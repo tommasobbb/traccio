@@ -1,0 +1,42 @@
+# --- Python / uv ---
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Swift / Xcode ---
+# il .xcodeproj è generato da XcodeGen: non va versionato
+*.xcodeproj/
+*.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# --- segreti e ambiente ---
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.mobileprovision
+secrets/
+
+# --- Local agent config ---
+CLAUDE.local.md
+.claude/settings.local.json
+
+# --- macOS / editor ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

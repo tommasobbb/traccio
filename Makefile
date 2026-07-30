@@ -1,0 +1,36 @@
+.DEFAULT_GOAL := help
+BACKEND := backend
+CORE := client/Packages/TraccioCore
+
+help: ## Mostra i comandi disponibili
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Installa le dipendenze di backend e client
+	cd $(BACKEND) && uv sync
+	cd $(CORE) && swift package resolve
+
+run: ## Avvia il backend in locale con reload
+	cd $(BACKEND) && uv run uvicorn traccio.api.main:app --reload
+
+test: test-backend test-core ## Esegue tutti i test
+
+test-backend: ## Test del backend Python
+	cd $(BACKEND) && uv run pytest
+
+test-core: ## Test del package Swift
+	cd $(CORE) && swift test
+
+lint: ## Lint e type check del backend
+	cd $(BACKEND) && uv run ruff check . && uv run mypy src
+
+fmt: ## Formatta e autocorregge il backend
+	cd $(BACKEND) && uv run ruff format . && uv run ruff check --fix .
+
+xcode: ## Rigenera il progetto Xcode da Project.yml
+	cd client && xcodegen generate
+
+openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
+	cd $(BACKEND) && uv run python -m traccio.api.export_openapi > ../docs/api/openapi.json
+
+.PHONY: help setup run test test-backend test-core lint fmt xcode openapi
