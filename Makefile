@@ -7,9 +7,12 @@ help: ## Mostra i comandi disponibili
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 setup: ## Installa le dipendenze di backend e client
-	cd $(BACKEND) && uv sync
+	cd $(BACKEND) && uv venv && uv sync
 	cd $(CORE) && swift package resolve
 
+reset-venv: ## Ricrea da zero il venv del backend (fix per import errors)
+	cd $(BACKEND) && rm -rf .venv && uv venv && uv sync
+	
 run: ## Avvia il backend in locale con reload
 	cd $(BACKEND) && uv run uvicorn traccio.api.main:app --reload
 
@@ -33,4 +36,4 @@ xcode: ## Rigenera il progetto Xcode da Project.yml
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi > ../docs/api/openapi.json
 
-.PHONY: help setup run test test-backend test-core lint fmt xcode openapi
+.PHONY: help setup reset-venv run test test-backend test-core lint fmt xcode openapi

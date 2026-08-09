@@ -1,7 +1,7 @@
 """Application configuration, loaded from the environment.
 
-`core/` imports nothing from the rest of the project (see
-`docs/architecture.md`); this module depends only on the standard library and
+``core/`` imports nothing from the rest of the project (see
+``docs/architecture.md``); this module depends only on the standard library and
 pydantic-settings.
 """
 
@@ -13,11 +13,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Settings read from environment variables (prefix ``TRACCIO_``).
 
-    Defaults are chosen so the app boots with no ``.env`` present. A
-    committable ``.env.example`` documents the available variables.
+    Values come from, in order of precedence, the process environment and a
+    local ``.env`` file. Defaults are chosen so the app boots with no ``.env``
+    present; a committable ``.env.example`` documents every variable. Read
+    settings through :func:`get_settings`, not by instantiating this directly.
+
+    Attributes
+    ----------
+    environment : str
+        Deployment environment, e.g. ``"development"`` or ``"production"``.
+    log_level : str
+        Minimum log level name passed to structlog (e.g. ``"INFO"``).
+    log_json : bool
+        Emit JSON logs (production) when ``True``, human-readable console
+        output (development) when ``False``.
+    database_url : str
+        PostgreSQL DSN. Declared now but unused until persistence lands; kept
+        here so ``.env.example`` stays a complete reference.
     """
 
     model_config = SettingsConfigDict(
+        # Load a local .env if present, namespace every variable under
+        # TRACCIO_, and ignore unrelated environment entries.
         env_file=".env",
         env_prefix="TRACCIO_",
         extra="ignore",
@@ -33,5 +50,15 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return the process-wide settings, loaded once."""
+    """Return the process-wide settings, loaded once.
+
+    The ``lru_cache`` makes this a lazy singleton: the environment is read on
+    the first call and the same :class:`Settings` instance is returned
+    thereafter.
+
+    Returns
+    -------
+    Settings
+        The cached, process-wide settings instance.
+    """
     return Settings()
