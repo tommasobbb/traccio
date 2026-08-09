@@ -30,10 +30,16 @@ lint: ## Lint e type check del backend
 fmt: ## Formatta e autocorregge il backend
 	cd $(BACKEND) && uv run ruff format . && uv run ruff check --fix .
 
+db-revision: ## Genera una migrazione Alembic da autogenerate (m="messaggio")
+	cd $(BACKEND) && uv run alembic revision --autogenerate -m "$(m)"
+
+db-upgrade: ## Applica le migrazioni fino a head
+	cd $(BACKEND) && uv run alembic upgrade head
+
 xcode: ## Rigenera il progetto Xcode da Project.yml
 	cd client && xcodegen generate
 
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi > ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run test test-backend test-core lint fmt xcode openapi
+.PHONY: help setup reset-venv run test test-backend test-core lint fmt db-revision db-upgrade xcode openapi
