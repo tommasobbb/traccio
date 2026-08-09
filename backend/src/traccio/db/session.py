@@ -29,6 +29,8 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 def session_scope() -> Iterator[Session]:
     """Provide a transactional session, committing or rolling back on exit.
 
+    For scripts and background work. HTTP handlers use :func:`get_session`.
+
     Yields
     ------
     Session
@@ -42,5 +44,24 @@ def session_scope() -> Iterator[Session]:
     except Exception:
         session.rollback()
         raise
+    finally:
+        session.close()
+
+
+def get_session() -> Iterator[Session]:
+    """Yield a session for a single request, as a FastAPI dependency.
+
+    Tests override this in ``app.dependency_overrides`` to bind a different
+    engine (e.g. SQLite), which is why the endpoints depend on it rather than
+    touching :data:`SessionLocal` directly.
+
+    Yields
+    ------
+    Session
+        An active session, closed when the request completes.
+    """
+    session = SessionLocal()
+    try:
+        yield session
     finally:
         session.close()

@@ -6,6 +6,7 @@ pydantic-settings.
 """
 
 from functools import lru_cache
+from uuid import UUID
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,6 +31,11 @@ class Settings(BaseSettings):
     database_url : str
         PostgreSQL DSN. Declared now but unused until persistence lands; kept
         here so ``.env.example`` stays a complete reference.
+    dev_user_id : UUID
+        Stand-in for the authenticated user until real auth lands (blocked on
+        the M4 decision). Traccio is built for one user, so every request is
+        scoped to this fixed id. Endpoints stay written as ``scoped by
+        user_id``; only where the id comes from changes when auth arrives.
     """
 
     model_config = SettingsConfigDict(
@@ -46,6 +52,8 @@ class Settings(BaseSettings):
     log_json: bool = False
     # Declared now, unused until persistence lands; keeps .env.example useful.
     database_url: str = "postgresql+psycopg://localhost/traccio"
+    # Fixed single-user id until real auth (M4). See the class docstring.
+    dev_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 @lru_cache
