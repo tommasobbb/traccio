@@ -44,5 +44,9 @@ warn_unreachable = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put src/ on sys.path directly so test imports never depend on the editable
+# install. This survives the intermittent _virtualenv.pth interference that
+# otherwise drops the editable src entry (see backend/CLAUDE.md).
+pythonpath = ["src"]
 asyncio_mode = "auto"
 addopts = "-q"
