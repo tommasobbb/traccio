@@ -1,0 +1,13 @@
+"""HTTP routers for the API layer.
+
+One ``APIRouter`` module per resource; ``create_app`` includes each of them.
+This package re-exports the routers so the factory imports from one place.
+"""
+
+from traccio.api.routers.accounts import router as accounts_router
+from traccio.api.routers.health import router as health_router
+
+__all__ = [
+    "accounts_router",
+    "health_router",
+]
