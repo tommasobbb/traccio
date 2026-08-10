@@ -43,6 +43,6 @@ xcode: ## Rigenera il progetto Xcode da Project.yml
 	cd client && xcodegen generate
 
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
-	cd $(BACKEND) && uv run python -m traccio.api.export_openapi > ../docs/api/openapi.json
+	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
 .PHONY: help setup reset-venv run test test-backend test-core lint fmt db-revision db-upgrade seed-dev xcode openapi

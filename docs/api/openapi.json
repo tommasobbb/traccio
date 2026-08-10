@@ -1,0 +1,145 @@
+{
+  "components": {
+    "schemas": {
+      "AccountKind": {
+        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).",
+        "enum": [
+          "current",
+          "savings",
+          "card"
+        ],
+        "title": "AccountKind",
+        "type": "string"
+      },
+      "AccountResponse": {
+        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, or ``card``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Optional display name.\ncreated_at : datetime\n    When the account was first recorded.",
+        "properties": {
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "connection_id",
+          "kind",
+          "currency",
+          "name",
+          "created_at"
+        ],
+        "title": "AccountResponse",
+        "type": "object"
+      },
+      "AccountsResponse": {
+        "description": "Envelope for the account list.\n\nA wrapper object rather than a bare array leaves room for pagination or\nmetadata later without breaking the generated Swift client.\n\nAttributes\n----------\naccounts : list[AccountResponse]\n    The caller's accounts, oldest first.",
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountResponse"
+            },
+            "title": "Accounts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accounts"
+        ],
+        "title": "AccountsResponse",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Payload returned by the health endpoint.\n\nAttributes\n----------\nstatus : str\n    Liveness marker; ``\"ok\"`` when the app is serving.\nversion : str\n    The running application version (see\n    :func:`~traccio.api.version.resolve_version`).",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Traccio",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/accounts": {
+      "get": {
+        "description": "List the current user's accounts.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`).\nThe query itself is already written ``scoped by user_id``; only the source\nof the id changes when auth arrives.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose accounts to return.\n\nReturns\n-------\nAccountsResponse\n    The user's accounts, oldest first.",
+        "operationId": "accounts_accounts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Accounts"
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Report liveness and the running version.\n\nReturns\n-------\nHealthResponse\n    ``status=\"ok\"`` and the current application version.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}
