@@ -1,0 +1,38 @@
+# XcodeGen spec for the Traccio app. The .xcodeproj is generated from this file
+# and is gitignored — edit here and run `make xcode`, never edit the project.
+#
+# The app target holds views, navigation, and platform wiring only. All models,
+# the API client, and formatting live in the local TraccioCore package
+# (Packages/TraccioCore), which builds and tests without Xcode.
+name: Traccio
+
+options:
+  bundleIdPrefix: com.traccio
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  TraccioCore:
+    path: Packages/TraccioCore
+
+targets:
+  Traccio:
+    type: application
+    # One target builds for both platforms; SwiftUI + platform checks handle
+    # the differences in code rather than in two near-duplicate targets.
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: App/Sources
+      - path: App/Resources
+        buildPhase: resources
+    dependencies:
+      - package: TraccioCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.traccio.app
+        GENERATE_INFOPLIST_FILE: true
+        MARKETING_VERSION: "0.0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
