@@ -29,10 +29,19 @@ targets:
         buildPhase: resources
     dependencies:
       - package: TraccioCore
+    # Generated Info.plist (gitignored, like the .xcodeproj — run `make xcode`).
+    # Its only non-default content is the ATS exception below: the M0 app talks
+    # to the dev backend over http://localhost, and the iOS simulator blocks
+    # cleartext HTTP without NSAllowsLocalNetworking. Dev-only; no production
+    # endpoint is cleartext.
+    info:
+      path: App/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.traccio.app
-        GENERATE_INFOPLIST_FILE: true
         MARKETING_VERSION: "0.0.1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"

@@ -12,8 +12,9 @@ build/
 *.egg-info/
 
 # --- Swift / Xcode ---
-# il .xcodeproj è generato da XcodeGen: non va versionato
+# il .xcodeproj e l'Info.plist sono generati da XcodeGen: non vanno versionati
 *.xcodeproj/
+client/App/Info.plist
 *.xcworkspace/
 !*.xcworkspace/contents.xcworkspacedata
 .build/
@@ -21,6 +22,11 @@ build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# --- database di sviluppo locale ---
+# SQLite file usato in locale quando non c'è un PostgreSQL a disposizione;
+# contiene solo dati sintetici del seed, ma non va comunque versionato.
+*.db
 
 # --- segreti e ambiente ---
 .env
