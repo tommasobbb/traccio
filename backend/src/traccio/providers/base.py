@@ -38,7 +38,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from traccio.domain import Account, ConnectionStatus, Transaction
+from traccio.domain import Account, AccountKind, ConnectionStatus, CurrencyCode, Transaction
 
 
 class ProviderError(Exception):
@@ -109,6 +109,40 @@ class AuthorizationResult(BaseModel):
     credentials: str = Field(repr=False)
     status: ConnectionStatus
     expires_at: datetime | None = None
+
+
+class ProviderAccount(BaseModel):
+    """One account discovered through a consent, in provider-agnostic form.
+
+    Returned by :meth:`BankProvider.list_accounts`. It carries only what the bank
+    knows about the account; it deliberately omits ``user_id`` and
+    ``connection_id`` (which the adapter cannot know), so the caller composes the
+    persisted :class:`~traccio.domain.models.Account` by injecting those — exactly
+    as :class:`AuthorizationResult` is turned into a stored ``Connection``.
+
+    ``identification_hash`` is the adapter's derived stable identity, not the
+    bank's account id (which is not stable across consents): the raw account
+    identifier (IBAN or other) never leaves the adapter, only its hash does.
+
+    Attributes
+    ----------
+    identification_hash : str
+        Derived stable identity used to match the account across consents.
+    kind : AccountKind
+        ``current``, ``savings``, or ``card``, normalized from the provider's
+        account type.
+    currency : str
+        The account's own ISO 4217 currency.
+    name : str or None
+        Optional display name (the account's product name), for the client only.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    identification_hash: str
+    kind: AccountKind
+    currency: CurrencyCode
+    name: str | None = None
 
 
 class SyncContext(BaseModel):
@@ -195,7 +229,7 @@ class BankProvider(ABC):
         """
 
     @abstractmethod
-    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[Account]:
+    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[ProviderAccount]:
         """List the accounts reachable through a consent.
 
         Parameters
@@ -207,10 +241,12 @@ class BankProvider(ABC):
 
         Returns
         -------
-        list[Account]
-            Domain accounts. ``identification_hash`` is the adapter's derived
-            stable identity, not the provider's account id (which is not stable
-            across consents).
+        list[ProviderAccount]
+            Provider-agnostic accounts. The caller injects ``user_id`` and
+            ``connection_id`` to build the persisted
+            :class:`~traccio.domain.models.Account`. ``identification_hash`` is
+            the adapter's derived stable identity, not the provider's account id
+            (which is not stable across consents).
         """
 
     @abstractmethod

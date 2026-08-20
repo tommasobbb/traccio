@@ -9,7 +9,7 @@ synthetic values only (invented references, round amounts) — see
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from traccio.domain import (
     Account,
@@ -24,6 +24,7 @@ from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    ProviderAccount,
     SyncContext,
 )
 
@@ -37,8 +38,7 @@ class FakeBankProvider(BankProvider):
     presence flag is threaded through.
     """
 
-    def __init__(self, *, user_id: UUID) -> None:
-        self._user_id = user_id
+    def __init__(self) -> None:
         self.last_context: SyncContext | None = None
 
     @property
@@ -63,13 +63,11 @@ class FakeBankProvider(BankProvider):
             expires_at=datetime(2026, 12, 31, tzinfo=UTC),
         )
 
-    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[Account]:
+    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[ProviderAccount]:
         self.last_context = context
         assert credentials == _SECRET
         return [
-            Account(
-                user_id=self._user_id,
-                connection_id=uuid4(),
+            ProviderAccount(
                 kind=AccountKind.CURRENT,
                 currency="EUR",
                 identification_hash="hash-01",
@@ -102,14 +100,14 @@ class FakeBankProvider(BankProvider):
 
 def test_fake_provider_is_a_bank_provider() -> None:
     """A concrete adapter is substitutable for the interface."""
-    provider: BankProvider = FakeBankProvider(user_id=uuid4())
+    provider: BankProvider = FakeBankProvider()
 
     assert provider.name == "fake"
 
 
 def test_authorization_handshake_round_trips() -> None:
     """start_authorization → complete_authorization yields a usable consent."""
-    provider = FakeBankProvider(user_id=uuid4())
+    provider = FakeBankProvider()
 
     start = provider.start_authorization(
         institution="test-bank", country="IT", redirect_url="traccio://callback"
@@ -124,22 +122,29 @@ def test_authorization_handshake_round_trips() -> None:
     assert result.credentials == _SECRET
 
 
-def test_list_accounts_returns_domain_accounts() -> None:
-    """list_accounts returns domain Account objects, not provider payloads."""
-    user_id = uuid4()
-    provider = FakeBankProvider(user_id=user_id)
+def test_list_accounts_returns_provider_accounts() -> None:
+    """list_accounts returns provider-agnostic accounts, not raw payloads or rows."""
+    provider = FakeBankProvider()
 
     accounts = provider.list_accounts(credentials=_SECRET, context=SyncContext(psu_present=True))
 
     assert len(accounts) == 1
-    assert isinstance(accounts[0], Account)
-    assert accounts[0].user_id == user_id
+    assert isinstance(accounts[0], ProviderAccount)
+    assert accounts[0].identification_hash == "hash-01"
 
 
 def test_fetch_transactions_returns_domain_transactions() -> None:
     """fetch_transactions returns normalized domain Transaction objects."""
-    provider = FakeBankProvider(user_id=uuid4())
-    account = provider.list_accounts(credentials=_SECRET, context=SyncContext(psu_present=True))[0]
+    provider = FakeBankProvider()
+    # The caller composes the domain Account (injecting user_id/connection_id)
+    # from what list_accounts reported.
+    account = Account(
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        kind=AccountKind.CURRENT,
+        currency="EUR",
+        identification_hash="hash-01",
+    )
 
     transactions = provider.fetch_transactions(
         credentials=_SECRET,
@@ -156,7 +161,7 @@ def test_fetch_transactions_returns_domain_transactions() -> None:
 
 def test_sync_context_is_threaded_to_the_adapter() -> None:
     """The presence flag reaches the adapter, which sets PSU headers from it."""
-    provider = FakeBankProvider(user_id=uuid4())
+    provider = FakeBankProvider()
 
     provider.list_accounts(credentials=_SECRET, context=SyncContext(psu_present=False))
 

@@ -147,6 +147,20 @@
         "title": "StartConnectionResponse",
         "type": "object"
       },
+      "SyncAccountsResponse": {
+        "description": "The outcome of syncing a connection's accounts.\n\nOnly a count is returned, never account contents (``.claude/rules/data-safety.md``);\nthe accounts themselves are read back via ``GET /accounts``. In this slice a\nsync discovers accounts only; transactions join it in a later slice.\n\nAttributes\n----------\naccounts_synced : int\n    How many accounts were discovered and persisted (inserted or updated).",
+        "properties": {
+          "accounts_synced": {
+            "title": "Accounts Synced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accounts_synced"
+        ],
+        "title": "SyncAccountsResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -346,6 +360,47 @@
           }
         },
         "summary": "Connection Callback"
+      }
+    },
+    "/connections/{connection_id}/sync": {
+      "post": {
+        "description": "Sync the accounts reachable through an active connection.\n\nReads the encrypted consent secret, decrypts it, lists the accounts the\nconsent exposes, and upserts each one (idempotent on stable identity, so a\nre-sync updates rather than duplicates). Scoped to the current user. This\nslice discovers accounts only; transactions join this endpoint later.\n\nParameters\n----------\nconnection_id : UUID\n    The active connection to sync.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\ncipher : Fernet cipher\n    Decrypts the stored consent secret.\n\nReturns\n-------\nSyncAccountsResponse\n    How many accounts were discovered and persisted.",
+        "operationId": "sync_connection_connections__connection_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncAccountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Connection"
       }
     },
     "/health": {

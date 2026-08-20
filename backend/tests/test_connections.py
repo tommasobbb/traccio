@@ -21,14 +21,15 @@ from traccio.api.deps import get_bank_provider, get_token_cipher_dep
 from traccio.api.main import create_app
 from traccio.core.crypto import TokenCipher
 from traccio.db.base import Base
-from traccio.db.models import ConnectionRow
+from traccio.db.models import AccountRow, ConnectionRow
 from traccio.db.session import get_session
 from traccio.domain import Account, Transaction
-from traccio.domain.enums import ConnectionStatus
+from traccio.domain.enums import AccountKind, ConnectionStatus
 from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    ProviderAccount,
     ProviderError,
     SyncContext,
 )
@@ -36,6 +37,21 @@ from traccio.providers.base import (
 _STATE = "STATE-XYZ-01"
 _SESSION_ID = "11111111-2222-3333-4444-555555555555"
 _EXPIRES_AT = datetime(2027, 2, 16, tzinfo=UTC)
+# Synthetic accounts the fake adapter reports on sync (see data-safety rules).
+_PROVIDER_ACCOUNTS = [
+    ProviderAccount(
+        kind=AccountKind.CURRENT,
+        currency="EUR",
+        identification_hash="HASH-CURR-01",
+        name="TEST CURRENT 01",
+    ),
+    ProviderAccount(
+        kind=AccountKind.CARD,
+        currency="EUR",
+        identification_hash="HASH-CARD-01",
+        name="TEST CARD 01",
+    ),
+]
 
 
 class FakeProvider(BankProvider):
@@ -66,8 +82,10 @@ class FakeProvider(BankProvider):
             credentials=_SESSION_ID, status=ConnectionStatus.ACTIVE, expires_at=_EXPIRES_AT
         )
 
-    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[Account]:
-        raise NotImplementedError
+    def list_accounts(self, *, credentials: str, context: SyncContext) -> list[ProviderAccount]:
+        # The endpoint must have decrypted the stored credential before calling us.
+        assert credentials == _SESSION_ID
+        return list(_PROVIDER_ACCOUNTS)
 
     def fetch_transactions(
         self,
@@ -112,6 +130,19 @@ def _client(engine: Engine, cipher: TokenCipher) -> TestClient:
 def _connections(engine: Engine) -> list[ConnectionRow]:
     with Session(engine) as session:
         return list(session.scalars(select(ConnectionRow)).all())
+
+
+def _accounts(engine: Engine) -> list[AccountRow]:
+    with Session(engine) as session:
+        return list(session.scalars(select(AccountRow)).all())
+
+
+def _activate_a_connection(client: TestClient) -> str:
+    """Run the consent flow so a connection is active, and return its id."""
+    start = client.post("/connections", json={"institution": "Test Bank 01", "country": "IT"})
+    connection_id: str = start.json()["connection_id"]
+    client.get("/connections/callback", params={"code": "AUTH-CODE-01", "state": _STATE})
+    return connection_id
 
 
 def test_start_connection_creates_pending_and_returns_url() -> None:
@@ -214,3 +245,51 @@ def test_callback_does_not_match_another_users_pending_connection() -> None:
     # invisible to the user-scoped lookup.
     assert response.status_code == 404
     assert _connections(engine)[0].status is ConnectionStatus.PENDING
+
+
+def test_sync_persists_accounts_and_is_idempotent() -> None:
+    engine = _sqlite_engine()
+    cipher = TokenCipher(Fernet.generate_key().decode())
+    client = _client(engine, cipher)
+    connection_id = _activate_a_connection(client)
+
+    response = client.post(f"/connections/{connection_id}/sync")
+
+    assert response.status_code == 200
+    assert response.json()["accounts_synced"] == 2
+
+    accounts = _accounts(engine)
+    assert len(accounts) == 2
+    assert {a.identification_hash for a in accounts} == {"HASH-CURR-01", "HASH-CARD-01"}
+    # Persisted under this connection, and surfaced by GET /accounts.
+    assert all(str(a.connection_id) == connection_id for a in accounts)
+    assert len(client.get("/accounts").json()["accounts"]) == 2
+
+    # Re-syncing the same accounts updates in place rather than duplicating.
+    again = client.post(f"/connections/{connection_id}/sync")
+    assert again.status_code == 200
+    assert again.json()["accounts_synced"] == 2
+    assert len(_accounts(engine)) == 2
+
+
+def test_sync_unknown_connection_is_not_found() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    response = client.post(f"/connections/{uuid4()}/sync")
+
+    assert response.status_code == 404
+
+
+def test_sync_pending_connection_is_not_found() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+    # Start (creates a pending connection) but never complete the callback.
+    start = client.post("/connections", json={"institution": "Test Bank 01", "country": "IT"})
+    connection_id = start.json()["connection_id"]
+
+    response = client.post(f"/connections/{connection_id}/sync")
+
+    # A pending connection has no usable credentials; it cannot sync.
+    assert response.status_code == 404
+    assert _accounts(engine) == []
