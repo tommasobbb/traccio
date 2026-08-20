@@ -39,17 +39,21 @@ class StartConnectionResponse(BaseModel):
     authorization_url: str
 
 
-class SyncAccountsResponse(BaseModel):
-    """The outcome of syncing a connection's accounts.
+class SyncResponse(BaseModel):
+    """The outcome of syncing a connection.
 
-    Only a count is returned, never account contents (``.claude/rules/data-safety.md``);
-    the accounts themselves are read back via ``GET /accounts``. In this slice a
-    sync discovers accounts only; transactions join it in a later slice.
+    Only counts are returned, never account or transaction contents
+    (``.claude/rules/data-safety.md``); the data itself is read back via the
+    resource endpoints (e.g. ``GET /accounts``).
 
     Attributes
     ----------
     accounts_synced : int
         How many accounts were discovered and persisted (inserted or updated).
+    transactions_synced : int
+        How many transactions were fetched and persisted across those accounts
+        (inserted, or updated in place while still pending).
     """
 
     accounts_synced: int
+    transactions_synced: int

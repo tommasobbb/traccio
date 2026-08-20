@@ -21,10 +21,11 @@ from traccio.api.deps import get_bank_provider, get_token_cipher_dep
 from traccio.api.main import create_app
 from traccio.core.crypto import TokenCipher
 from traccio.db.base import Base
-from traccio.db.models import AccountRow, ConnectionRow
+from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.session import get_session
 from traccio.domain import Account, Transaction
-from traccio.domain.enums import AccountKind, ConnectionStatus
+from traccio.domain.enums import AccountKind, ConnectionStatus, KeyStrategy, TransactionStatus
+from traccio.domain.money import Money
 from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
@@ -96,7 +97,21 @@ class FakeProvider(BankProvider):
         until: datetime | None,
         context: SyncContext,
     ) -> list[Transaction]:
-        raise NotImplementedError
+        assert credentials == _SESSION_ID
+        # One booked transaction per account, with a stable key derived from the
+        # account so a re-sync deduplicates rather than duplicating.
+        return [
+            Transaction(
+                user_id=account.user_id,
+                account_id=account.id,
+                money=Money(amount=-1234, currency="EUR"),
+                description="TEST MERCHANT 01",
+                status=TransactionStatus.BOOKED,
+                entry_reference=f"TX-{account.identification_hash}",
+                stable_key=f"TX-{account.identification_hash}",
+                key_strategy=KeyStrategy.ENTRY_REFERENCE,
+            )
+        ]
 
 
 def _sqlite_engine() -> Engine:
@@ -135,6 +150,11 @@ def _connections(engine: Engine) -> list[ConnectionRow]:
 def _accounts(engine: Engine) -> list[AccountRow]:
     with Session(engine) as session:
         return list(session.scalars(select(AccountRow)).all())
+
+
+def _transactions(engine: Engine) -> list[TransactionRow]:
+    with Session(engine) as session:
+        return list(session.scalars(select(TransactionRow)).all())
 
 
 def _activate_a_connection(client: TestClient) -> str:
@@ -256,7 +276,9 @@ def test_sync_persists_accounts_and_is_idempotent() -> None:
     response = client.post(f"/connections/{connection_id}/sync")
 
     assert response.status_code == 200
-    assert response.json()["accounts_synced"] == 2
+    body = response.json()
+    assert body["accounts_synced"] == 2
+    assert body["transactions_synced"] == 2  # one per account, from the fake
 
     accounts = _accounts(engine)
     assert len(accounts) == 2
@@ -264,12 +286,17 @@ def test_sync_persists_accounts_and_is_idempotent() -> None:
     # Persisted under this connection, and surfaced by GET /accounts.
     assert all(str(a.connection_id) == connection_id for a in accounts)
     assert len(client.get("/accounts").json()["accounts"]) == 2
+    # Transactions landed too, each linked to a persisted account.
+    txs = _transactions(engine)
+    assert len(txs) == 2
+    assert {t.account_id for t in txs} == {a.id for a in accounts}
 
-    # Re-syncing the same accounts updates in place rather than duplicating.
+    # Re-syncing updates in place rather than duplicating, for both resources.
     again = client.post(f"/connections/{connection_id}/sync")
     assert again.status_code == 200
-    assert again.json()["accounts_synced"] == 2
+    assert again.json() == {"accounts_synced": 2, "transactions_synced": 2}
     assert len(_accounts(engine)) == 2
+    assert len(_transactions(engine)) == 2
 
 
 def test_sync_unknown_connection_is_not_found() -> None:

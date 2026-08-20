@@ -280,21 +280,118 @@ def test_list_accounts_rejects_session_without_accounts() -> None:
         provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
 
 
-def test_fetch_transactions_is_not_yet_implemented() -> None:
-    """The transaction half of the adapter lands in a later slice."""
-    provider = _provider(httpx.MockTransport(lambda request: httpx.Response(200, json={})))
-    account = Account(
+def _transactions_handler(
+    *,
+    accounts: list[str],
+    details: dict[str, dict[str, Any]],
+    pages: dict[str, dict[str, Any]],
+) -> httpx.MockTransport:
+    """Serve session/details (for uid resolution) then transactions pages.
+
+    ``pages`` is keyed by the incoming ``continuation_key`` (``""`` for the first
+    request), so a page carrying ``continuation_key`` chains to the next.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == f"/sessions/{_SESSION_ID}":
+            return httpx.Response(200, json={"accounts": accounts})
+        prefix, _, suffix = path.partition("/accounts/")
+        if prefix == "" and suffix.endswith("/details"):
+            return httpx.Response(200, json=details[suffix.removesuffix("/details")])
+        if prefix == "" and suffix.endswith("/transactions"):
+            key = request.url.params.get("continuation_key", "")
+            return httpx.Response(200, json=pages[key])
+        raise AssertionError(f"unexpected path: {path}")
+
+    return httpx.MockTransport(handler)
+
+
+def _account(identification_hash: str = "IDHASH-CURR-01") -> Account:
+    return Account(
         user_id=uuid4(),
         connection_id=uuid4(),
         kind=AccountKind.CURRENT,
         currency="EUR",
-        identification_hash="IDHASH-CURR-01",
+        identification_hash=identification_hash,
     )
 
-    with pytest.raises(NotImplementedError):
+
+def _raw_tx(entry_reference: str, amount: str = "12.34") -> dict[str, Any]:
+    return {
+        "entry_reference": entry_reference,
+        "transaction_amount": {"currency": "EUR", "amount": amount},
+        "credit_debit_indicator": "DBIT",
+        "status": "BOOK",
+        "booking_date": "2026-08-15",
+        "value_date": "2026-08-16",
+        "remittance_information": ["TEST MERCHANT 01"],
+    }
+
+
+def test_fetch_transactions_resolves_uid_and_normalizes() -> None:
+    """The adapter matches identification_hash to a uid, then normalizes each entry."""
+    account = _account("IDHASH-CURR-01")
+    provider = _provider(
+        _transactions_handler(
+            accounts=["uid-curr-01"],
+            details=_DETAILS,
+            pages={"": {"transactions": [_raw_tx("ENTRY-01")]}},
+        )
+    )
+
+    txs = provider.fetch_transactions(
+        credentials=_SESSION_ID,
+        account=account,
+        since=datetime(2026, 1, 1, tzinfo=UTC),
+        until=None,
+        context=SyncContext(psu_present=True),
+    )
+
+    assert len(txs) == 1
+    assert txs[0].account_id == account.id
+    assert txs[0].money.amount == -1234
+    assert txs[0].stable_key == "ENTRY-01"
+
+
+def test_fetch_transactions_follows_pagination() -> None:
+    """A page carrying a continuation_key is chained until one omits it."""
+    provider = _provider(
+        _transactions_handler(
+            accounts=["uid-curr-01"],
+            details=_DETAILS,
+            pages={
+                "": {"transactions": [_raw_tx("ENTRY-01")], "continuation_key": "PAGE2"},
+                "PAGE2": {"transactions": [_raw_tx("ENTRY-02")]},
+            },
+        )
+    )
+
+    txs = provider.fetch_transactions(
+        credentials=_SESSION_ID,
+        account=_account("IDHASH-CURR-01"),
+        since=datetime(2026, 1, 1, tzinfo=UTC),
+        until=None,
+        context=SyncContext(psu_present=True),
+    )
+
+    assert [t.stable_key for t in txs] == ["ENTRY-01", "ENTRY-02"]
+
+
+def test_fetch_transactions_rejects_account_not_in_session() -> None:
+    """An account whose identification_hash no uid matches fails loudly."""
+    provider = _provider(
+        _transactions_handler(
+            accounts=["uid-curr-01"],
+            details=_DETAILS,
+            pages={"": {"transactions": []}},
+        )
+    )
+
+    with pytest.raises(ProviderError):
         provider.fetch_transactions(
             credentials=_SESSION_ID,
-            account=account,
+            account=_account("IDHASH-NOT-PRESENT"),
             since=datetime(2026, 1, 1, tzinfo=UTC),
             until=None,
             context=SyncContext(psu_present=True),
