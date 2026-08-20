@@ -7,8 +7,20 @@ Pure unit tests: no database, no network. Fixtures use synthetic values only
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
+
 from traccio.domain import KeyStrategy, Money, Transaction, TransactionRole, TransactionStatus
-from traccio.services.transfers import detect_transfers
+from traccio.services.transfers import (
+    REASON_CURRENCY_MISMATCH,
+    REASON_NOT_OPPOSITE_SIGNS,
+    REASON_NOT_PERSONAL,
+    REASON_REJECTED,
+    REASON_SAME_ACCOUNT,
+    REASON_ZERO_AMOUNT,
+    TransferPairError,
+    detect_transfers,
+    validate_transfer_pair,
+)
 
 _BASE = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -149,3 +161,101 @@ def test_value_date_is_used_when_booked_at_is_absent() -> None:
     inc = _tx(account_id=b, amount=50000, booked_at=_BASE)
 
     assert len(detect_transfers([out, inc])) == 1
+
+
+def test_dismissed_pair_is_not_suggested() -> None:
+    """A rejected pair is filtered out even though it otherwise matches."""
+    a, b = uuid4(), uuid4()
+    out = _tx(account_id=a, amount=-50000)
+    inc = _tx(account_id=b, amount=50000)
+    dismissed = {frozenset({out.id, inc.id})}
+
+    assert detect_transfers([out, inc]) != []
+    assert detect_transfers([out, inc], dismissed_pairs=dismissed) == []
+
+
+def test_dismissing_one_pair_leaves_another_match() -> None:
+    """Only the dismissed pair is suppressed; a different valid pair still shows."""
+    a, b, c, d = uuid4(), uuid4(), uuid4(), uuid4()
+    out1 = _tx(account_id=a, amount=-50000)
+    inc1 = _tx(account_id=b, amount=50000)
+    out2 = _tx(account_id=c, amount=-30000)
+    inc2 = _tx(account_id=d, amount=30000)
+    dismissed = {frozenset({out1.id, inc1.id})}
+
+    suggestions = detect_transfers([out1, inc1, out2, inc2], dismissed_pairs=dismissed)
+
+    assert len(suggestions) == 1
+    assert {suggestions[0].outgoing_transaction_id, suggestions[0].incoming_transaction_id} == {
+        out2.id,
+        inc2.id,
+    }
+
+
+def test_validate_transfer_pair_accepts_a_clean_pair() -> None:
+    """A structurally valid opposite-sign pair validates without raising."""
+    out = _tx(account_id=uuid4(), amount=-50000)
+    inc = _tx(account_id=uuid4(), amount=50000)
+
+    validate_transfer_pair(out, inc)  # does not raise
+
+
+def test_validate_transfer_pair_ignores_tolerance_and_window() -> None:
+    """An explicit confirm may link a pair a detector would never suggest."""
+    out = _tx(account_id=uuid4(), amount=-50000, booked_at=_BASE)
+    # A large gap and a large amount delta: outside detection tolerance/window,
+    # but the user is allowed to confirm it explicitly.
+    inc = _tx(account_id=uuid4(), amount=10, booked_at=_BASE + timedelta(days=365))
+
+    validate_transfer_pair(out, inc)  # does not raise
+    assert detect_transfers([out, inc]) == []
+
+
+def test_validate_transfer_pair_rejects_same_account() -> None:
+    a = uuid4()
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(_tx(account_id=a, amount=-50000), _tx(account_id=a, amount=50000))
+    assert exc.value.reason == REASON_SAME_ACCOUNT
+
+
+def test_validate_transfer_pair_rejects_currency_mismatch() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=-50000, currency="EUR"),
+            _tx(account_id=uuid4(), amount=50000, currency="USD"),
+        )
+    assert exc.value.reason == REASON_CURRENCY_MISMATCH
+
+
+def test_validate_transfer_pair_rejects_same_sign() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=-50000), _tx(account_id=uuid4(), amount=-50000)
+        )
+    assert exc.value.reason == REASON_NOT_OPPOSITE_SIGNS
+
+
+def test_validate_transfer_pair_rejects_non_personal_leg() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=-50000, role=TransactionRole.ADVANCE),
+            _tx(account_id=uuid4(), amount=50000),
+        )
+    assert exc.value.reason == REASON_NOT_PERSONAL
+
+
+def test_validate_transfer_pair_rejects_rejected_leg() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=-50000, status=TransactionStatus.REJECTED),
+            _tx(account_id=uuid4(), amount=50000),
+        )
+    assert exc.value.reason == REASON_REJECTED
+
+
+def test_validate_transfer_pair_rejects_zero_amount() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=0), _tx(account_id=uuid4(), amount=50000)
+        )
+    assert exc.value.reason == REASON_ZERO_AMOUNT

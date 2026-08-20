@@ -11,9 +11,10 @@ from traccio.db.models import (
     AccountRow,
     ConnectionRow,
     TransactionRow,
+    TransferRow,
     UserRow,
 )
-from traccio.domain.models import Account, Connection, Transaction, User
+from traccio.domain.models import Account, Connection, Transaction, Transfer, User
 from traccio.domain.money import Money
 
 
@@ -123,4 +124,26 @@ def row_to_transaction(row: TransactionRow) -> Transaction:
         entry_reference=row.entry_reference,
         stable_key=row.stable_key,
         key_strategy=row.key_strategy,
+    )
+
+
+def transfer_to_row(transfer: Transfer) -> TransferRow:
+    """Translate a domain :class:`Transfer` into a :class:`TransferRow`."""
+    return TransferRow(
+        id=transfer.id,
+        user_id=transfer.user_id,
+        outgoing_transaction_id=transfer.outgoing_transaction_id,
+        incoming_transaction_id=transfer.incoming_transaction_id,
+        created_at=transfer.created_at,
+    )
+
+
+def row_to_transfer(row: TransferRow) -> Transfer:
+    """Translate a :class:`TransferRow` into a domain :class:`Transfer`."""
+    return Transfer(
+        id=row.id,
+        user_id=row.user_id,
+        outgoing_transaction_id=row.outgoing_transaction_id,
+        incoming_transaction_id=row.incoming_transaction_id,
+        created_at=row.created_at,
     )
