@@ -36,6 +36,12 @@ class Settings(BaseSettings):
         the M4 decision). Traccio is built for one user, so every request is
         scoped to this fixed id. Endpoints stay written as ``scoped by
         user_id``; only where the id comes from changes when auth arrives.
+    encryption_key : str or None
+        Fernet key for encrypting stored bank credentials at rest (see
+        ``docs/decisions/0003-token-encryption-at-rest.md``). Held outside the
+        database, never logged. ``None`` by default so the app boots without a
+        ``.env``; operations that touch stored secrets require it to be set (see
+        :func:`traccio.core.crypto.get_token_cipher`).
     """
 
     model_config = SettingsConfigDict(
@@ -54,6 +60,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://localhost/traccio"
     # Fixed single-user id until real auth (M4). See the class docstring.
     dev_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
+    # Fernet key for encrypting stored bank credentials; None until set so the
+    # app still boots with no .env. Never logged. See core/crypto.py and ADR 0003.
+    encryption_key: str | None = None
 
 
 @lru_cache
