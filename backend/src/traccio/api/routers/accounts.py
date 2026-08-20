@@ -43,6 +43,4 @@ def accounts(
     found = list_accounts(session, user_id)
     # Log a count, never account contents (see data-safety rules).
     logger.info("accounts.list", count=len(found))
-    return AccountsResponse(
-        accounts=[AccountResponse.from_domain(account) for account in found]
-    )
+    return AccountsResponse(accounts=[AccountResponse.from_domain(account) for account in found])

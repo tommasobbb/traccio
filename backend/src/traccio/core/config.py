@@ -42,6 +42,16 @@ class Settings(BaseSettings):
         database, never logged. ``None`` by default so the app boots without a
         ``.env``; operations that touch stored secrets require it to be set (see
         :func:`traccio.core.crypto.get_token_cipher`).
+    enable_banking_application_id : str or None
+        Enable Banking application ID, used as the JWT ``kid`` header when
+        authenticating API calls (``docs/openbanking.md``). Not a secret. ``None``
+        until configured.
+    enable_banking_private_key_path : str or None
+        Filesystem path to the application's ``<application-id>.pem`` RSA private
+        key. The key is a secret held **outside the database** and never
+        committed or logged; only its path lives here. ``None`` until configured.
+    enable_banking_base_url : str
+        Base URL of the Enable Banking API. Defaults to the production host.
     """
 
     model_config = SettingsConfigDict(
@@ -63,6 +73,12 @@ class Settings(BaseSettings):
     # Fernet key for encrypting stored bank credentials; None until set so the
     # app still boots with no .env. Never logged. See core/crypto.py and ADR 0003.
     encryption_key: str | None = None
+    # Enable Banking credentials. The application id is the JWT kid (not secret);
+    # the private key is a secret file held outside the DB — only its path lives
+    # here, never logged. Both None until configured. See docs/openbanking.md.
+    enable_banking_application_id: str | None = None
+    enable_banking_private_key_path: str | None = None
+    enable_banking_base_url: str = "https://api.enablebanking.com"
 
 
 @lru_cache
