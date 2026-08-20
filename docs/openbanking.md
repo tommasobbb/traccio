@@ -71,20 +71,31 @@ The `<application-id>.pem` private key is a secret and is treated like one
 - **Never logged.** Not the key, not the minted JWT, not any provider response
   body. If a connection must be identified in a log, log its `connection_id`.
 
-The **encryption scheme for tokens/consents stored per `Connection`** is a
-separate, still-open M1 decision ("Token encryption at rest — decide the
-scheme before storing anything" in `tasks/backlog.md`). This document only
-records the constraint; it does not fix the scheme.
+The **encryption scheme for tokens/consents stored per `Connection`** is
+decided in `docs/decisions/0003-token-encryption-at-rest.md`: Fernet
+(`cryptography`), one key held outside the DB in `TRACCIO_ENCRYPTION_KEY`. The
+primitive lives in `core/crypto.py`; wiring it into credential storage is part
+of the adapter work.
 
-## Redirect URL — open design question
+## Redirect URL
 
-The redirect URL is whitelisted when the application is created and is where
-the bank returns the user after authorization. For a native client plus a
-local backend the flow is not obvious (custom URL scheme handed back to the
-app vs. a backend-hosted callback). **This is deliberately left open here** and
-must be decided together with the adapter's authorization flow — do not invent
-a provider integration path in this document (root `CLAUDE.md`). Bank
-authorization must run in the **system browser**, never an in-app WebView:
+**M1 value: `https://localhost:8000/connections/callback`.** After the user
+completes SCA the bank returns the browser to this URL with a `code` query
+parameter, which the backend exchanges for a session.
+
+Registration constraints observed against Enable Banking production:
+
+- **`https` is mandatory** — an `http://` redirect is rejected at registration
+  ("unsupported scheme"). `https` + `localhost` is accepted, which is what makes
+  the local-backend flow viable for M1.
+- The URL is **editable after registration** via the Control Panel API/CLI, so
+  this value is not locked in.
+
+The on-device flow is deferred to **M3**: on a physical iPhone `localhost` does
+not reach the Mac backend, so that will use an **Apple Universal Link** (an
+`https` URL on a domain we control, e.g. GitHub Pages, hosting the
+`apple-app-site-association` file) or a backend-hosted `https` callback. Bank
+authorization always runs in the **system browser**, never an in-app WebView:
 bank SCA apps often fail to open from a WebView (`client/CLAUDE.md`).
 
 ## Operational constraints
@@ -122,7 +133,9 @@ redacted (`.claude/rules/data-safety.md`).
 
 | Bank | Card accounts exposed | Description readability | Notable fields / quirks |
 | ---- | --------------------- | ----------------------- | ----------------------- |
-| _tbd_ | _tbd_ | _tbd_ | _tbd_ |
+| Revolut | _tbd_ | _tbd_ | Linked 2026-08-20; findings pending first sync |
+| IsyBank | _tbd_ | _tbd_ | Linked 2026-08-20; findings pending first sync |
+| PayPal | _tbd_ | _tbd_ | Linked 2026-08-20; findings pending first sync |
 
 Coverage note (from ADR `0001`): card-account access was extended in March
 2026 to BPER, Postepay, Fineco, Banco BPM/Bibanca, and Nexi including YAP.
