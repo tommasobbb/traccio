@@ -45,9 +45,11 @@ class FakeBankProvider(BankProvider):
     def name(self) -> str:
         return "fake"
 
-    def start_authorization(self, *, institution: str, redirect_url: str) -> AuthorizationStart:
+    def start_authorization(
+        self, *, institution: str, country: str, redirect_url: str
+    ) -> AuthorizationStart:
         return AuthorizationStart(
-            authorization_url=f"https://auth.example/{institution}?redirect={redirect_url}",
+            authorization_url=f"https://auth.example/{country}/{institution}?redirect={redirect_url}",
             session_reference="SESSION-REF-01",
         )
 
@@ -109,7 +111,9 @@ def test_authorization_handshake_round_trips() -> None:
     """start_authorization → complete_authorization yields a usable consent."""
     provider = FakeBankProvider(user_id=uuid4())
 
-    start = provider.start_authorization(institution="test-bank", redirect_url="traccio://callback")
+    start = provider.start_authorization(
+        institution="test-bank", country="IT", redirect_url="traccio://callback"
+    )
     result = provider.complete_authorization(
         session_reference=start.session_reference,
         callback_payload={"code": "AUTH-CODE-01"},

@@ -57,6 +57,30 @@ They produce the application ID and the private key the backend adapter needs.
 References: Enable Banking docs — `quick-start`, `api/control-panel`,
 `tpp/getting-started` under <https://enablebanking.com/docs>.
 
+## Consent flow
+
+How a `Connection` is authorized, as implemented by the Enable Banking adapter
+(`providers/enable_banking/`). Three steps across two backend requests:
+
+1. **Start** (`POST /auth`). The adapter sends `aspsp` (`name` + `country`),
+   `access` (with a `valid_until` requested at the 180-day maximum), a random
+   `state` (anti-CSRF), the `redirect_url`, and `psu_type=personal`. The response
+   carries the SCA `url`. The user opens it in the **system browser** (never a
+   WebView) and completes the bank's authentication.
+2. **Callback.** The bank redirects to `redirect_url` with `code` and the echoed
+   `state` in the query (or `error` / `error_description` on failure).
+3. **Complete** (`POST /sessions`). The adapter checks the returned `state`
+   matches the one it issued (constant-time), then exchanges `code` for a
+   session. The response `session_id` is **the credential** for all later data
+   calls, and `access.valid_until` becomes `Connection.expires_at`.
+
+The adapter is **stateless**: it generates `state` and returns it as the
+`session_reference`; persisting the `state`→pending-`Connection` pairing (so the
+callback can be matched to the right connection and user) is the caller's job.
+`session_id` is a secret — encrypted at rest (Fernet, ADR 0003), never logged,
+never returned by any endpoint. The SCA `url` embeds `state`, so it is not logged
+either.
+
 ## Credential handling
 
 The `<application-id>.pem` private key is a secret and is treated like one

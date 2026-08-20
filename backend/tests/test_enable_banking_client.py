@@ -6,9 +6,11 @@ synthetic institution metadata (no personal data).
 """
 
 import httpx
+import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from traccio.providers.base import ProviderError
 from traccio.providers.enable_banking.client import EnableBankingClient
 
 _APPLICATION_ID = "synthetic-app-id-01"
@@ -50,21 +52,19 @@ def test_list_aspsps_sends_bearer_and_country() -> None:
     assert aspsps == [{"name": "Test Bank 01", "country": "IT"}]
 
 
-def test_list_aspsps_raises_on_error_status() -> None:
-    """A non-2xx response surfaces as an HTTP error rather than empty data."""
+def test_list_aspsps_wraps_error_status_in_provider_error() -> None:
+    """A non-2xx response surfaces as a value-free ProviderError, not the body."""
 
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(401, json={"message": "unauthorized"})
+        return httpx.Response(401, json={"message": "unauthorized-secret-detail"})
 
     client = EnableBankingClient(
         application_id=_APPLICATION_ID,
         private_key_pem=_synthetic_pem(),
         transport=httpx.MockTransport(handler),
     )
-    with client:
-        try:
-            client.list_aspsps("IT")
-        except httpx.HTTPStatusError as exc:
-            assert exc.response.status_code == 401
-        else:
-            raise AssertionError("expected an HTTPStatusError")
+    with client, pytest.raises(ProviderError) as excinfo:
+        client.list_aspsps("IT")
+
+    # The provider response body must not leak into the raised message.
+    assert "unauthorized-secret-detail" not in str(excinfo.value)
