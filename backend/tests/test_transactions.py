@@ -137,10 +137,40 @@ def test_transactions_returns_only_current_users_most_recent_first() -> None:
     # Projection carries the client-facing fields and none of the internals.
     first = transactions[0]
     assert first["amount"] == -1234
+    # A personal transaction's effective amount is its full amount.
+    assert first["effective_amount"] == -1234
     assert first["currency"] == "EUR"
     assert first["role"] == "personal"
     assert "stable_key" not in first
     assert "user_id" not in first
+
+
+def test_transactions_expose_zero_effective_amount_for_rejected() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=account_id,
+                stable_key="TX-RJCT",
+                description="TEST MERCHANT REJECTED",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                status=TransactionStatus.REJECTED,
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions")
+
+    assert response.status_code == 200
+    row = response.json()["transactions"][0]
+    # A rejected movement never settled: raw amount is preserved for balance
+    # reconciliation, but it contributes zero effective spending.
+    assert row["amount"] == -1234
+    assert row["effective_amount"] == 0
 
 
 def test_transactions_can_be_filtered_by_account() -> None:

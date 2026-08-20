@@ -245,7 +245,7 @@
         "type": "object"
       },
       "TransactionResponse": {
-        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\ncurrency : str\n    ISO 4217 code of ``amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.",
+        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\n    What the bank reported; used only for balance reconciliation.\neffective_amount : int\n    How much counts as real personal spending, derived from ``role`` and\n    ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).\n    In the same ``currency`` as ``amount``. Every dashboard/budget total\n    flows from this, never from ``amount``.\ncurrency : str\n    ISO 4217 code of both ``amount`` and ``effective_amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.",
         "properties": {
           "account_id": {
             "format": "uuid",
@@ -287,6 +287,10 @@
             ],
             "title": "Display Description"
           },
+          "effective_amount": {
+            "title": "Effective Amount",
+            "type": "integer"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -315,6 +319,7 @@
           "id",
           "account_id",
           "amount",
+          "effective_amount",
           "currency",
           "booked_at",
           "value_date",

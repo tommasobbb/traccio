@@ -2,9 +2,11 @@
 
 The ``amount``/``currency`` pair mirrors how persistence stores
 :class:`~traccio.domain.money.Money` (two columns). ``effective_amount`` is
-deliberately **not** exposed: it is an M2 derivation from ``role`` and does not
-belong to this read projection (see ``docs/architecture.md`` and
-``tasks/backlog.md``).
+derived here from the single pure function
+:func:`~traccio.domain.effective_amount.effective_amount` and returned alongside
+``amount`` in the same ``currency``. The client renders it and never computes
+spending from ``amount``, or advances and transfers would silently reappear as
+spending (see the invariants in ``docs/architecture.md``).
 """
 
 from datetime import datetime
@@ -12,6 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import TransactionRole, TransactionStatus
 from traccio.domain.models import Transaction
 
@@ -34,8 +37,14 @@ class TransactionResponse(BaseModel):
         Account this movement belongs to.
     amount : int
         Value in the currency's minor unit (cents); negative means outgoing.
+        What the bank reported; used only for balance reconciliation.
+    effective_amount : int
+        How much counts as real personal spending, derived from ``role`` and
+        ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).
+        In the same ``currency`` as ``amount``. Every dashboard/budget total
+        flows from this, never from ``amount``.
     currency : str
-        ISO 4217 code of ``amount``.
+        ISO 4217 code of both ``amount`` and ``effective_amount``.
     booked_at : datetime or None
         Settlement time; ``None`` while pending.
     value_date : datetime or None
@@ -53,6 +62,7 @@ class TransactionResponse(BaseModel):
     id: UUID
     account_id: UUID
     amount: int
+    effective_amount: int
     currency: str
     booked_at: datetime | None
     value_date: datetime | None
@@ -79,10 +89,15 @@ class TransactionResponse(BaseModel):
         TransactionResponse
             The narrowed, client-facing view of ``transaction``.
         """
+        # Derived in one place (the domain function), never recomputed elsewhere.
+        # No advance own_share is threaded yet: no transaction carries
+        # ``role=advance`` until the Advance model lands (a later M2 slice).
+        effective = effective_amount(transaction)
         return cls(
             id=transaction.id,
             account_id=transaction.account_id,
             amount=transaction.money.amount,
+            effective_amount=effective.amount,
             currency=transaction.money.currency,
             booked_at=transaction.booked_at,
             value_date=transaction.value_date,
