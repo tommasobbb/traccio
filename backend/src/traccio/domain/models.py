@@ -286,3 +286,46 @@ class Advance(BaseModel):
     status: AdvanceStatus = AdvanceStatus.OPEN
     participants: list[Participant] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_now)
+
+
+class Reimbursement(BaseModel):
+    """Money paid back against an :class:`Advance`, reducing its receivable.
+
+    One advance has many reimbursements; each belongs to exactly one advance
+    (see ``docs/domain.md``). A reimbursement is either a real incoming
+    transaction the user linked (``transaction_id`` set, whose ``role`` becomes
+    ``reimbursement`` so it counts as neither income nor spending) or a cash
+    payment the user recorded by hand (``transaction_id`` is ``None`` — cash
+    never appears in a bank feed). Its ``amount`` is a **positive magnitude** in
+    the advance's currency and is free: it is summed against the receivable, not
+    validated against any participant's expected share. The advance's
+    ``outstanding`` and derived ``status`` follow from the sum of these — nothing
+    is stored on the advance itself (see :mod:`traccio.domain.advances`).
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the reimbursement within Traccio.
+    user_id : UUID
+        Owning user. The advance and any linked transaction belong to this user.
+    advance_id : UUID
+        The advance this reimbursement pays back.
+    amount : Money
+        The amount paid back, a positive magnitude in the advance's currency.
+    transaction_id : UUID or None
+        The linked incoming transaction, or ``None`` for a manual cash entry.
+    note : str or None
+        Optional free-text note (e.g. "cash, split dinner"). Never validated.
+    created_at : datetime
+        When the reimbursement was recorded (timezone-aware, UTC).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    advance_id: UUID
+    amount: Money
+    transaction_id: UUID | None = None
+    note: str | None = None
+    created_at: datetime = Field(default_factory=_now)

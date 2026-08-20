@@ -291,6 +291,22 @@ The user confirms. Never auto-link money.
 Cash reimbursements exist and never appear in any API. The user must be able
 to record one manually against an `Advance`.
 
+**Storage and derivation (implementation note).** A `Reimbursement` stores its
+`amount` as a positive magnitude (split into `amount` + `currency` like every
+`Money`), an optional `transaction_id` (set for a linked incoming transaction,
+`NULL` for a cash entry), and an optional free-text `note` — nothing else. The
+advance's `outstanding`, `excess` (over-reimbursement) and its `settled` state
+are **derived**, never stored: a single pure function
+(`domain/advances.py::derive_advance`) folds `(receivable, Σ reimbursed,
+written_off)` into `outstanding = max(0, receivable − Σ reimbursed)`, `excess =
+max(0, Σ reimbursed − receivable)`, the derived `status`, and the signed
+`spending_share` fed to `effective_amount`. Only `written_off` is stored on the
+advance; `settled` is derived, so deleting a reimbursement reopens the advance
+automatically. Linking a transaction sets its `role` to `reimbursement` (so its
+`effective_amount` is zero); deleting the link reverts it to `personal`.
+Automatic SEPA matching is a separate later slice that only suggests. See
+ADR 0004.
+
 ---
 
 ## Category
