@@ -102,6 +102,26 @@ class TransactionRole(StrEnum):
     REIMBURSEMENT = "reimbursement"
 
 
+class AdvanceStatus(StrEnum):
+    """Lifecycle state of an :class:`~traccio.domain.models.Advance`.
+
+    Attributes
+    ----------
+    OPEN : str
+        The user is still owed money; the default when an advance is created.
+    SETTLED : str
+        Fully paid back (reimbursements cover the receivable). Set when the
+        reimbursement work lands.
+    WRITTEN_OFF : str
+        Given up on: the outstanding amount moves into the user's spending,
+        because at that point it genuinely was spent. Set by the write-off flow.
+    """
+
+    OPEN = "open"
+    SETTLED = "settled"
+    WRITTEN_OFF = "written_off"
+
+
 class KeyStrategy(StrEnum):
     """How a transaction's stable deduplication key was produced.
 

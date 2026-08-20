@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from traccio.domain.enums import (
     AccountKind,
+    AdvanceStatus,
     ConnectionStatus,
     KeyStrategy,
     TransactionRole,
@@ -218,4 +219,70 @@ class Transfer(BaseModel):
     user_id: UUID
     outgoing_transaction_id: UUID
     incoming_transaction_id: UUID
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Participant(BaseModel):
+    """A named person who owes the user part of an :class:`Advance`.
+
+    Free-text names, not :class:`User` records — enough to answer "who still
+    owes me" without building a social graph (see ``docs/domain.md``). The
+    ``expected_amount`` is a positive magnitude in the advance's currency; it is
+    a hint for reconciliation, never validated against reimbursements.
+
+    Attributes
+    ----------
+    name : str
+        The participant's plain name.
+    expected_amount : Money
+        What this participant is expected to pay back, as a positive magnitude.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    expected_amount: Money
+
+
+class Advance(BaseModel):
+    """A transaction where the user paid for others and expects money back.
+
+    The outgoing ``transaction``'s ``role`` becomes ``advance``, so only the
+    user's declared ``own_share`` counts as spending (the rest is a receivable).
+    An ``Advance`` exists only because the user created it — nothing is inferred
+    (``docs/domain.md``). Deleting it reverts the transaction to ``personal``.
+
+    ``own_share`` is stored as a **positive magnitude** in the transaction's
+    currency (the cents the user actually owes); ``receivable`` and
+    ``outstanding`` are **derived**, never stored — see
+    :mod:`traccio.domain.advances`. Traccio tracks money owed *to* the user only;
+    an advance is not a debt the user owes.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the advance within Traccio.
+    user_id : UUID
+        Owning user. The transaction belongs to this user.
+    transaction_id : UUID
+        The outgoing transaction whose ``role`` is ``advance``.
+    own_share : Money
+        The part of the advance the user actually owes, a positive magnitude in
+        the transaction's currency. Declared by the user, never inferred.
+    status : AdvanceStatus
+        Lifecycle state; ``open`` when created.
+    participants : list[Participant]
+        Optional people who owe the user back, with an expected amount each.
+    created_at : datetime
+        When the advance was created (timezone-aware, UTC).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    transaction_id: UUID
+    own_share: Money
+    status: AdvanceStatus = AdvanceStatus.OPEN
+    participants: list[Participant] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_now)

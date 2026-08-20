@@ -3,22 +3,34 @@
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import (
     AccountKind,
+    AdvanceStatus,
     ConnectionStatus,
     KeyStrategy,
     TransactionRole,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Connection, Transaction, Transfer, User
+from traccio.domain.models import (
+    Account,
+    Advance,
+    Connection,
+    Participant,
+    Transaction,
+    Transfer,
+    User,
+)
 from traccio.domain.money import CurrencyCode, Money
 
 __all__ = [
     "Account",
     "AccountKind",
+    "Advance",
+    "AdvanceStatus",
     "Connection",
     "ConnectionStatus",
     "CurrencyCode",
     "KeyStrategy",
     "Money",
+    "Participant",
     "Transaction",
     "TransactionRole",
     "TransactionStatus",
