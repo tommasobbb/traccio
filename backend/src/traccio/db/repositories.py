@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from traccio.db.mappers import connection_to_row, row_to_account
+from traccio.db.mappers import account_to_row, connection_to_row, row_to_account
 from traccio.db.models import AccountRow, ConnectionRow
 from traccio.domain.enums import ConnectionStatus
 from traccio.domain.models import Account, Connection
@@ -40,9 +40,7 @@ def create_connection(session: Session, *, connection: Connection, auth_state: s
     session.add(row)
 
 
-def find_pending_connection_id(
-    session: Session, *, user_id: UUID, auth_state: str
-) -> UUID | None:
+def find_pending_connection_id(session: Session, *, user_id: UUID, auth_state: str) -> UUID | None:
     """Return the id of the pending connection matching ``auth_state``.
 
     Scoped by ``user_id``. Returns only the id — no ORM row escapes ``db/``.
@@ -107,6 +105,81 @@ def activate_connection(
             auth_state=None,
         )
     )
+
+
+def get_connection_credentials(
+    session: Session, *, user_id: UUID, connection_id: UUID
+) -> str | None:
+    """Return the encrypted credentials of an active connection, or ``None``.
+
+    Scoped by ``user_id``. Returns ``None`` when no connection matches, when it
+    is not ``active``, or when it carries no stored credentials — the caller
+    treats every one of these as "cannot sync". The value is the ciphertext; it
+    is decrypted by the caller (``api/``), never here.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the connection; the query is scoped to it.
+    connection_id : UUID
+        The connection whose credentials to read.
+
+    Returns
+    -------
+    str or None
+        The encrypted consent secret, or ``None`` if unavailable.
+    """
+    return session.scalars(
+        select(ConnectionRow.encrypted_credentials).where(
+            ConnectionRow.id == connection_id,
+            ConnectionRow.user_id == user_id,
+            ConnectionRow.status == ConnectionStatus.ACTIVE,
+        )
+    ).one_or_none()
+
+
+def upsert_account(session: Session, *, account: Account) -> Account:
+    """Insert an account or update it in place if already known.
+
+    Idempotent on ``(user_id, identification_hash)``: an account re-exposed
+    through a new consent updates the existing row (its ``connection_id``,
+    ``kind``, ``currency``, ``name``) rather than duplicating, keeping the
+    original ``id`` and ``created_at`` stable so downstream references survive a
+    re-sync (see ``docs/architecture.md``). Scoped by ``user_id``. Uses a
+    read-then-write pattern (no dialect-specific upsert) so it behaves the same
+    on SQLite and PostgreSQL. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    account : Account
+        The domain account to persist. Its ``user_id`` scopes the match.
+
+    Returns
+    -------
+    Account
+        The persisted account: the newly inserted one, or the existing one with
+        its mutable fields refreshed (original ``id``/``created_at`` preserved).
+    """
+    existing = session.scalars(
+        select(AccountRow).where(
+            AccountRow.user_id == account.user_id,
+            AccountRow.identification_hash == account.identification_hash,
+        )
+    ).one_or_none()
+    if existing is None:
+        row = account_to_row(account)
+        session.add(row)
+        return row_to_account(row)
+
+    existing.connection_id = account.connection_id
+    existing.kind = account.kind
+    existing.currency = account.currency
+    existing.name = account.name
+    return row_to_account(existing)
 
 
 def list_accounts(session: Session, user_id: UUID) -> list[Account]:

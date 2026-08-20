@@ -7,13 +7,15 @@ the session id and codes are synthetic (see ``.claude/rules/data-safety.md``).
 
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from traccio.domain.enums import ConnectionStatus
+from traccio.domain import Account
+from traccio.domain.enums import AccountKind, ConnectionStatus
 from traccio.providers.base import AuthorizationStart, ProviderError, SyncContext
 from traccio.providers.enable_banking.client import EnableBankingClient
 from traccio.providers.enable_banking.provider import EnableBankingProvider
@@ -167,13 +169,136 @@ def test_authorization_result_hides_the_session_credential() -> None:
     assert _SESSION_ID not in repr(result)
 
 
-def test_account_and_transaction_methods_are_not_yet_implemented() -> None:
-    """The data-retrieval half of the adapter lands in a later slice."""
+# Synthetic account details (invented IBAN, holder name, product) — see
+# .claude/rules/data-safety.md. The holder name and IBAN must never surface in
+# the normalized ProviderAccount.
+_IBAN = "IT60X0542811101000000123456"
+_HOLDER_NAME = "MARIO ROSSI"
+_DETAILS = {
+    "uid-curr-01": {
+        "uid": "uid-curr-01",
+        "identification_hash": "IDHASH-CURR-01",
+        "account_id": {"iban": _IBAN},
+        "cash_account_type": "CACC",
+        "currency": "EUR",
+        "product": "TEST CURRENT 01",
+        "name": _HOLDER_NAME,
+    },
+    "uid-card-01": {
+        "uid": "uid-card-01",
+        "identification_hash": "IDHASH-CARD-01",
+        "account_id": {"other": {"identification": "MASKED-01"}},
+        "cash_account_type": "CARD",
+        "currency": "EUR",
+        "product": "TEST CARD 01",
+    },
+}
+
+
+def _accounts_handler(
+    *, session_body: dict[str, Any], details: dict[str, dict[str, Any]]
+) -> httpx.MockTransport:
+    """Serve GET /sessions/{id} then GET /accounts/{uid}/details from canned data."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == f"/sessions/{_SESSION_ID}":
+            return httpx.Response(200, json=session_body)
+        prefix, _, suffix = path.partition("/accounts/")
+        if prefix == "" and suffix.endswith("/details"):
+            uid = suffix.removesuffix("/details")
+            return httpx.Response(200, json=details[uid])
+        raise AssertionError(f"unexpected path: {path}")
+
+    return httpx.MockTransport(handler)
+
+
+def test_list_accounts_maps_session_accounts_to_provider_accounts() -> None:
+    """list_accounts fans out over the session's uids and normalizes each account."""
+    provider = _provider(
+        _accounts_handler(
+            session_body={"accounts": ["uid-curr-01", "uid-card-01"]}, details=_DETAILS
+        )
+    )
+
+    accounts = provider.list_accounts(
+        credentials=_SESSION_ID, context=SyncContext(psu_present=True)
+    )
+
+    assert len(accounts) == 2
+    by_hash = {a.identification_hash: a for a in accounts}
+    assert by_hash["IDHASH-CURR-01"].kind is AccountKind.CURRENT
+    assert by_hash["IDHASH-CURR-01"].currency == "EUR"
+    # The display name is the bank product, not the account holder.
+    assert by_hash["IDHASH-CURR-01"].name == "TEST CURRENT 01"
+    assert by_hash["IDHASH-CARD-01"].kind is AccountKind.CARD
+
+
+def test_list_accounts_never_exposes_iban_or_holder_name() -> None:
+    """The raw IBAN and the account-holder name stay inside the adapter (data-safety)."""
+    provider = _provider(
+        _accounts_handler(
+            session_body={"accounts": ["uid-curr-01"]},
+            details={"uid-curr-01": _DETAILS["uid-curr-01"]},
+        )
+    )
+
+    accounts = provider.list_accounts(
+        credentials=_SESSION_ID, context=SyncContext(psu_present=True)
+    )
+
+    blob = repr(accounts)
+    assert _IBAN not in blob
+    assert _HOLDER_NAME not in blob
+
+
+def test_list_accounts_rejects_unsupported_account_type() -> None:
+    """A cash_account_type outside the modelled kinds fails loudly rather than coercing."""
+    details = {"uid-loan-01": {**_DETAILS["uid-curr-01"], "cash_account_type": "LOAN"}}
+    provider = _provider(
+        _accounts_handler(session_body={"accounts": ["uid-loan-01"]}, details=details)
+    )
+
+    with pytest.raises(ProviderError):
+        provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
+
+
+def test_list_accounts_rejects_malformed_details() -> None:
+    """Missing a required field surfaces as a value-free ProviderError."""
+    details = {"uid-x": {"cash_account_type": "CACC", "currency": "EUR"}}  # no identification_hash
+    provider = _provider(_accounts_handler(session_body={"accounts": ["uid-x"]}, details=details))
+
+    with pytest.raises(ProviderError):
+        provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
+
+
+def test_list_accounts_rejects_session_without_accounts() -> None:
+    """A session response lacking the accounts list is a malformed payload."""
+    provider = _provider(_accounts_handler(session_body={}, details={}))
+
+    with pytest.raises(ProviderError):
+        provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
+
+
+def test_fetch_transactions_is_not_yet_implemented() -> None:
+    """The transaction half of the adapter lands in a later slice."""
     provider = _provider(httpx.MockTransport(lambda request: httpx.Response(200, json={})))
-    context = SyncContext(psu_present=True)
+    account = Account(
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        kind=AccountKind.CURRENT,
+        currency="EUR",
+        identification_hash="IDHASH-CURR-01",
+    )
 
     with pytest.raises(NotImplementedError):
-        provider.list_accounts(credentials=_SESSION_ID, context=context)
+        provider.fetch_transactions(
+            credentials=_SESSION_ID,
+            account=account,
+            since=datetime(2026, 1, 1, tzinfo=UTC),
+            until=None,
+            context=SyncContext(psu_present=True),
+        )
 
 
 def test_provider_name_is_stable() -> None:

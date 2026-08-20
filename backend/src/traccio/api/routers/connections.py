@@ -22,7 +22,11 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_user_id, get_bank_provider, get_token_cipher_dep
-from traccio.api.schemas.connections import StartConnectionRequest, StartConnectionResponse
+from traccio.api.schemas.connections import (
+    StartConnectionRequest,
+    StartConnectionResponse,
+    SyncAccountsResponse,
+)
 from traccio.core.config import get_settings
 from traccio.core.crypto import TokenCipher
 from traccio.core.logging import get_logger
@@ -30,11 +34,13 @@ from traccio.db.repositories import (
     activate_connection,
     create_connection,
     find_pending_connection_id,
+    get_connection_credentials,
+    upsert_account,
 )
 from traccio.db.session import get_session
 from traccio.domain.enums import ConnectionStatus
-from traccio.domain.models import Connection
-from traccio.providers.base import BankProvider, ProviderError
+from traccio.domain.models import Account, Connection
+from traccio.providers.base import BankProvider, ProviderError, SyncContext
 
 logger = get_logger(__name__)
 
@@ -169,3 +175,70 @@ def connection_callback(
 
     logger.info("connections.callback", connection_id=str(connection_id), status="active")
     return HTMLResponse(content=_SUCCESS_PAGE)
+
+
+@router.post("/connections/{connection_id}/sync", response_model=SyncAccountsResponse)
+def sync_connection(
+    connection_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+    provider: Annotated[BankProvider, Depends(get_bank_provider)],
+    cipher: Annotated[TokenCipher, Depends(get_token_cipher_dep)],
+) -> SyncAccountsResponse:
+    """Sync the accounts reachable through an active connection.
+
+    Reads the encrypted consent secret, decrypts it, lists the accounts the
+    consent exposes, and upserts each one (idempotent on stable identity, so a
+    re-sync updates rather than duplicates). Scoped to the current user. This
+    slice discovers accounts only; transactions join this endpoint later.
+
+    Parameters
+    ----------
+    connection_id : UUID
+        The active connection to sync.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the connection belongs to.
+    provider : BankProvider
+        The bank adapter (Enable Banking).
+    cipher : Fernet cipher
+        Decrypts the stored consent secret.
+
+    Returns
+    -------
+    SyncAccountsResponse
+        How many accounts were discovered and persisted.
+    """
+    encrypted = get_connection_credentials(session, user_id=user_id, connection_id=connection_id)
+    if encrypted is None:
+        raise HTTPException(status_code=404, detail="unknown or inactive connection")
+
+    credentials = cipher.decrypt(encrypted)
+    try:
+        provider_accounts = provider.list_accounts(
+            credentials=credentials, context=SyncContext(psu_present=True)
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail="provider account listing failed") from exc
+
+    for provider_account in provider_accounts:
+        upsert_account(
+            session,
+            account=Account(
+                user_id=user_id,
+                connection_id=connection_id,
+                kind=provider_account.kind,
+                currency=provider_account.currency,
+                identification_hash=provider_account.identification_hash,
+                name=provider_account.name,
+            ),
+        )
+    session.commit()
+
+    logger.info(
+        "connections.sync",
+        connection_id=str(connection_id),
+        accounts_synced=len(provider_accounts),
+    )
+    return SyncAccountsResponse(accounts_synced=len(provider_accounts))

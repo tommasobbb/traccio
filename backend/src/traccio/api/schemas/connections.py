@@ -37,3 +37,19 @@ class StartConnectionResponse(BaseModel):
 
     connection_id: UUID
     authorization_url: str
+
+
+class SyncAccountsResponse(BaseModel):
+    """The outcome of syncing a connection's accounts.
+
+    Only a count is returned, never account contents (``.claude/rules/data-safety.md``);
+    the accounts themselves are read back via ``GET /accounts``. In this slice a
+    sync discovers accounts only; transactions join it in a later slice.
+
+    Attributes
+    ----------
+    accounts_synced : int
+        How many accounts were discovered and persisted (inserted or updated).
+    """
+
+    accounts_synced: int

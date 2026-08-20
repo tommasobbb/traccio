@@ -14,9 +14,12 @@ composes this client. The endpoints here:
 - ``POST /auth`` — start a consent handshake; returns the SCA ``url``.
 - ``POST /sessions`` — exchange the callback ``code`` for a session; the
   ``session_id`` in the response is the credential used for later data calls.
+- ``GET /sessions/{session_id}`` — the account UIDs a stored session exposes.
+- ``GET /accounts/{account_uid}/details`` — full details for one account
+  (type, currency, stable identification hash).
 
-The account and transaction endpoints — which return domain objects, not raw
-payloads — land in a later slice.
+The transaction endpoint — which returns domain objects, not raw payloads —
+lands in a later slice.
 
 Data safety (``.claude/rules/data-safety.md``): this module never logs the JWT,
 the credentials, or any response body. ``/auth`` and ``/sessions`` responses
@@ -175,6 +178,41 @@ class EnableBankingClient:
             ``accounts``, and ``access``.
         """
         return cast(dict[str, Any], self._request_json("POST", "/sessions", json={"code": code}))
+
+    def get_session(self, session_id: str) -> dict[str, Any]:
+        """Retrieve a stored session (``GET /sessions/{session_id}``).
+
+        Parameters
+        ----------
+        session_id : str
+            The session identifier obtained from :meth:`authorize_session`; the
+            consent credential. Placed in the path, never logged.
+
+        Returns
+        -------
+        dict
+            Raw provider response, notably ``accounts`` (a list of account UID
+            strings). Full per-account details are fetched separately with
+            :meth:`get_account_details`.
+        """
+        return cast(dict[str, Any], self._request_json("GET", f"/sessions/{session_id}"))
+
+    def get_account_details(self, account_uid: str) -> dict[str, Any]:
+        """Retrieve one account's details (``GET /accounts/{account_uid}/details``).
+
+        Parameters
+        ----------
+        account_uid : str
+            An account UID from :meth:`get_session`.
+
+        Returns
+        -------
+        dict
+            Raw provider ``AccountResource`` (top-level, unwrapped): notably
+            ``identification_hash``, ``cash_account_type``, ``currency``, and
+            ``product``. Normalized into a domain object by the provider, not here.
+        """
+        return cast(dict[str, Any], self._request_json("GET", f"/accounts/{account_uid}/details"))
 
     def close(self) -> None:
         """Close the underlying HTTP connection pool."""

@@ -81,6 +81,42 @@ callback can be matched to the right connection and user) is the caller's job.
 never returned by any endpoint. The SCA `url` embeds `state`, so it is not logged
 either.
 
+## Account retrieval
+
+Once a `Connection` is active, its accounts are fetched with the stored
+`session_id` (the credential) by `POST /connections/{id}/sync`, which drives the
+adapter's `list_accounts`. Two provider calls per sync:
+
+1. **`GET /sessions/{session_id}`** returns the `accounts` array — the account
+   **UIDs** the session exposes (not full objects).
+2. **`GET /accounts/{account_uid}/details`** returns the full `AccountResource`
+   for each UID: `identification_hash`, `cash_account_type`, `currency`,
+   `product`, and — deliberately unused — the account-holder `name`.
+
+The adapter normalizes each into a provider-agnostic `ProviderAccount`; the
+`api/` handler injects `user_id`/`connection_id` and upserts it (idempotent on
+`(user_id, identification_hash)`, so a re-sync updates rather than duplicates).
+
+**Normalization duties for this adapter:**
+
+- **Stable identity.** Enable Banking supplies a per-account
+  `identification_hash`, documented as stable for matching an account across
+  sessions and re-authorizations. It is used directly as the domain
+  `Account.identification_hash`; the raw IBAN never leaves the adapter (a purely
+  derived, non-reversible identity satisfies both the domain rule — "not the
+  bank's account id" — and data-safety).
+- **Account kind.** ISO 20022 `cash_account_type` maps to `AccountKind`:
+  `CACC`→`current`, `SVGS`→`savings`, `CARD`→`card`. Any other value the bank
+  reports (`CASH`, `LOAN`, `OTHR`) is **refused** (`ProviderError`) rather than
+  coerced, so an unmodelled account fails loudly instead of masquerading as a
+  current account.
+- **Display name.** The bank's proprietary `product` name is used as
+  `Account.name`. The `AccountResource.name` field is the **account-holder
+  name** — personal data — and is never stored or logged (`.claude/rules/data-safety.md`).
+
+Sign convention, stable transaction identity, and `booked_at`/`value_date` are
+transaction-level duties documented alongside `fetch_transactions` (a later slice).
+
 ## Credential handling
 
 The `<application-id>.pem` private key is a secret and is treated like one
