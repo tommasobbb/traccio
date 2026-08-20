@@ -16,6 +16,13 @@ import structlog
 # importing structlog directly.
 get_logger = structlog.get_logger
 
+# Third-party HTTP client loggers whose INFO/DEBUG records include full request
+# URLs. For Enable Banking those URLs carry the consent secret
+# (``/sessions/{session_id}``) and account uids (``/accounts/{account_uid}/...``),
+# so they must never reach the log sink (see ``.claude/rules/data-safety.md``).
+# Pinned at WARNING regardless of the app's configured level.
+_SILENCED_HTTP_LOGGERS = ("httpx", "httpcore")
+
 
 def configure_logging(*, log_level: str = "INFO", json_logs: bool = False) -> None:
     """Configure structlog and the stdlib logging backend.
@@ -37,6 +44,12 @@ def configure_logging(*, log_level: str = "INFO", json_logs: bool = False) -> No
     Returns
     -------
     None
+
+    Notes
+    -----
+    The HTTP client loggers in :data:`_SILENCED_HTTP_LOGGERS` are pinned at
+    ``WARNING`` so their per-request URL lines (which embed consent secrets and
+    account uids) never reach the sink, even when the app runs at ``DEBUG``.
     """
     # Map the level name to its numeric value, defaulting to INFO if unknown.
     level = logging.getLevelNamesMapping().get(log_level.upper(), logging.INFO)
@@ -59,6 +72,12 @@ def configure_logging(*, log_level: str = "INFO", json_logs: bool = False) -> No
     # Route stdlib logging through the same level so third-party libraries that
     # use ``logging`` honour the configured threshold.
     logging.basicConfig(format="%(message)s", level=level)
+
+    # Pin the HTTP client loggers above INFO so their per-request URL lines
+    # (consent secrets, account uids) never reach the sink. A named logger's own
+    # level filters before propagation, so this holds even at DEBUG.
+    for name in _SILENCED_HTTP_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     structlog.configure(
         processors=[*shared_processors, renderer],
