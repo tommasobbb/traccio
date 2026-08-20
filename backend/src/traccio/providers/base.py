@@ -41,6 +41,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from traccio.domain import Account, ConnectionStatus, Transaction
 
 
+class ProviderError(Exception):
+    """A bank provider operation failed.
+
+    The provider-agnostic error contract every adapter raises and the layers
+    above ``providers/`` catch — so callers never handle provider-specific
+    exception types (the anti-corruption rule extends to errors, not just data).
+
+    Messages must be **stable and value-free** (``.claude/rules/data-safety.md``):
+    an adapter never re-raises a provider/library exception unchanged, since its
+    message may carry a response body; it wraps it with ``raise ... from`` and a
+    fixed message, attaching only a non-sensitive identifier when one helps.
+    """
+
+
 class AuthorizationStart(BaseModel):
     """The first step of a consent handshake: where to send the user.
 
@@ -137,13 +151,18 @@ class BankProvider(ABC):
         """
 
     @abstractmethod
-    def start_authorization(self, *, institution: str, redirect_url: str) -> AuthorizationStart:
+    def start_authorization(
+        self, *, institution: str, country: str, redirect_url: str
+    ) -> AuthorizationStart:
         """Begin a consent handshake for ``institution``.
 
         Parameters
         ----------
         institution : str
             Provider-scoped identifier of the bank to authorize.
+        country : str
+            ISO 3166-1 alpha-2 country of the bank. Open Banking institutions are
+            country-scoped, so identity is ``(institution, country)``.
         redirect_url : str
             Whitelisted URL the bank returns the user to after SCA.
 
