@@ -9,13 +9,14 @@ never see ORM types.
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from traccio.db.mappers import (
     account_to_row,
     connection_to_row,
     row_to_account,
+    row_to_connection,
     row_to_transaction,
     transaction_to_row,
 )
@@ -265,3 +266,81 @@ def list_accounts(session: Session, user_id: UUID) -> list[Account]:
         select(AccountRow).where(AccountRow.user_id == user_id).order_by(AccountRow.created_at)
     ).all()
     return [row_to_account(row) for row in rows]
+
+
+def list_connections(session: Session, user_id: UUID) -> list[Connection]:
+    """Return the user's connections, oldest first.
+
+    Scoped by ``user_id``. Secret material (``encrypted_credentials``,
+    ``auth_state``) stays on the row and never reaches the domain object the
+    mapper produces, so callers above ``db/`` cannot leak it.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose connections to return; the query is scoped to it.
+
+    Returns
+    -------
+    list[Connection]
+        Domain connections owned by ``user_id`` (empty if none).
+    """
+    rows = session.scalars(
+        select(ConnectionRow)
+        .where(ConnectionRow.user_id == user_id)
+        .order_by(ConnectionRow.created_at)
+    ).all()
+    return [row_to_connection(row) for row in rows]
+
+
+def list_transactions(
+    session: Session,
+    user_id: UUID,
+    *,
+    account_id: UUID | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[Transaction]:
+    """Return the user's transactions, most recent first, paginated.
+
+    Scoped by ``user_id``; the optional ``account_id`` narrows to a single
+    account but is always combined with ``user_id``, so it can never expose
+    another user's rows. Ordering is most-recent-first on
+    ``coalesce(booked_at, value_date)`` (a pending row with no ``booked_at``
+    falls back to its ``value_date``), tie-broken by ``id`` for a deterministic,
+    stable page order without relying on dialect-specific ``NULLS FIRST/LAST``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose transactions to return; the query is scoped to it.
+    account_id : UUID or None, optional
+        When given, restrict to this account (still scoped by ``user_id``).
+    limit : int, optional
+        Maximum number of rows to return. The caller (``api/``) validates the
+        bounds; the default matches one page.
+    offset : int, optional
+        Number of rows to skip for pagination.
+
+    Returns
+    -------
+    list[Transaction]
+        Domain transactions owned by ``user_id`` (empty if none), newest first.
+    """
+    query = select(TransactionRow).where(TransactionRow.user_id == user_id)
+    if account_id is not None:
+        query = query.where(TransactionRow.account_id == account_id)
+    query = (
+        query.order_by(
+            func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
+            TransactionRow.id,
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = session.scalars(query).all()
+    return [row_to_transaction(row) for row in rows]

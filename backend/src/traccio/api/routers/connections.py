@@ -24,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_user_id, get_bank_provider, get_token_cipher_dep
 from traccio.api.schemas.connections import (
+    ConnectionResponse,
+    ConnectionsResponse,
     StartConnectionRequest,
     StartConnectionResponse,
     SyncResponse,
@@ -36,6 +38,7 @@ from traccio.db.repositories import (
     create_connection,
     find_pending_connection_id,
     get_connection_credentials,
+    list_connections,
     upsert_account,
     upsert_transaction,
 )
@@ -260,4 +263,35 @@ def sync_connection(
     return SyncResponse(
         accounts_synced=len(provider_accounts),
         transactions_synced=transactions_synced,
+    )
+
+
+@router.get("/connections", response_model=ConnectionsResponse)
+def connections(
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> ConnectionsResponse:
+    """List the current user's bank connections, oldest first.
+
+    Scoped to the current user. Secret material never leaves ``db/``, so the
+    projection cannot expose the consent secret or ``auth_state`` (see
+    ``.claude/rules/data-safety.md``).
+
+    Parameters
+    ----------
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user whose connections to return.
+
+    Returns
+    -------
+    ConnectionsResponse
+        The user's connections, oldest first.
+    """
+    found = list_connections(session, user_id)
+    # Log a count, never connection contents (see data-safety rules).
+    logger.info("connections.list", count=len(found))
+    return ConnectionsResponse(
+        connections=[ConnectionResponse.from_domain(connection) for connection in found]
     )

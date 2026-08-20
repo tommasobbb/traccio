@@ -8,7 +8,12 @@ Routes live in ``api/routers/`` and their schemas in ``api/schemas/``.
 
 from fastapi import FastAPI
 
-from traccio.api.routers import accounts_router, connections_router, health_router
+from traccio.api.routers import (
+    accounts_router,
+    connections_router,
+    health_router,
+    transactions_router,
+)
 from traccio.api.version import resolve_version
 from traccio.core.config import get_settings
 from traccio.core.logging import configure_logging, get_logger
@@ -42,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(accounts_router)
     app.include_router(connections_router)
+    app.include_router(transactions_router)
 
     return app
 

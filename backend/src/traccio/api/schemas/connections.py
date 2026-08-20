@@ -4,9 +4,13 @@ None of these carry secret material: the consent secret (``session_id``) is
 encrypted at rest and never returned by any endpoint (``.claude/rules/data-safety.md``).
 """
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel
+
+from traccio.domain.enums import ConnectionStatus
+from traccio.domain.models import Connection
 
 
 class StartConnectionRequest(BaseModel):
@@ -57,3 +61,75 @@ class SyncResponse(BaseModel):
 
     accounts_synced: int
     transactions_synced: int
+
+
+class ConnectionResponse(BaseModel):
+    """One connection as returned to the client.
+
+    A narrow projection of :class:`~traccio.domain.models.Connection`. It
+    carries no secret material by construction: the consent secret and the
+    anti-CSRF ``auth_state`` live only on the ORM row, never on the domain model
+    this is built from (see ``.claude/rules/data-safety.md``). ``user_id`` is
+    implied by the caller and omitted.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable connection identifier.
+    provider : str
+        Adapter that produced the connection (e.g. ``"enable_banking"``).
+    institution_name : str
+        Human-readable bank name for display.
+    status : ConnectionStatus
+        Consent lifecycle state.
+    expires_at : datetime or None
+        Consent expiry; ``None`` while pending. Surfacing an upcoming expiry is
+        a product concern the client renders from this field.
+    created_at : datetime
+        When the connection was created.
+    """
+
+    id: UUID
+    provider: str
+    institution_name: str
+    status: ConnectionStatus
+    expires_at: datetime | None
+    created_at: datetime
+
+    @classmethod
+    def from_domain(cls, connection: Connection) -> "ConnectionResponse":
+        """Project a domain :class:`~traccio.domain.models.Connection`.
+
+        Parameters
+        ----------
+        connection : Connection
+            The domain connection to project.
+
+        Returns
+        -------
+        ConnectionResponse
+            The narrowed, client-facing view of ``connection``.
+        """
+        return cls(
+            id=connection.id,
+            provider=connection.provider,
+            institution_name=connection.institution_name,
+            status=connection.status,
+            expires_at=connection.expires_at,
+            created_at=connection.created_at,
+        )
+
+
+class ConnectionsResponse(BaseModel):
+    """Envelope for the connection list.
+
+    A wrapper object rather than a bare array leaves room for pagination or
+    metadata later without breaking the generated Swift client.
+
+    Attributes
+    ----------
+    connections : list[ConnectionResponse]
+        The caller's connections, oldest first.
+    """
+
+    connections: list[ConnectionResponse]
