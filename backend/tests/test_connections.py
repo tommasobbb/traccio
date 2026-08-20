@@ -320,3 +320,54 @@ def test_sync_pending_connection_is_not_found() -> None:
     # A pending connection has no usable credentials; it cannot sync.
     assert response.status_code == 404
     assert _accounts(engine) == []
+
+
+def test_list_connections_returns_the_users_connections_without_secrets() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+    connection_id = _activate_a_connection(client)
+
+    response = client.get("/connections")
+
+    assert response.status_code == 200
+    connections = response.json()["connections"]
+    assert len(connections) == 1
+    body = connections[0]
+    assert body["id"] == connection_id
+    assert body["provider"] == "enable_banking"
+    assert body["institution_name"] == "Test Bank 01"
+    assert body["status"] == ConnectionStatus.ACTIVE.value
+    assert body["expires_at"] is not None
+    # No secret material is ever projected (data-safety): neither the consent
+    # secret nor the anti-CSRF state, and not even the field names.
+    assert "encrypted_credentials" not in body
+    assert "auth_state" not in body
+    assert _SESSION_ID not in response.text
+    assert _STATE not in response.text
+
+
+def test_list_connections_excludes_other_users() -> None:
+    engine = _sqlite_engine()
+    stranger_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            ConnectionRow(
+                id=uuid4(),
+                user_id=stranger_id,
+                provider="enable_banking",
+                institution_name="STRANGER BANK",
+                status=ConnectionStatus.ACTIVE,
+                expires_at=None,
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                encrypted_credentials=None,
+                auth_state=None,
+            )
+        )
+        session.commit()
+
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+    response = client.get("/connections")
+
+    assert response.status_code == 200
+    # The stranger's connection is invisible to the user-scoped query.
+    assert response.json() == {"connections": []}
