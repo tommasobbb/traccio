@@ -5,9 +5,11 @@ This package re-exports the routers so the factory imports from one place.
 """
 
 from traccio.api.routers.accounts import router as accounts_router
+from traccio.api.routers.connections import router as connections_router
 from traccio.api.routers.health import router as health_router
 
 __all__ = [
     "accounts_router",
+    "connections_router",
     "health_router",
 ]

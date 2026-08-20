@@ -87,9 +87,10 @@ class UserRow(Base):
 class ConnectionRow(Base):
     """Persisted :class:`~traccio.domain.models.Connection`.
 
-    Bank credentials and tokens are deliberately absent: the at-rest encryption
-    scheme is decided in M1 before anything is stored (see
-    ``tasks/backlog.md``). Until then this table holds no secret material.
+    Two columns hold secret/transient material that is deliberately **absent
+    from the domain model** (which never carries tokens — see
+    ``docs/architecture.md``): ``encrypted_credentials`` and ``auth_state``.
+    They are written by :mod:`traccio.db.repositories`, not by the mappers.
 
     Attributes
     ----------
@@ -107,9 +108,19 @@ class ConnectionRow(Base):
         Consent expiry; ``None`` while pending.
     created_at : datetime
         Creation timestamp (timezone-aware, UTC).
+    encrypted_credentials : str or None
+        The provider consent secret (Enable Banking ``session_id``) encrypted at
+        rest with Fernet (see ``docs/decisions/0003-token-encryption-at-rest.md``).
+        ``None`` while the connection is pending. Never logged, never returned by
+        any endpoint.
+    auth_state : str or None
+        The anti-CSRF ``state`` issued when authorization started, used to match
+        the SCA callback back to this pending connection. Unique; cleared to
+        ``None`` once the connection is activated.
     """
 
     __tablename__ = "connections"
+    __table_args__ = (UniqueConstraint("auth_state"),)
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
@@ -118,6 +129,8 @@ class ConnectionRow(Base):
     status: Mapped[ConnectionStatus] = mapped_column(_enum_column(ConnectionStatus))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auth_state: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class AccountRow(Base):
