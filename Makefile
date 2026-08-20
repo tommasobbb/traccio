@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := help
 BACKEND := backend
 CORE := client/Packages/TraccioCore
+COUNTRY ?= IT
+CERTS := $(BACKEND)/.certs
 
 help: ## Mostra i comandi disponibili
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -13,8 +15,18 @@ setup: ## Installa le dipendenze di backend e client
 reset-venv: ## Ricrea da zero il venv del backend (fix per import errors)
 	cd $(BACKEND) && rm -rf .venv && uv venv && uv sync
 	
-run: ## Avvia il backend in locale con reload
+run: db-upgrade ## Avvia il backend in locale con reload
 	cd $(BACKEND) && uv run uvicorn traccio.api.main:app --reload
+
+run-tls: db-upgrade ## Avvia il backend in https locale (cert self-signed) per il callback OB
+	@mkdir -p $(CERTS)
+	@test -f $(CERTS)/cert.pem || openssl req -x509 -newkey rsa:2048 -nodes \
+		-keyout $(CERTS)/key.pem -out $(CERTS)/cert.pem -days 365 -subj "/CN=localhost"
+	cd $(BACKEND) && uv run uvicorn traccio.api.main:app --reload \
+		--ssl-keyfile .certs/key.pem --ssl-certfile .certs/cert.pem
+
+eb-aspsps: ## Elenca gli ASPSP Enable Banking per un paese (COUNTRY=IT), valida l'auth
+	cd $(BACKEND) && uv run python scripts/eb_smoke.py --country $(COUNTRY)
 
 test: test-backend test-core ## Esegue tutti i test
 
@@ -36,7 +48,7 @@ db-revision: ## Genera una migrazione Alembic da autogenerate (m="messaggio")
 db-upgrade: ## Applica le migrazioni fino a head
 	cd $(BACKEND) && uv run alembic upgrade head
 
-seed-dev: ## Popola il DB con l'utente dev e alcuni account sintetici
+seed-dev: db-upgrade ## Popola il DB con l'utente dev e alcuni account sintetici
 	cd $(BACKEND) && uv run python -m traccio.db.seed_dev
 
 xcode: ## Rigenera il progetto Xcode da Project.yml
@@ -45,4 +57,4 @@ xcode: ## Rigenera il progetto Xcode da Project.yml
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run test test-backend test-core lint fmt db-revision db-upgrade seed-dev xcode openapi
+.PHONY: help setup reset-venv run run-tls eb-aspsps test test-backend test-core lint fmt db-revision db-upgrade seed-dev xcode openapi

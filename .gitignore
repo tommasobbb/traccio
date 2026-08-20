@@ -37,6 +37,8 @@ xcuserdata/
 *.pem
 *.mobileprovision
 secrets/
+# Self-signed TLS material for the local https callback (make run-tls).
+.certs/
 
 # --- Local agent config ---
 CLAUDE.local.md
