@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from traccio.domain.advances import outstanding, receivable
+from traccio.domain.advances import derive_advance
 from traccio.domain.enums import AdvanceStatus
 from traccio.domain.models import Advance, Participant, Transaction
 from traccio.domain.money import Money
@@ -77,13 +77,19 @@ class AdvanceResponse(BaseModel):
         The user's declared share, a positive magnitude (cents).
     receivable : int
         What the user is owed: ``|amount| - own_share`` (positive magnitude).
+    reimbursed : int
+        The sum paid back so far, a positive magnitude.
     outstanding : int
-        What is still owed after reimbursements. Equals ``receivable`` until the
-        reimbursement work lands.
+        What is still owed after reimbursements, clamped at zero
+        (``max(0, receivable - reimbursed)``).
+    excess : int
+        Over-reimbursement, ``max(0, reimbursed - receivable)`` — flagged for the
+        user rather than silently absorbed. Zero in the normal case.
     currency : str
         ISO 4217 code of every amount here (the transaction's currency).
     status : AdvanceStatus
-        Lifecycle state; ``open`` when created.
+        Derived lifecycle state: ``written_off`` when written off, else
+        ``settled`` once reimbursements cover the receivable, else ``open``.
     participants : list[ParticipantSchema]
         People who owe the user back.
     created_at : datetime
@@ -94,18 +100,28 @@ class AdvanceResponse(BaseModel):
     transaction_id: UUID
     own_share: int
     receivable: int
+    reimbursed: int
     outstanding: int
+    excess: int
     currency: str
     status: AdvanceStatus
     participants: list[ParticipantSchema]
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, advance: Advance, transaction: Transaction) -> "AdvanceResponse":
+    def from_domain(
+        cls,
+        advance: Advance,
+        transaction: Transaction,
+        reimbursed: Money | None = None,
+    ) -> "AdvanceResponse":
         """Project an :class:`~traccio.domain.models.Advance` with derived amounts.
 
-        Derives ``receivable``/``outstanding`` in one place via the pure domain
-        functions. No reimbursements exist yet, so ``outstanding == receivable``.
+        Derives ``receivable``/``reimbursed``/``outstanding``/``excess`` and the
+        lifecycle ``status`` in one place via
+        :func:`~traccio.domain.advances.derive_advance`. The stored ``status``
+        only tells whether the advance was written off; ``settled`` is derived
+        from the reimbursements (see ADR 0004).
 
         Parameters
         ----------
@@ -113,6 +129,9 @@ class AdvanceResponse(BaseModel):
             The domain advance to project.
         transaction : Transaction
             Its outgoing transaction, needed to derive the receivable.
+        reimbursed : Money or None, optional
+            The sum reimbursed against this advance; defaults to zero in the
+            advance's currency (no reimbursements).
 
         Returns
         -------
@@ -120,16 +139,23 @@ class AdvanceResponse(BaseModel):
             The client-facing view of ``advance``.
         """
         currency = advance.own_share.currency
-        receivable_amount = receivable(transaction, advance.own_share)
-        outstanding_amount = outstanding(receivable_amount, Money(amount=0, currency=currency))
+        reimbursed = reimbursed if reimbursed is not None else Money(amount=0, currency=currency)
+        state = derive_advance(
+            transaction,
+            advance.own_share,
+            reimbursed,
+            written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
+        )
         return cls(
             id=advance.id,
             transaction_id=advance.transaction_id,
             own_share=advance.own_share.amount,
-            receivable=receivable_amount.amount,
-            outstanding=outstanding_amount.amount,
+            receivable=state.receivable.amount,
+            reimbursed=state.reimbursed.amount,
+            outstanding=state.outstanding.amount,
+            excess=state.excess.amount,
             currency=currency,
-            status=advance.status,
+            status=state.status,
             participants=[ParticipantSchema.from_domain(p) for p in advance.participants],
             created_at=advance.created_at,
         )

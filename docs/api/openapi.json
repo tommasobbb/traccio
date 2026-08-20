@@ -78,7 +78,7 @@
         "type": "object"
       },
       "AdvanceResponse": {
-        "description": "One advance as returned to the client.\n\nProjects :class:`~traccio.domain.models.Advance` and adds the derived\n``receivable``/``outstanding`` (positive magnitudes). The transaction carries\n``role=advance``, so its ``effective_amount`` on ``GET /transactions`` is the\nuser's share, not the full amount.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the advance.\ntransaction_id : UUID\n    The outgoing transaction this advance is on.\nown_share : int\n    The user's declared share, a positive magnitude (cents).\nreceivable : int\n    What the user is owed: ``|amount| - own_share`` (positive magnitude).\noutstanding : int\n    What is still owed after reimbursements. Equals ``receivable`` until the\n    reimbursement work lands.\ncurrency : str\n    ISO 4217 code of every amount here (the transaction's currency).\nstatus : AdvanceStatus\n    Lifecycle state; ``open`` when created.\nparticipants : list[ParticipantSchema]\n    People who owe the user back.\ncreated_at : datetime\n    When the advance was created (timezone-aware, UTC).",
+        "description": "One advance as returned to the client.\n\nProjects :class:`~traccio.domain.models.Advance` and adds the derived\n``receivable``/``outstanding`` (positive magnitudes). The transaction carries\n``role=advance``, so its ``effective_amount`` on ``GET /transactions`` is the\nuser's share, not the full amount.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the advance.\ntransaction_id : UUID\n    The outgoing transaction this advance is on.\nown_share : int\n    The user's declared share, a positive magnitude (cents).\nreceivable : int\n    What the user is owed: ``|amount| - own_share`` (positive magnitude).\nreimbursed : int\n    The sum paid back so far, a positive magnitude.\noutstanding : int\n    What is still owed after reimbursements, clamped at zero\n    (``max(0, receivable - reimbursed)``).\nexcess : int\n    Over-reimbursement, ``max(0, reimbursed - receivable)`` \u2014 flagged for the\n    user rather than silently absorbed. Zero in the normal case.\ncurrency : str\n    ISO 4217 code of every amount here (the transaction's currency).\nstatus : AdvanceStatus\n    Derived lifecycle state: ``written_off`` when written off, else\n    ``settled`` once reimbursements cover the receivable, else ``open``.\nparticipants : list[ParticipantSchema]\n    People who owe the user back.\ncreated_at : datetime\n    When the advance was created (timezone-aware, UTC).",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -88,6 +88,10 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "excess": {
+            "title": "Excess",
+            "type": "integer"
           },
           "id": {
             "format": "uuid",
@@ -113,6 +117,10 @@
             "title": "Receivable",
             "type": "integer"
           },
+          "reimbursed": {
+            "title": "Reimbursed",
+            "type": "integer"
+          },
           "status": {
             "$ref": "#/components/schemas/AdvanceStatus"
           },
@@ -127,7 +135,9 @@
           "transaction_id",
           "own_share",
           "receivable",
+          "reimbursed",
           "outstanding",
+          "excess",
           "currency",
           "status",
           "participants",
@@ -289,6 +299,43 @@
         "title": "CreateAdvanceRequest",
         "type": "object"
       },
+      "CreateReimbursementRequest": {
+        "description": "Body for recording a reimbursement against an advance.\n\nAttributes\n----------\namount : int\n    The amount paid back, a positive magnitude in the advance's currency\n    (cents); must be ``> 0``.\ntransaction_id : UUID or None\n    The incoming transaction to link (the caller's, a ``personal``\n    non-``rejected`` credit). Omit for a manual cash reimbursement.\nnote : str or None\n    Optional free-text note.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Id"
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "title": "CreateReimbursementRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -338,6 +385,85 @@
           "expected_amount"
         ],
         "title": "ParticipantSchema",
+        "type": "object"
+      },
+      "ReimbursementResponse": {
+        "description": "One reimbursement as returned to the client.\n\nProjects :class:`~traccio.domain.models.Reimbursement`. Amounts are positive\nmagnitudes in the advance's currency.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the reimbursement.\nadvance_id : UUID\n    The advance this reimbursement pays back.\namount : int\n    The amount paid back, a positive magnitude (cents).\ncurrency : str\n    ISO 4217 code of ``amount`` (the advance's currency).\ntransaction_id : UUID or None\n    The linked incoming transaction, or ``None`` for a manual cash entry.\nnote : str or None\n    Optional free-text note.\ncreated_at : datetime\n    When the reimbursement was recorded (timezone-aware, UTC).",
+        "properties": {
+          "advance_id": {
+            "format": "uuid",
+            "title": "Advance Id",
+            "type": "string"
+          },
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Id"
+          }
+        },
+        "required": [
+          "id",
+          "advance_id",
+          "amount",
+          "currency",
+          "transaction_id",
+          "note",
+          "created_at"
+        ],
+        "title": "ReimbursementResponse",
+        "type": "object"
+      },
+      "ReimbursementsResponse": {
+        "description": "Envelope for the reimbursements list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nreimbursements : list[ReimbursementResponse]\n    The advance's reimbursements, oldest first.",
+        "properties": {
+          "reimbursements": {
+            "items": {
+              "$ref": "#/components/schemas/ReimbursementResponse"
+            },
+            "title": "Reimbursements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reimbursements"
+        ],
+        "title": "ReimbursementsResponse",
         "type": "object"
       },
       "RejectTransferRequest": {
@@ -851,6 +977,222 @@
           }
         },
         "summary": "Advance"
+      }
+    },
+    "/advances/{advance_id}/reimbursements": {
+      "get": {
+        "description": "List an advance's reimbursements, oldest first.\n\nScoped to the current user; a ``404`` if the advance is unknown or not the\ncaller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance whose reimbursements to list.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.\n\nReturns\n-------\nReimbursementsResponse\n    The advance's reimbursements, oldest first (empty if none).",
+        "operationId": "reimbursements_advances__advance_id__reimbursements_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReimbursementsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reimbursements"
+      },
+      "post": {
+        "description": "Record a reimbursement against an advance.\n\nTwo shapes: a manual **cash** entry (``transaction_id`` omitted) or a **link**\nto an existing incoming transaction, which then counts as neither income nor\nspending (its ``role`` becomes ``reimbursement``). The amount is a positive\nmagnitude in the advance's currency and is otherwise free. Refused (``422``)\non a ``written_off`` advance \u2014 reopen it first. Scoped to the current user.\n\nParameters\n----------\nadvance_id : UUID\n    The advance being paid back.\nbody : CreateReimbursementRequest\n    The amount, optional linked transaction, and optional note.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.\n\nReturns\n-------\nReimbursementResponse\n    The created reimbursement.",
+        "operationId": "create_reimbursement_endpoint_advances__advance_id__reimbursements_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReimbursementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReimbursementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Reimbursement Endpoint"
+      }
+    },
+    "/advances/{advance_id}/reimbursements/{reimbursement_id}": {
+      "delete": {
+        "description": "Delete a reimbursement; revert a linked transaction to ``personal``.\n\nThe inverse of create: if the reimbursement linked a transaction, its ``role``\nreturns to ``personal`` (so its ``effective_amount`` is restored). The\nadvance's derived ``outstanding``/``status`` follow automatically. Scoped to\nthe current user; a ``404`` if the reimbursement is unknown or not the\ncaller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance the reimbursement belongs to.\nreimbursement_id : UUID\n    The reimbursement to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.",
+        "operationId": "remove_reimbursement_advances__advance_id__reimbursements__reimbursement_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "reimbursement_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Reimbursement Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Reimbursement"
+      }
+    },
+    "/advances/{advance_id}/reopen": {
+      "post": {
+        "description": "Reverse a write-off, returning the advance to an open lifecycle.\n\nSets the stored status back to ``open``; the derived status then follows the\nreimbursements again (``settled`` if they cover the receivable, else\n``open``). The transaction's ``effective_amount`` returns to ``own_share``.\nScoped to the current user; a ``404`` if the advance is unknown or not the\ncaller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance to reopen.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.\n\nReturns\n-------\nAdvanceResponse\n    The advance with its derived, no-longer-written-off state.",
+        "operationId": "reopen_advance_advances__advance_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen Advance"
+      }
+    },
+    "/advances/{advance_id}/write-off": {
+      "post": {
+        "description": "Write off an advance the user gave up on collecting.\n\nMoves the outstanding amount into the user's spending: the transaction's\n``effective_amount`` grows from ``own_share`` to ``own_share + outstanding``\n(see :func:`~traccio.domain.advances.derive_advance`). Refused (``422``) when\nthere is nothing outstanding to write off. Scoped to the current user; a\n``404`` if the advance is unknown or not the caller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance to write off.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.\n\nReturns\n-------\nAdvanceResponse\n    The advance in its ``written_off`` state.",
+        "operationId": "write_off_advance_advances__advance_id__write_off_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Off Advance"
       }
     },
     "/connections": {

@@ -15,6 +15,7 @@ from traccio.db.models import (
     AdvanceParticipantRow,
     AdvanceRow,
     ConnectionRow,
+    ReimbursementRow,
     TransactionRow,
     TransferRow,
     UserRow,
@@ -24,6 +25,7 @@ from traccio.domain.models import (
     Advance,
     Connection,
     Participant,
+    Reimbursement,
     Transaction,
     Transfer,
     User,
@@ -218,5 +220,39 @@ def row_to_transfer(row: TransferRow) -> Transfer:
         user_id=row.user_id,
         outgoing_transaction_id=row.outgoing_transaction_id,
         incoming_transaction_id=row.incoming_transaction_id,
+        created_at=row.created_at,
+    )
+
+
+def reimbursement_to_row(reimbursement: Reimbursement) -> ReimbursementRow:
+    """Translate a domain :class:`Reimbursement` into a :class:`ReimbursementRow`.
+
+    Splits ``amount`` into the ``amount``/``currency`` columns like every other
+    :class:`Money` mapping.
+    """
+    return ReimbursementRow(
+        id=reimbursement.id,
+        user_id=reimbursement.user_id,
+        advance_id=reimbursement.advance_id,
+        amount=reimbursement.amount.amount,
+        currency=reimbursement.amount.currency,
+        transaction_id=reimbursement.transaction_id,
+        note=reimbursement.note,
+        created_at=reimbursement.created_at,
+    )
+
+
+def row_to_reimbursement(row: ReimbursementRow) -> Reimbursement:
+    """Translate a :class:`ReimbursementRow` into a domain :class:`Reimbursement`.
+
+    Recomposes ``amount`` from its two columns.
+    """
+    return Reimbursement(
+        id=row.id,
+        user_id=row.user_id,
+        advance_id=row.advance_id,
+        amount=Money(amount=row.amount, currency=row.currency),
+        transaction_id=row.transaction_id,
+        note=row.note,
         created_at=row.created_at,
     )

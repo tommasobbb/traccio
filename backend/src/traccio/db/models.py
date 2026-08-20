@@ -379,3 +379,48 @@ class AdvanceParticipantRow(Base):
     name: Mapped[str] = mapped_column(String(255))
     expected_amount: Mapped[int] = mapped_column(BigInteger)
     expected_currency: Mapped[str] = mapped_column(String(3))
+
+
+class ReimbursementRow(Base):
+    """Persisted :class:`~traccio.domain.models.Reimbursement`.
+
+    Records money paid back against one advance. Created only by an explicit user
+    action. Either links a real incoming transaction (``transaction_id`` set,
+    whose ``role`` the caller flips to ``reimbursement``) or is a manual cash
+    entry (``transaction_id`` NULL). ``amount`` is a positive magnitude split into
+    ``amount`` + ``currency`` like :class:`~traccio.domain.money.Money` elsewhere;
+    the advance's ``outstanding`` and derived status follow from the sum of these,
+    never stored on the advance.
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key.
+    user_id : UUID
+        Owning user (foreign key, indexed).
+    advance_id : UUID
+        The advance this reimbursement pays back (foreign key, indexed).
+    amount : int
+        The amount paid back, a positive magnitude in minor units.
+    currency : str
+        ISO 4217 code of ``amount`` (matches the advance currency).
+    transaction_id : UUID or None
+        The linked incoming transaction, or ``None`` for a manual cash entry.
+    note : str or None
+        Optional free-text note.
+    created_at : datetime
+        Creation timestamp (timezone-aware, UTC).
+    """
+
+    __tablename__ = "reimbursements"
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
+    advance_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("advances.id"), index=True)
+    amount: Mapped[int] = mapped_column(BigInteger)
+    currency: Mapped[str] = mapped_column(String(3))
+    transaction_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("transactions.id"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
