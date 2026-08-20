@@ -2,17 +2,18 @@
   "components": {
     "schemas": {
       "AccountKind": {
-        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).",
+        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.",
         "enum": [
           "current",
           "savings",
-          "card"
+          "card",
+          "wallet"
         ],
         "title": "AccountKind",
         "type": "string"
       },
       "AccountResponse": {
-        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, or ``card``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Optional display name.\ncreated_at : datetime\n    When the account was first recorded.",
+        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, or ``wallet``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Optional display name.\ncreated_at : datetime\n    When the account was first recorded.",
         "properties": {
           "connection_id": {
             "format": "uuid",
@@ -337,10 +338,11 @@
         "type": "string"
       },
       "TransactionStatus": {
-        "description": "Settlement state of a :class:`~traccio.domain.models.Transaction`.\n\nAttributes\n----------\nPENDING : str\n    Authorized but not yet settled; amount and description may still change.\nBOOKED : str\n    Settled by the bank; immutable thereafter (corrections arrive as new\n    transactions).",
+        "description": "Settlement state of a :class:`~traccio.domain.models.Transaction`.\n\nAttributes\n----------\nPENDING : str\n    Authorized but not yet settled; amount and description may still change.\nBOOKED : str\n    Settled by the bank; immutable thereafter (corrections arrive as new\n    transactions).\nREJECTED : str\n    The movement was refused or reversed by the bank and never settled\n    (ISO 20022 ``RJCT``). A terminal, immutable state like ``booked``; it is\n    not real spending, so it contributes zero to ``effective_amount`` (M2).",
         "enum": [
           "pending",
-          "booked"
+          "booked",
+          "rejected"
         ],
         "title": "TransactionStatus",
         "type": "string"

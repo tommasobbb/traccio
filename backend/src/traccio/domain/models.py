@@ -103,10 +103,11 @@ class Account(BaseModel):
     connection_id : UUID
         Connection through which this account is currently reachable.
     kind : AccountKind
-        ``current``, ``savings``, or ``card``.
+        ``current``, ``savings``, ``card``, or ``wallet``.
     currency : str
-        The account's own ISO 4217 currency. A transaction may carry a
-        different one (foreign card purchases).
+        The account's own ISO 4217 currency (a wallet may report ``XXX``). A
+        transaction may carry a different one (foreign card purchases, or the
+        per-transaction currency of a currency-agnostic wallet).
     identification_hash : str
         Derived stable identity used to match the account across consents.
         Bank-assigned account IDs are not stable, so they are not used here.

@@ -128,6 +128,12 @@ def test_unknown_indicator_is_rejected() -> None:
         to_transaction(_entry(credit_debit_indicator="XXXX"), account=_account())
 
 
+def test_rejected_status_maps_to_rejected() -> None:
+    # RJCT (refused/reversed, terminal like booked) — first seen in the PayPal ledger.
+    tx = to_transaction(_entry(status="RJCT"), account=_account())
+    assert tx.status is TransactionStatus.REJECTED
+
+
 def test_unknown_status_is_rejected() -> None:
     # INFO and other codes are refused rather than coerced (fail loud on first sync).
     with pytest.raises(ProviderError):

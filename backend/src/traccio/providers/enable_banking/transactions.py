@@ -43,12 +43,15 @@ from traccio.providers.base import ProviderError
 # CRDT = money in (stored positive). Any other value fails loud.
 _DEBIT = "DBIT"
 _CREDIT = "CRDT"
-# Enable Banking transaction status -> our two-state settlement model. INFO and
-# other codes are refused rather than coerced, so an unmodelled status surfaces
-# on the first real sync instead of masquerading as a booked movement.
+# Enable Banking transaction status -> our settlement model. RJCT (rejected or
+# reversed, terminal like booked) was surfaced by the first PayPal sync
+# (docs/openbanking.md). INFO and other codes are still refused rather than
+# coerced, so an unmodelled status surfaces on its first real sync instead of
+# masquerading as a booked movement.
 _STATUS_MAP = {
     "BOOK": TransactionStatus.BOOKED,
     "PDNG": TransactionStatus.PENDING,
+    "RJCT": TransactionStatus.REJECTED,
 }
 # Minor units per major unit for the currencies M1 targets (EUR, GBP, …, all
 # two-decimal). A currency with a different exponent (JPY 0, BHD 3) would need

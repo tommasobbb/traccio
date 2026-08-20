@@ -106,10 +106,12 @@ The adapter normalizes each into a provider-agnostic `ProviderAccount`; the
   derived, non-reversible identity satisfies both the domain rule — "not the
   bank's account id" — and data-safety).
 - **Account kind.** ISO 20022 `cash_account_type` maps to `AccountKind`:
-  `CACC`→`current`, `SVGS`→`savings`, `CARD`→`card`. Any other value the bank
-  reports (`CASH`, `LOAN`, `OTHR`) is **refused** (`ProviderError`) rather than
-  coerced, so an unmodelled account fails loudly instead of masquerading as a
-  current account.
+  `CACC`→`current`, `SVGS`→`savings`, `CARD`→`card`, `OTHR`→`wallet` (a
+  currency-agnostic wallet such as PayPal, which also reports `currency='XXX'` —
+  stored as-is, since the per-transaction currency is authoritative). Any other
+  value the bank reports (`CASH`, `LOAN`) is **refused** (`ProviderError`)
+  rather than coerced, so an unmodelled account fails loudly instead of
+  masquerading as a current account.
 - **Display name.** The bank's proprietary `product` name is used as
   `Account.name`. The `AccountResource.name` field is the **account-holder
   name** — personal data — and is never stored or logged (`.claude/rules/data-safety.md`).
@@ -166,9 +168,10 @@ lands with the background scheduler.
 - **Description.** The `remittance_information` lines are joined **verbatim** as
   the raw `description` — Enable Banking does not enrich (no clean merchant name).
   A cleaned `display_description` is produced separately, later.
-- **Status.** `BOOK` → `booked`, `PDNG` → `pending`; any other code (e.g. `INFO`)
-  is refused, so an unmodelled status surfaces on the first real sync rather than
-  masquerading as a booked movement.
+- **Status.** `BOOK` → `booked`, `PDNG` → `pending`, `RJCT` → `rejected` (a
+  refused/reversed movement, terminal like booked — first seen in the PayPal
+  ledger). Any other code (e.g. `INFO`) is still refused, so an unmodelled status
+  surfaces on its first real sync rather than masquerading as a booked movement.
 
 **Persistence and dedup.** Each transaction is upserted on the
 `(account_id, stable_key)` unique constraint (idempotency enforced at the schema
@@ -255,7 +258,7 @@ redacted (`.claude/rules/data-safety.md`).
 | ---- | --------------------- | ----------------------- | ----------------------- |
 | Revolut | No — only `current` accounts, one per currency (EUR/CHF/TRY); no `CARD`/`SVGS` | Good — `remittance_information` populated on every entry (merchant/counterparty text), no enrichment | `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always, hash fallback never used. `product` absent → `Account.name` is `null`. Sign: `DBIT`→negative confirmed, no card inversion. A `pending` entry still carried a `booking_date` (so `booked_at` set while pending); `value_date` absent only on that pending row. First real sync 2026-08-20: 3 accounts, 374 transactions; re-sync added 0 duplicates. The API institution string is `Revolut`. |
 | Isybank | No — one `current` EUR account; no `CARD`/`SVGS` | Good — `remittance_information` populated on every entry, no enrichment | `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always. `product` absent → `Account.name` is `null` (same as Revolut). Every entry had both `booked_at` and `value_date`; no pending in the synced window. First real sync 2026-08-20: 1 account, 14 transactions; re-sync added 0 duplicates. API institution string: `Isybank`. |
-| PayPal | N/A — not a bank account | N/A (not yet synced) | **Not syncable under the current model.** Exposes a single account with `cash_account_type='OTHR'` and `currency='XXX'` (ISO 4217 "no currency") — a currency-agnostic wallet, not a current/savings/card account. The adapter refuses `OTHR` fail-loud by design (`_CASH_ACCOUNT_TYPE_TO_KIND`), so the sync returns 502 and persists nothing. Modelling a wallet `AccountKind` + handling `XXX` at the account level (per-transaction currency stays authoritative) is a follow-up — see `tasks/backlog.md`. First observed 2026-08-20. API institution string: `PayPal`. |
+| PayPal | N/A — single `wallet` account | Good — rich entry payload (creditor/debtor, `merchant_category_code`, `remittance_information`) | Exposes one `cash_account_type='OTHR'`, `currency='XXX'` (ISO 4217 "no currency") account → `AccountKind.WALLET` (modelled 2026-08-20); the account-level `XXX` is stored as-is and the per-transaction currency (all `EUR` in the synced window) is authoritative. `product` **present** → `Account.name` is set (unlike Revolut/Isybank). `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always. Surfaced a second modelling gap: 1 entry with status `RJCT` (rejected/reversed) → now `TransactionStatus.REJECTED` (terminal like booked, zero effective spending at M2). Indicators `DBIT`/`CRDT` only, amounts all two-decimal. First real sync 2026-08-20: 1 account, 141 transactions (140 booked, 1 rejected); re-sync added 0 duplicates. API institution string: `PayPal`. |
 
 Coverage note (from ADR `0001`): card-account access was extended in March
 2026 to BPER, Postepay, Fineco, Banco BPM/Bibanca, and Nexi including YAP.

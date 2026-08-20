@@ -23,7 +23,7 @@ class AccountResponse(BaseModel):
     connection_id : UUID
         Connection currently exposing this account.
     kind : AccountKind
-        ``current``, ``savings``, or ``card``.
+        ``current``, ``savings``, ``card``, or ``wallet``.
     currency : str
         The account's ISO 4217 currency.
     name : str or None

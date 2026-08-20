@@ -50,14 +50,18 @@ _PSU_TYPE = "personal"
 # Consent lifetime requested; the maximum most banks allow. The bank may grant
 # less, so the response's valid_until is authoritative (see docs/openbanking.md).
 _MAX_CONSENT_DAYS = 180
-# ISO 20022 external cash-account-type -> our AccountKind. Only the kinds M1
-# targets (personal current, savings, card) are mapped; any other value the bank
-# reports (CASH, LOAN, OTHR) is refused rather than silently coerced, so an
+# ISO 20022 external cash-account-type -> our AccountKind. The kinds M1 targets
+# (personal current, savings, card) plus OTHR, which banks use for a
+# currency-agnostic wallet such as PayPal (mapped to WALLET; the account may also
+# report currency='XXX', which validates as an ISO 4217 code and is stored as-is
+# because the per-transaction currency is authoritative). Any other value the
+# bank reports (e.g. CASH, LOAN) is refused rather than silently coerced, so an
 # unmodelled account fails loudly instead of masquerading as a current account.
 _CASH_ACCOUNT_TYPE_TO_KIND = {
     "CACC": AccountKind.CURRENT,
     "SVGS": AccountKind.SAVINGS,
     "CARD": AccountKind.CARD,
+    "OTHR": AccountKind.WALLET,
 }
 
 
