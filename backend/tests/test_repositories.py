@@ -354,6 +354,46 @@ def test_upsert_transaction_booked_row_is_immutable() -> None:
     assert row.description == "ORIGINAL"
 
 
+def test_upsert_transaction_rejected_row_is_immutable() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-1234,
+                description="ORIGINAL",
+                status=TransactionStatus.REJECTED,
+            ),
+        )
+        session.commit()
+
+    # A rejected entry is terminal like booked: a re-sync leaves it untouched.
+    with Session(engine) as session:
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-9999,
+                description="TAMPERED",
+                status=TransactionStatus.REJECTED,
+            ),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.scalars(select(TransactionRow)).one()
+    assert row.amount == -1234
+    assert row.description == "ORIGINAL"
+
+
 def test_upsert_transaction_same_key_on_different_accounts_are_separate() -> None:
     engine = _engine()
     user_id = uuid4()

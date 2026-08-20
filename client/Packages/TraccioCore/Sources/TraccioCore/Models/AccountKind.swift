@@ -11,4 +11,7 @@ public enum AccountKind: String, Codable, Sendable, CaseIterable {
     /// A card account. Many banks invert the sign convention here; the backend
     /// adapter normalizes it (see `docs/domain.md`).
     case card
+    /// A currency-agnostic wallet (e.g. PayPal). It has no single account
+    /// currency; the per-transaction currency is authoritative.
+    case wallet
 }

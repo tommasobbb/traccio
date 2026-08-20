@@ -44,11 +44,16 @@ class AccountKind(StrEnum):
     CARD : str
         A card account. Many banks invert the sign convention here; the
         provider adapter normalizes it (see ``docs/domain.md``).
+    WALLET : str
+        A currency-agnostic wallet (e.g. PayPal). It has no single account
+        currency — the account may report ``XXX`` (ISO 4217 "no currency") —
+        so the per-transaction currency is authoritative, not the account's.
     """
 
     CURRENT = "current"
     SAVINGS = "savings"
     CARD = "card"
+    WALLET = "wallet"
 
 
 class TransactionStatus(StrEnum):
@@ -61,10 +66,15 @@ class TransactionStatus(StrEnum):
     BOOKED : str
         Settled by the bank; immutable thereafter (corrections arrive as new
         transactions).
+    REJECTED : str
+        The movement was refused or reversed by the bank and never settled
+        (ISO 20022 ``RJCT``). A terminal, immutable state like ``booked``; it is
+        not real spending, so it contributes zero to ``effective_amount`` (M2).
     """
 
     PENDING = "pending"
     BOOKED = "booked"
+    REJECTED = "rejected"
 
 
 class TransactionRole(StrEnum):

@@ -129,10 +129,10 @@ class ProviderAccount(BaseModel):
     identification_hash : str
         Derived stable identity used to match the account across consents.
     kind : AccountKind
-        ``current``, ``savings``, or ``card``, normalized from the provider's
-        account type.
+        ``current``, ``savings``, ``card``, or ``wallet``, normalized from the
+        provider's account type.
     currency : str
-        The account's own ISO 4217 currency.
+        The account's own ISO 4217 currency (a wallet may report ``XXX``).
     name : str or None
         Optional display name (the account's product name), for the client only.
     """

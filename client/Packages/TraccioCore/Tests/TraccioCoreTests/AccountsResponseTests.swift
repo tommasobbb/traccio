@@ -80,6 +80,27 @@ struct AccountsResponseTests {
         #expect(response.accounts[1].createdAt == naiveExpected)
     }
 
+    @Test func decodesWalletKindWithNoCurrencyCode() throws {
+        // A currency-agnostic wallet (e.g. PayPal) reports "XXX" at the account
+        // level; the client must decode it rather than fail on an unknown kind.
+        let json = """
+            { "accounts": [ {
+              "id": "44444444-4444-4444-4444-444444444444",
+              "connection_id": "22222222-2222-2222-2222-222222222222",
+              "kind": "wallet",
+              "currency": "XXX",
+              "name": null,
+              "created_at": "2026-08-20T12:00:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            AccountsResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.accounts[0].kind == .wallet)
+        #expect(response.accounts[0].currency == "XXX")
+    }
+
     @Test func rejectsUnknownAccountKind() {
         let json = """
             { "accounts": [ {

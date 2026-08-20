@@ -113,6 +113,8 @@ def test_enum_values_are_stable() -> None:
     """Enum wire values stay stable across serialization and storage."""
     assert ConnectionStatus.ACTIVE.value == "active"
     assert AccountKind.CARD.value == "card"
+    assert AccountKind.WALLET.value == "wallet"
     assert TransactionStatus.PENDING.value == "pending"
+    assert TransactionStatus.REJECTED.value == "rejected"
     assert TransactionRole.REIMBURSEMENT.value == "reimbursement"
     assert KeyStrategy.DERIVED_HASH.value == "derived_hash"

@@ -263,6 +263,35 @@ def test_list_accounts_rejects_unsupported_account_type() -> None:
         provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
 
 
+def test_list_accounts_maps_wallet_account_type() -> None:
+    """A currency-agnostic wallet (OTHR/XXX, e.g. PayPal) maps to AccountKind.WALLET.
+
+    The account-level ``XXX`` is stored as-is (it validates as an ISO 4217 code);
+    the per-transaction currency stays authoritative.
+    """
+    details = {
+        "uid-wallet-01": {
+            "uid": "uid-wallet-01",
+            "identification_hash": "IDHASH-WALLET-01",
+            "account_id": {"other": {"identification": "MASKED-WALLET"}},
+            "cash_account_type": "OTHR",
+            "currency": "XXX",
+            "product": "TEST WALLET 01",
+        }
+    }
+    provider = _provider(
+        _accounts_handler(session_body={"accounts": ["uid-wallet-01"]}, details=details)
+    )
+
+    accounts = provider.list_accounts(
+        credentials=_SESSION_ID, context=SyncContext(psu_present=True)
+    )
+
+    assert len(accounts) == 1
+    assert accounts[0].kind is AccountKind.WALLET
+    assert accounts[0].currency == "XXX"
+
+
 def test_list_accounts_rejects_malformed_details() -> None:
     """Missing a required field surfaces as a value-free ProviderError."""
     details = {"uid-x": {"cash_account_type": "CACC", "currency": "EUR"}}  # no identification_hash

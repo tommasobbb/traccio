@@ -65,9 +65,16 @@ connection silently stops producing data.
 ## Account
 
 A single balance-bearing account exposed by a bank: a current account, a
-savings account, or a card account.
+savings account, a card account, or a currency-agnostic wallet (e.g. PayPal).
 
-`kind`: `current` | `savings` | `card`
+`kind`: `current` | `savings` | `card` | `wallet`
+
+**Wallets have no single currency.** A wallet such as PayPal reports `XXX`
+(ISO 4217 "no currency") as its account currency, because it holds balances in
+several currencies at once. Traccio stores that `XXX` as-is; the account
+currency is only informational for a wallet. The **per-transaction** currency
+is authoritative — each movement already carries its own currency, exactly as a
+foreign card purchase does.
 
 **Card accounts invert intuition.** Many banks report card transactions with
 the opposite sign to current accounts (a purchase as a positive number,
@@ -95,7 +102,12 @@ Fields that matter for identity and behavior:
 - `value_date`: when it affects the balance. Often differs from `booked_at`.
 - `description`: raw text from the bank. Preserved verbatim, never rewritten
   in place; cleanup produces a separate `display_description`.
-- `status`: `pending` | `booked`
+- `status`: `pending` | `booked` | `rejected`
+
+  A `rejected` movement was refused or reversed by the bank and never settled
+  (ISO 20022 `RJCT`, first seen in the PayPal ledger). Like `booked` it is
+  terminal and immutable; it is not real spending, so it contributes zero to
+  `effective_amount` (M2).
 
 ### Identity
 

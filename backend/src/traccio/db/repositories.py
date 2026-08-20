@@ -200,13 +200,14 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
     Conflict handling follows the domain's immutability rule
     (``docs/domain.md``):
 
-    - An existing **booked** row is immutable — corrections arrive as new
-      transactions — so it is returned untouched.
+    - An existing **terminal** row (``booked`` or ``rejected``) is immutable —
+      corrections arrive as new transactions — so it is returned untouched.
     - An existing **pending** row is the *same* movement transitioning state (its
-      amount/description routinely change on settlement), so the bank-sourced
-      fields are refreshed. User- and detection-owned fields (``role``,
-      ``display_description``) are **never** overwritten by a sync, and the
-      ``id`` is preserved so references survive.
+      amount/description routinely change on settlement, and it may settle to
+      ``booked`` or be ``rejected``), so the bank-sourced fields are refreshed.
+      User- and detection-owned fields (``role``, ``display_description``) are
+      **never** overwritten by a sync, and the ``id`` is preserved so references
+      survive.
 
     Parameters
     ----------
@@ -233,7 +234,8 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
         session.add(row)
         return row_to_transaction(row)
 
-    if existing.status is TransactionStatus.BOOKED:
+    if existing.status is not TransactionStatus.PENDING:
+        # Terminal (booked or rejected): immutable, returned untouched.
         return row_to_transaction(existing)
 
     existing.amount = transaction.money.amount
