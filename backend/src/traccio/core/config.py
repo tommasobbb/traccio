@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         committed or logged; only its path lives here. ``None`` until configured.
     enable_banking_base_url : str
         Base URL of the Enable Banking API. Defaults to the production host.
+    enable_banking_redirect_url : str
+        Whitelisted URL the bank returns the user to after SCA. Must match both
+        the redirect registered in the Enable Banking Control Panel and the
+        backend callback endpoint (``GET /connections/callback``).
     """
 
     model_config = SettingsConfigDict(
@@ -79,6 +83,9 @@ class Settings(BaseSettings):
     enable_banking_application_id: str | None = None
     enable_banking_private_key_path: str | None = None
     enable_banking_base_url: str = "https://api.enablebanking.com"
+    # Must match the redirect registered in the Control Panel and the callback
+    # endpoint. https is mandatory; localhost is accepted (docs/openbanking.md).
+    enable_banking_redirect_url: str = "https://localhost:8000/connections/callback"
 
 
 @lru_cache

@@ -76,6 +76,19 @@
         "title": "AccountsResponse",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "description": "Payload returned by the health endpoint.\n\nAttributes\n----------\nstatus : str\n    Liveness marker; ``\"ok\"`` when the app is serving.\nversion : str\n    The running application version (see\n    :func:`~traccio.api.version.resolve_version`).",
         "properties": {
@@ -93,6 +106,85 @@
           "version"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "StartConnectionRequest": {
+        "description": "Request to begin authorizing a bank connection.\n\nAttributes\n----------\ninstitution : str\n    The bank's provider-scoped identifier (Enable Banking ASPSP ``name``).\ncountry : str\n    ISO 3166-1 alpha-2 country of the bank.",
+        "properties": {
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "institution": {
+            "title": "Institution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "institution",
+          "country"
+        ],
+        "title": "StartConnectionRequest",
+        "type": "object"
+      },
+      "StartConnectionResponse": {
+        "description": "The started authorization: where to send the user.\n\nAttributes\n----------\nconnection_id : UUID\n    The pending connection created for this authorization.\nauthorization_url : str\n    The bank authorization URL to open in the system browser.",
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_id",
+          "authorization_url"
+        ],
+        "title": "StartConnectionResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       }
     }
@@ -120,6 +212,140 @@
           }
         },
         "summary": "Accounts"
+      }
+    },
+    "/connections": {
+      "post": {
+        "description": "Begin authorizing a bank connection.\n\nCreates a pending connection and returns the URL to open in the system\nbrowser for SCA. Scoped to the current user.\n\nParameters\n----------\nbody : StartConnectionRequest\n    The bank to authorize (institution + country).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\n\nReturns\n-------\nStartConnectionResponse\n    The pending connection id and the authorization url.",
+        "operationId": "start_connection_connections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartConnectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Connection"
+      }
+    },
+    "/connections/callback": {
+      "get": {
+        "description": "Complete an authorization after the bank's SCA redirect.\n\nMatches the callback to its pending connection by ``state``, exchanges the\ncode for a session, encrypts the consent secret at rest, and activates the\nconnection. Scoped to the current user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\ncipher : Fernet cipher\n    Encrypts the consent secret before it is stored.\ncode, state, error, error_description : str or None\n    The query parameters the bank appended to the redirect.\n\nReturns\n-------\nHTMLResponse\n    A small success page for the browser tab.",
+        "operationId": "connection_callback_connections_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error_description",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Description"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connection Callback"
       }
     },
     "/health": {
