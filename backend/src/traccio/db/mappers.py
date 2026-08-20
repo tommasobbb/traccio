@@ -7,14 +7,27 @@ domain carries as one value object and the schema stores as two columns
 (``amount`` + ``currency``).
 """
 
+from collections.abc import Sequence
+from uuid import UUID, uuid4
+
 from traccio.db.models import (
     AccountRow,
+    AdvanceParticipantRow,
+    AdvanceRow,
     ConnectionRow,
     TransactionRow,
     TransferRow,
     UserRow,
 )
-from traccio.domain.models import Account, Connection, Transaction, Transfer, User
+from traccio.domain.models import (
+    Account,
+    Advance,
+    Connection,
+    Participant,
+    Transaction,
+    Transfer,
+    User,
+)
 from traccio.domain.money import Money
 
 
@@ -124,6 +137,66 @@ def row_to_transaction(row: TransactionRow) -> Transaction:
         entry_reference=row.entry_reference,
         stable_key=row.stable_key,
         key_strategy=row.key_strategy,
+    )
+
+
+def advance_to_row(advance: Advance) -> AdvanceRow:
+    """Translate a domain :class:`Advance` into an :class:`AdvanceRow`.
+
+    Splits ``own_share`` into the ``own_share_amount``/``own_share_currency``
+    columns. Participants are mapped separately (see :func:`participant_to_row`),
+    since they are their own rows.
+    """
+    return AdvanceRow(
+        id=advance.id,
+        user_id=advance.user_id,
+        transaction_id=advance.transaction_id,
+        own_share_amount=advance.own_share.amount,
+        own_share_currency=advance.own_share.currency,
+        status=advance.status,
+        created_at=advance.created_at,
+    )
+
+
+def participant_to_row(
+    participant: Participant, *, user_id: UUID, advance_id: UUID
+) -> AdvanceParticipantRow:
+    """Translate a domain :class:`Participant` into an :class:`AdvanceParticipantRow`.
+
+    The ``user_id`` and ``advance_id`` are supplied by the caller (they live on
+    the parent :class:`Advance`, not on the value object).
+    """
+    return AdvanceParticipantRow(
+        id=uuid4(),
+        user_id=user_id,
+        advance_id=advance_id,
+        name=participant.name,
+        expected_amount=participant.expected_amount.amount,
+        expected_currency=participant.expected_amount.currency,
+    )
+
+
+def row_to_participant(row: AdvanceParticipantRow) -> Participant:
+    """Translate an :class:`AdvanceParticipantRow` into a domain :class:`Participant`."""
+    return Participant(
+        name=row.name,
+        expected_amount=Money(amount=row.expected_amount, currency=row.expected_currency),
+    )
+
+
+def row_to_advance(row: AdvanceRow, participant_rows: Sequence[AdvanceParticipantRow]) -> Advance:
+    """Translate an :class:`AdvanceRow` (+ its participants) into a domain :class:`Advance`.
+
+    Recomposes ``own_share`` from its two columns and attaches the participants.
+    """
+    return Advance(
+        id=row.id,
+        user_id=row.user_id,
+        transaction_id=row.transaction_id,
+        own_share=Money(amount=row.own_share_amount, currency=row.own_share_currency),
+        status=row.status,
+        participants=[row_to_participant(p) for p in participant_rows],
+        created_at=row.created_at,
     )
 
 

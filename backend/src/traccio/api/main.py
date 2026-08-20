@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from traccio.api.routers import (
     accounts_router,
+    advances_router,
     connections_router,
     health_router,
     transactions_router,
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(connections_router)
     app.include_router(transactions_router)
     app.include_router(transfers_router)
+    app.include_router(advances_router)
 
     return app
 

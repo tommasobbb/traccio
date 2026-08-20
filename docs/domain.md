@@ -241,6 +241,18 @@ Fields:
 `own_share` is declared by the user, not inferred. The app cannot know
 whether the user paid for four people or five.
 
+**Sign and storage (implementation note).** `own_share`, `receivable`, and
+`outstanding` are stored and exposed as **positive magnitudes** (the euros the
+user owes / is owed): `receivable = |amount| - own_share`, `outstanding =
+receivable - Σ reimbursed`, validated `0 ≤ own_share ≤ |amount|`. Only
+`effective_amount` needs a signed value; a single pure helper
+(`domain/advances.py::advance_spending_share`) converts the magnitude to the
+transaction's sign at that one boundary, so the `effective_amount` contract is
+untouched. Creating an `Advance` sets the transaction's `role` to `advance`;
+deleting it reverts to `personal`. Reimbursements and the `written_off`
+transition are separate slices — until they land an advance is `open` with
+`outstanding == receivable`.
+
 **Advances that never settle are the normal case, not an edge case.** Money
 gets paid back in cash, or in a round of drinks, or never. `written_off`
 moves the outstanding amount into the user's spending, because at that point

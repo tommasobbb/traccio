@@ -77,6 +77,92 @@
         "title": "AccountsResponse",
         "type": "object"
       },
+      "AdvanceResponse": {
+        "description": "One advance as returned to the client.\n\nProjects :class:`~traccio.domain.models.Advance` and adds the derived\n``receivable``/``outstanding`` (positive magnitudes). The transaction carries\n``role=advance``, so its ``effective_amount`` on ``GET /transactions`` is the\nuser's share, not the full amount.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the advance.\ntransaction_id : UUID\n    The outgoing transaction this advance is on.\nown_share : int\n    The user's declared share, a positive magnitude (cents).\nreceivable : int\n    What the user is owed: ``|amount| - own_share`` (positive magnitude).\noutstanding : int\n    What is still owed after reimbursements. Equals ``receivable`` until the\n    reimbursement work lands.\ncurrency : str\n    ISO 4217 code of every amount here (the transaction's currency).\nstatus : AdvanceStatus\n    Lifecycle state; ``open`` when created.\nparticipants : list[ParticipantSchema]\n    People who owe the user back.\ncreated_at : datetime\n    When the advance was created (timezone-aware, UTC).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "outstanding": {
+            "title": "Outstanding",
+            "type": "integer"
+          },
+          "own_share": {
+            "title": "Own Share",
+            "type": "integer"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipantSchema"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "receivable": {
+            "title": "Receivable",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AdvanceStatus"
+          },
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "own_share",
+          "receivable",
+          "outstanding",
+          "currency",
+          "status",
+          "participants",
+          "created_at"
+        ],
+        "title": "AdvanceResponse",
+        "type": "object"
+      },
+      "AdvanceStatus": {
+        "description": "Lifecycle state of an :class:`~traccio.domain.models.Advance`.\n\nAttributes\n----------\nOPEN : str\n    The user is still owed money; the default when an advance is created.\nSETTLED : str\n    Fully paid back (reimbursements cover the receivable). Set when the\n    reimbursement work lands.\nWRITTEN_OFF : str\n    Given up on: the outstanding amount moves into the user's spending,\n    because at that point it genuinely was spent. Set by the write-off flow.",
+        "enum": [
+          "open",
+          "settled",
+          "written_off"
+        ],
+        "title": "AdvanceStatus",
+        "type": "string"
+      },
+      "AdvancesResponse": {
+        "description": "Envelope for the advances list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nadvances : list[AdvanceResponse]\n    The user's advances, oldest first.",
+        "properties": {
+          "advances": {
+            "items": {
+              "$ref": "#/components/schemas/AdvanceResponse"
+            },
+            "title": "Advances",
+            "type": "array"
+          }
+        },
+        "required": [
+          "advances"
+        ],
+        "title": "AdvancesResponse",
+        "type": "object"
+      },
       "ConfirmTransferRequest": {
         "description": "Body for confirming a suggestion as a transfer.\n\nNames the two legs by role: the outgoing (negative) leg left one account and\nthe incoming (positive) leg arrived in another. Both must belong to the\ncaller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).",
         "properties": {
@@ -175,6 +261,34 @@
         "title": "ConnectionsResponse",
         "type": "object"
       },
+      "CreateAdvanceRequest": {
+        "description": "Body for creating an advance on a transaction.\n\nAttributes\n----------\ntransaction_id : UUID\n    The outgoing transaction to mark as an advance. Must be the caller's, a\n    ``personal`` non-``rejected`` spend.\nown_share : int\n    The part of the advance the user actually owes, a positive magnitude in\n    the transaction's currency; ``0 <= own_share <= |amount|``.\nparticipants : list[ParticipantSchema]\n    Optional people who owe the user back (may be empty).",
+        "properties": {
+          "own_share": {
+            "title": "Own Share",
+            "type": "integer"
+          },
+          "participants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ParticipantSchema"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "own_share"
+        ],
+        "title": "CreateAdvanceRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -205,6 +319,25 @@
           "version"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "ParticipantSchema": {
+        "description": "One person who owes the user back, on the wire.\n\nAttributes\n----------\nname : str\n    The participant's plain name.\nexpected_amount : int\n    What the participant is expected to pay back, a positive magnitude in\n    minor units (cents).",
+        "properties": {
+          "expected_amount": {
+            "title": "Expected Amount",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "expected_amount"
+        ],
+        "title": "ParticipantSchema",
         "type": "object"
       },
       "RejectTransferRequest": {
@@ -589,6 +722,135 @@
           }
         },
         "summary": "Accounts"
+      }
+    },
+    "/advances": {
+      "get": {
+        "description": "List the current user's advances, oldest first.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\n\nReturns\n-------\nAdvancesResponse\n    The user's advances, oldest first (empty if none).",
+        "operationId": "advances_advances_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvancesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Advances"
+      },
+      "post": {
+        "description": "Create an advance on a transaction.\n\nValidates the transaction (the user's, ``personal``, not ``rejected``,\noutgoing) and the declared ``own_share`` (in range, in the transaction's\ncurrency), records the advance and its participants, and sets the\ntransaction's ``role`` to ``advance``. Scoped to the current user.\n\nParameters\n----------\nbody : CreateAdvanceRequest\n    The transaction, the user's own share, and optional participants.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.\n\nReturns\n-------\nAdvanceResponse\n    The created advance, with derived receivable/outstanding.",
+        "operationId": "create_advance_endpoint_advances_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAdvanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Advance Endpoint"
+      }
+    },
+    "/advances/{advance_id}": {
+      "delete": {
+        "description": "Delete an advance and revert its transaction to ``personal``.\n\nThe inverse of create: remove the advance (and its participants) and restore\nthe transaction's role so its ``effective_amount`` returns to the full amount.\nScoped to the current user; a ``404`` if the advance is unknown or not the\ncaller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.",
+        "operationId": "remove_advance_advances__advance_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Advance"
+      },
+      "get": {
+        "description": "Return one of the current user's advances.\n\nScoped to the current user; a ``404`` if the advance is unknown or not the\ncaller's.\n\nParameters\n----------\nadvance_id : UUID\n    The advance to fetch.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the advance belongs to.\n\nReturns\n-------\nAdvanceResponse\n    The advance, with derived receivable/outstanding.",
+        "operationId": "advance_advances__advance_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "advance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Advance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Advance"
       }
     },
     "/connections": {

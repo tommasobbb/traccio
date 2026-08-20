@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import TransactionRole, TransactionStatus
 from traccio.domain.models import Transaction
+from traccio.domain.money import Money
 
 
 class TransactionResponse(BaseModel):
@@ -72,7 +73,9 @@ class TransactionResponse(BaseModel):
     role: TransactionRole
 
     @classmethod
-    def from_domain(cls, transaction: Transaction) -> "TransactionResponse":
+    def from_domain(
+        cls, transaction: Transaction, *, advance_own_share: Money | None = None
+    ) -> "TransactionResponse":
         """Project a domain :class:`~traccio.domain.models.Transaction`.
 
         Flattens ``money`` into ``amount``/``currency`` (the same split the
@@ -83,6 +86,11 @@ class TransactionResponse(BaseModel):
         ----------
         transaction : Transaction
             The domain transaction to project.
+        advance_own_share : Money or None, optional
+            The signed spending share for an ``advance`` transaction (see
+            :func:`~traccio.domain.advances.advance_spending_share`). Required
+            only when ``transaction.role`` is ``advance``; the caller supplies it
+            from the transaction's :class:`~traccio.domain.models.Advance`.
 
         Returns
         -------
@@ -90,9 +98,7 @@ class TransactionResponse(BaseModel):
             The narrowed, client-facing view of ``transaction``.
         """
         # Derived in one place (the domain function), never recomputed elsewhere.
-        # No advance own_share is threaded yet: no transaction carries
-        # ``role=advance`` until the Advance model lands (a later M2 slice).
-        effective = effective_amount(transaction)
+        effective = effective_amount(transaction, advance_own_share=advance_own_share)
         return cls(
             id=transaction.id,
             account_id=transaction.account_id,
