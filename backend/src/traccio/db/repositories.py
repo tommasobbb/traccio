@@ -297,6 +297,39 @@ def list_connections(session: Session, user_id: UUID) -> list[Connection]:
     return [row_to_connection(row) for row in rows]
 
 
+def list_all_transactions(session: Session, user_id: UUID) -> list[Transaction]:
+    """Return every one of the user's transactions, most recent first.
+
+    Scoped by ``user_id``. Unlike :func:`list_transactions` this is unpaginated:
+    it feeds in-memory detection (e.g. transfer suggestions), which must see the
+    whole pool to pair legs, not one page. Ordering matches the paginated reader
+    for consistency but detection does not depend on it. A windowed/incremental
+    variant is a later optimization, tied to the background sync scheduler.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose transactions to return; the query is scoped to it.
+
+    Returns
+    -------
+    list[Transaction]
+        All domain transactions owned by ``user_id`` (empty if none), newest
+        first.
+    """
+    rows = session.scalars(
+        select(TransactionRow)
+        .where(TransactionRow.user_id == user_id)
+        .order_by(
+            func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
+            TransactionRow.id,
+        )
+    ).all()
+    return [row_to_transaction(row) for row in rows]
+
+
 def list_transactions(
     session: Session,
     user_id: UUID,

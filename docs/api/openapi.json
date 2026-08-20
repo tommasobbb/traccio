@@ -369,6 +369,69 @@
         "title": "TransactionsResponse",
         "type": "object"
       },
+      "TransferSuggestionResponse": {
+        "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).",
+        "properties": {
+          "amount_delta": {
+            "title": "Amount Delta",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "day_gap": {
+            "title": "Day Gap",
+            "type": "integer"
+          },
+          "incoming_amount": {
+            "title": "Incoming Amount",
+            "type": "integer"
+          },
+          "incoming_transaction_id": {
+            "format": "uuid",
+            "title": "Incoming Transaction Id",
+            "type": "string"
+          },
+          "outgoing_amount": {
+            "title": "Outgoing Amount",
+            "type": "integer"
+          },
+          "outgoing_transaction_id": {
+            "format": "uuid",
+            "title": "Outgoing Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoing_transaction_id",
+          "incoming_transaction_id",
+          "currency",
+          "outgoing_amount",
+          "incoming_amount",
+          "amount_delta",
+          "day_gap"
+        ],
+        "title": "TransferSuggestionResponse",
+        "type": "object"
+      },
+      "TransferSuggestionsResponse": {
+        "description": "Envelope for the transfer-suggestions list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nsuggestions : list[TransferSuggestionResponse]\n    The suggested transfers, most confident first.",
+        "properties": {
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/TransferSuggestionResponse"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions"
+        ],
+        "title": "TransferSuggestionsResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -716,6 +779,25 @@
           }
         },
         "summary": "Transactions"
+      }
+    },
+    "/transfers/suggestions": {
+      "get": {
+        "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). The user confirms a suggestion later,\nwhich is a separate, explicit action. Scoped to the current user; the\ntolerance and window come from settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
+        "operationId": "transfer_suggestions_transfers_suggestions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferSuggestionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Transfer Suggestions"
       }
     }
   }

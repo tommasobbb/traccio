@@ -13,6 +13,7 @@ from traccio.api.routers import (
     connections_router,
     health_router,
     transactions_router,
+    transfers_router,
 )
 from traccio.api.version import resolve_version
 from traccio.core.config import get_settings
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(accounts_router)
     app.include_router(connections_router)
     app.include_router(transactions_router)
+    app.include_router(transfers_router)
 
     return app
 

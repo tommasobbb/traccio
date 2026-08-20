@@ -63,6 +63,14 @@ class Settings(BaseSettings):
         deliberately generous. Deduplication makes re-fetching the same window
         harmless; incremental, budget-aware windowing lands with the background
         scheduler.
+    transfer_amount_tolerance_cents : int
+        Maximum absolute difference, in minor units, between the two legs of a
+        suggested transfer. Absorbs fees on same-currency internal moves (see
+        ``docs/domain.md``). Detection only suggests; nothing is linked
+        automatically.
+    transfer_window_days : int
+        Maximum whole-day gap between the two legs of a suggested transfer;
+        settlement is not simultaneous.
     """
 
     model_config = SettingsConfigDict(
@@ -96,6 +104,11 @@ class Settings(BaseSettings):
     # Greedy lookback for the initial history fetch (the ~1h post-auth window is
     # the only shot at full history). Dedup makes re-fetching harmless. ~2 years.
     initial_history_days: int = 730
+    # Transfer detection tolerances (suggestions only, never auto-linked). A
+    # small amount tolerance absorbs fees; a few days absorbs non-simultaneous
+    # settlement. See docs/domain.md and services/transfers.py.
+    transfer_amount_tolerance_cents: int = 100
+    transfer_window_days: int = 4
 
 
 @lru_cache
