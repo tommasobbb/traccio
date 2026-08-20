@@ -77,6 +77,27 @@
         "title": "AccountsResponse",
         "type": "object"
       },
+      "ConfirmTransferRequest": {
+        "description": "Body for confirming a suggestion as a transfer.\n\nNames the two legs by role: the outgoing (negative) leg left one account and\nthe incoming (positive) leg arrived in another. Both must belong to the\ncaller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).",
+        "properties": {
+          "incoming_transaction_id": {
+            "format": "uuid",
+            "title": "Incoming Transaction Id",
+            "type": "string"
+          },
+          "outgoing_transaction_id": {
+            "format": "uuid",
+            "title": "Outgoing Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoing_transaction_id",
+          "incoming_transaction_id"
+        ],
+        "title": "ConfirmTransferRequest",
+        "type": "object"
+      },
       "ConnectionResponse": {
         "description": "One connection as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Connection`. It\ncarries no secret material by construction: the consent secret and the\nanti-CSRF ``auth_state`` live only on the ORM row, never on the domain model\nthis is built from (see ``.claude/rules/data-safety.md``). ``user_id`` is\nimplied by the caller and omitted.\n\nAttributes\n----------\nid : UUID\n    Stable connection identifier.\nprovider : str\n    Adapter that produced the connection (e.g. ``\"enable_banking\"``).\ninstitution_name : str\n    Human-readable bank name for display.\nstatus : ConnectionStatus\n    Consent lifecycle state.\nexpires_at : datetime or None\n    Consent expiry; ``None`` while pending. Surfacing an upcoming expiry is\n    a product concern the client renders from this field.\ncreated_at : datetime\n    When the connection was created.",
         "properties": {
@@ -184,6 +205,27 @@
           "version"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "RejectTransferRequest": {
+        "description": "Body for rejecting a suggested pair as a transfer.\n\nThe pair is order-independent \u2014 it is stored canonically so the same two\ntransactions are not suggested again regardless of which was outgoing. Both\nmust belong to the caller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    One leg of the rejected pair (the suggestion's outgoing leg).\nincoming_transaction_id : UUID\n    The other leg of the rejected pair (the suggestion's incoming leg).",
+        "properties": {
+          "incoming_transaction_id": {
+            "format": "uuid",
+            "title": "Incoming Transaction Id",
+            "type": "string"
+          },
+          "outgoing_transaction_id": {
+            "format": "uuid",
+            "title": "Outgoing Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outgoing_transaction_id",
+          "incoming_transaction_id"
+        ],
+        "title": "RejectTransferRequest",
         "type": "object"
       },
       "StartConnectionRequest": {
@@ -369,6 +411,39 @@
         "title": "TransactionsResponse",
         "type": "object"
       },
+      "TransferResponse": {
+        "description": "One confirmed transfer as returned to the client.\n\nProjects :class:`~traccio.domain.models.Transfer`. Both legs already carry\n``role=transfer``, so their ``effective_amount`` is zero on\n``GET /transactions``.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the transfer.\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).\ncreated_at : datetime\n    When the transfer was confirmed (timezone-aware, UTC).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incoming_transaction_id": {
+            "format": "uuid",
+            "title": "Incoming Transaction Id",
+            "type": "string"
+          },
+          "outgoing_transaction_id": {
+            "format": "uuid",
+            "title": "Outgoing Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "outgoing_transaction_id",
+          "incoming_transaction_id",
+          "created_at"
+        ],
+        "title": "TransferResponse",
+        "type": "object"
+      },
       "TransferSuggestionResponse": {
         "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).",
         "properties": {
@@ -430,6 +505,23 @@
           "suggestions"
         ],
         "title": "TransferSuggestionsResponse",
+        "type": "object"
+      },
+      "TransfersResponse": {
+        "description": "Envelope for the confirmed-transfers list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ntransfers : list[TransferResponse]\n    The user's confirmed transfers, oldest first.",
+        "properties": {
+          "transfers": {
+            "items": {
+              "$ref": "#/components/schemas/TransferResponse"
+            },
+            "title": "Transfers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transfers"
+        ],
+        "title": "TransfersResponse",
         "type": "object"
       },
       "ValidationError": {
@@ -781,9 +873,99 @@
         "summary": "Transactions"
       }
     },
+    "/transfers": {
+      "get": {
+        "description": "List the current user's confirmed transfers, oldest first.\n\nScoped to the current user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transfers to return.\n\nReturns\n-------\nTransfersResponse\n    The user's confirmed transfers, oldest first (empty if none).",
+        "operationId": "transfers_transfers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransfersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Transfers"
+      }
+    },
+    "/transfers/confirm": {
+      "post": {
+        "description": "Confirm two transactions as a transfer.\n\nThe explicit user action that turns a suggestion into a persisted link: it\nvalidates the pair (same invariants detection uses, minus the tolerance and\nwindow \u2014 a user may link any structurally valid pair), records the\n:class:`~traccio.domain.models.Transfer`, and sets both legs' ``role`` to\n``transfer`` so their ``effective_amount`` becomes zero. Scoped to the\ncurrent user.\n\nParameters\n----------\nbody : ConfirmTransferRequest\n    The outgoing (negative) and incoming (positive) legs to link.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.\n\nReturns\n-------\nTransferResponse\n    The created transfer.",
+        "operationId": "confirm_transfer_transfers_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmTransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Transfer"
+      }
+    },
+    "/transfers/reject": {
+      "post": {
+        "description": "Reject a suggested pair so it is not suggested again.\n\nRecords an order-independent dismissal for the two legs. Idempotent: rejecting\nthe same pair twice changes nothing. Both legs must belong to the caller.\nScoped to the current user.\n\nParameters\n----------\nbody : RejectTransferRequest\n    The two legs of the rejected suggestion.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.",
+        "operationId": "reject_transfer_transfers_reject_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectTransferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Transfer"
+      }
+    },
     "/transfers/suggestions": {
       "get": {
-        "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). The user confirms a suggestion later,\nwhich is a separate, explicit action. Scoped to the current user; the\ntolerance and window come from settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
+        "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). Pairs the user has rejected are\nexcluded via stored dismissals, so a rejected suggestion does not reappear.\nScoped to the current user; the tolerance and window come from settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
         "operationId": "transfer_suggestions_transfers_suggestions_get",
         "responses": {
           "200": {
@@ -798,6 +980,40 @@
           }
         },
         "summary": "Transfer Suggestions"
+      }
+    },
+    "/transfers/{transfer_id}": {
+      "delete": {
+        "description": "Delete a confirmed transfer and revert both legs to ``personal``.\n\nThe inverse of confirm: unlink the two transactions and restore their role so\ntheir ``effective_amount`` returns to the full amount. Scoped to the current\nuser; a ``404`` if the transfer is unknown or not the caller's.\n\nParameters\n----------\ntransfer_id : UUID\n    The transfer to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transfer belongs to.",
+        "operationId": "remove_transfer_transfers__transfer_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transfer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transfer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Transfer"
       }
     }
   }

@@ -8,7 +8,7 @@ from traccio.domain.enums import (
     TransactionRole,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Connection, Transaction, User
+from traccio.domain.models import Account, Connection, Transaction, Transfer, User
 from traccio.domain.money import CurrencyCode, Money
 
 __all__ = [
@@ -22,6 +22,7 @@ __all__ = [
     "Transaction",
     "TransactionRole",
     "TransactionStatus",
+    "Transfer",
     "User",
     "effective_amount",
 ]

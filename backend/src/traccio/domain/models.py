@@ -185,3 +185,37 @@ class Transaction(BaseModel):
     entry_reference: str | None = None
     stable_key: str
     key_strategy: KeyStrategy
+
+
+class Transfer(BaseModel):
+    """A confirmed link between two transactions moving the same money.
+
+    Two of the user's own accounts, opposite signs: the outgoing leg left one
+    account and the incoming leg arrived in another (see ``docs/domain.md``). A
+    ``Transfer`` exists only because the user confirmed a suggestion — detection
+    never links (``docs/architecture.md``). Confirming sets both legs'
+    ``role`` to :attr:`TransactionRole.TRANSFER`, which zeroes their
+    ``effective_amount``; deleting the ``Transfer`` reverts both to
+    ``personal``.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the transfer within Traccio.
+    user_id : UUID
+        Owning user. Both legs belong to this user.
+    outgoing_transaction_id : UUID
+        The negative leg (money left an account).
+    incoming_transaction_id : UUID
+        The positive leg (money arrived in another account).
+    created_at : datetime
+        When the transfer was confirmed (timezone-aware, UTC).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    outgoing_transaction_id: UUID
+    incoming_transaction_id: UUID
+    created_at: datetime = Field(default_factory=_now)

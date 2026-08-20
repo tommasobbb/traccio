@@ -120,3 +120,169 @@ def test_empty_when_user_has_no_transactions() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"suggestions": []}
+
+
+def _seed_pair(engine: Engine, *, user_id: UUID) -> tuple[str, str]:
+    """Seed a clean opposite-sign pair and return (outgoing_id, incoming_id)."""
+    with Session(engine) as session:
+        out = _tx(user_id=user_id, account_id=uuid4(), amount=-50000, stable_key="TX-OUT")
+        inc = _tx(user_id=user_id, account_id=uuid4(), amount=50000, stable_key="TX-IN")
+        session.add_all([out, inc])
+        session.commit()
+        return str(out.id), str(inc.id)
+
+
+def test_confirm_links_pair_and_zeroes_effective_amount() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    response = client.post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["outgoing_transaction_id"] == out_id
+    assert body["incoming_transaction_id"] == in_id
+
+    # Both legs now carry role=transfer, so their effective_amount is zero,
+    # derived by the one pure domain function on GET /transactions.
+    by_id = {t["id"]: t for t in client.get("/transactions").json()["transactions"]}
+    assert by_id[out_id]["role"] == "transfer"
+    assert by_id[in_id]["role"] == "transfer"
+    assert by_id[out_id]["effective_amount"] == 0
+    assert by_id[in_id]["effective_amount"] == 0
+
+    # The confirmed pair no longer appears as a suggestion and is listed.
+    assert client.get("/transfers/suggestions").json() == {"suggestions": []}
+    assert len(client.get("/transfers").json()["transfers"]) == 1
+
+
+def test_delete_reverts_roles_and_reinstates_the_suggestion() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    transfer_id = client.post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    ).json()["id"]
+
+    response = client.delete(f"/transfers/{transfer_id}")
+
+    assert response.status_code == 204
+    by_id = {t["id"]: t for t in client.get("/transactions").json()["transactions"]}
+    assert by_id[out_id]["role"] == "personal"
+    assert by_id[out_id]["effective_amount"] == -50000
+    # With the link gone the pair is suggested again, and nothing is listed.
+    assert len(client.get("/transfers/suggestions").json()["suggestions"]) == 1
+    assert client.get("/transfers").json() == {"transfers": []}
+
+
+def test_delete_unknown_transfer_is_404() -> None:
+    response = _client(_sqlite_engine()).delete(f"/transfers/{uuid4()}")
+    assert response.status_code == 404
+
+
+def test_reject_suppresses_the_suggestion_and_is_idempotent() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    first = client.post(
+        "/transfers/reject",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    )
+    assert first.status_code == 204
+    assert client.get("/transfers/suggestions").json() == {"suggestions": []}
+
+    # Rejecting the same pair again changes nothing (idempotent).
+    again = client.post(
+        "/transfers/reject",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    )
+    assert again.status_code == 204
+    assert client.get("/transfers/suggestions").json() == {"suggestions": []}
+
+
+def test_reject_is_order_independent() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    # Reject naming the legs in the opposite order; the pair is still suppressed.
+    response = client.post(
+        "/transfers/reject",
+        json={"outgoing_transaction_id": in_id, "incoming_transaction_id": out_id},
+    )
+    assert response.status_code == 204
+    assert client.get("/transfers/suggestions").json() == {"suggestions": []}
+
+
+def test_confirm_unknown_transaction_is_404() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, _ = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    response = client.post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": str(uuid4())},
+    )
+    assert response.status_code == 404
+
+
+def test_confirm_same_account_is_422() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        out = _tx(user_id=dev_user_id, account_id=account, amount=-50000, stable_key="TX-OUT")
+        inc = _tx(user_id=dev_user_id, account_id=account, amount=50000, stable_key="TX-IN")
+        session.add_all([out, inc])
+        session.commit()
+        out_id, in_id = str(out.id), str(inc.id)
+
+    response = _client(engine).post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "same_account"
+
+
+def test_confirm_already_linked_leg_is_409() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    payload = {"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id}
+    assert client.post("/transfers/confirm", json=payload).status_code == 201
+    # Both legs are now linked, so confirming them again is a conflict.
+    assert client.post("/transfers/confirm", json=payload).status_code == 409
+
+
+def test_confirm_another_users_transaction_is_404() -> None:
+    dev_user_id = get_settings().dev_user_id
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        mine = _tx(user_id=dev_user_id, account_id=uuid4(), amount=-50000, stable_key="TX-MINE")
+        theirs = _tx(user_id=stranger_id, account_id=uuid4(), amount=50000, stable_key="TX-THEIRS")
+        session.add_all([mine, theirs])
+        session.commit()
+        mine_id, theirs_id = str(mine.id), str(theirs.id)
+
+    response = _client(engine).post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": mine_id, "incoming_transaction_id": theirs_id},
+    )
+    # The stranger's leg is invisible to this user, so it reads as "not found".
+    assert response.status_code == 404

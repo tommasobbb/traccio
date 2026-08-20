@@ -178,6 +178,19 @@ Detection produces a **suggestion**, never a silent link. A wrongly detected
 transfer erases a real expense from the user's totals, which is worse than
 missing one.
 
+**Confirming** a suggestion is the explicit user action that creates the
+`Transfer`: it links exactly the two legs and sets both to `role=transfer`, so
+their `effective_amount` becomes zero. Deleting the `Transfer` unlinks the legs
+and reverts both to `personal`. A user may confirm any structurally valid pair —
+different accounts, same currency, opposite signs, both still `personal` — even
+one outside detection's amount tolerance or day window; those bounds constrain
+automatic *suggestions*, not an explicit confirmation.
+
+**Rejecting** a suggestion records a dismissal for that pair, so detection does
+not propose it again (suggestions are recomputed on demand, so without this a
+rejected pair would reappear). A dismissal is order-independent and rejecting the
+same pair twice is idempotent.
+
 **Half-transfers exist and are normal**: money moved to an account the user
 has not connected. The outgoing leg has no counterpart and stays
 `personal`. Do not treat an unmatched leg as an error.

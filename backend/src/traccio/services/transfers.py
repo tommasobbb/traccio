@@ -11,7 +11,7 @@ which is worse than missing one, so nothing here writes.
 This module is pure (no I/O) and imports only ``domain``.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 from itertools import combinations
 from uuid import UUID
@@ -26,6 +26,34 @@ from traccio.domain.models import Transaction
 # without a settings object, e.g. in unit tests.
 _DEFAULT_AMOUNT_TOLERANCE_CENTS = 100
 _DEFAULT_WINDOW_DAYS = 4
+
+# Stable, value-free reason codes for an invalid transfer pair. Exposed so the
+# API layer can map a rejection to an HTTP status without parsing a message.
+REASON_SAME_ACCOUNT = "same_account"
+REASON_CURRENCY_MISMATCH = "currency_mismatch"
+REASON_NOT_OPPOSITE_SIGNS = "not_opposite_signs"
+REASON_NOT_PERSONAL = "not_personal"
+REASON_REJECTED = "rejected"
+REASON_ZERO_AMOUNT = "zero_amount"
+
+
+class TransferPairError(ValueError):
+    """A pair of transactions cannot form a transfer.
+
+    Raised by :func:`validate_transfer_pair`. Carries a stable, value-free
+    ``reason`` (one of the ``REASON_*`` constants) so the API layer can map it to
+    an HTTP status without inspecting the message. No amounts, descriptions, or
+    other financial values are included (see ``.claude/rules/data-safety.md``).
+
+    Attributes
+    ----------
+    reason : str
+        Machine-readable cause, one of the module ``REASON_*`` constants.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"invalid transfer pair: {reason}")
+        self.reason = reason
 
 
 class TransferSuggestion(BaseModel):
@@ -81,6 +109,7 @@ def detect_transfers(
     *,
     amount_tolerance_cents: int = _DEFAULT_AMOUNT_TOLERANCE_CENTS,
     window_days: int = _DEFAULT_WINDOW_DAYS,
+    dismissed_pairs: Collection[frozenset[UUID]] = (),
 ) -> list[TransferSuggestion]:
     """Suggest transfers among ``transactions`` by pairing opposite legs.
 
@@ -106,6 +135,10 @@ def detect_transfers(
         minor units. Absorbs fees on same-currency internal moves.
     window_days : int, optional
         Maximum allowed whole-day gap between the legs' effective dates.
+    dismissed_pairs : Collection[frozenset[UUID]], optional
+        Unordered id pairs the user has rejected as transfers; any candidate pair
+        whose two transaction ids form one of these is skipped, so a rejected
+        suggestion is not proposed again. Defaults to none.
 
     Returns
     -------
@@ -128,6 +161,7 @@ def detect_transfers(
         ):
             candidates.append((tx, date))
 
+    dismissed = set(dismissed_pairs)
     scored: list[tuple[int, int, TransferSuggestion]] = []
     for (first, first_date), (second, second_date) in combinations(candidates, 2):
         if first.account_id == second.account_id:
@@ -136,6 +170,8 @@ def detect_transfers(
             continue
         # Opposite signs: exactly one leg is negative.
         if (first.money.amount < 0) == (second.money.amount < 0):
+            continue
+        if frozenset({first.id, second.id}) in dismissed:
             continue
         amount_delta = abs(abs(first.money.amount) - abs(second.money.amount))
         if amount_delta > amount_tolerance_cents:
@@ -173,3 +209,47 @@ def detect_transfers(
         suggestions.append(suggestion)
 
     return suggestions
+
+
+def validate_transfer_pair(outgoing: Transaction, incoming: Transaction) -> None:
+    """Check that two transactions may be confirmed as a transfer.
+
+    Enforces the structural invariants a transfer must satisfy, the same ones
+    :func:`detect_transfers` requires of a candidate pair — different accounts,
+    shared currency, opposite signs (``outgoing`` negative, ``incoming``
+    positive), both still ``personal``, neither ``rejected``, and non-zero
+    amounts. It deliberately does **not** apply the amount tolerance or day
+    window: those bound *automatic suggestions*, whereas an explicit user
+    confirmation may link any structurally valid pair (a large fee or a slow
+    settlement is the user's call to make).
+
+    Sharing this function with detection keeps the confirm rule and the
+    suggestion rule from drifting apart.
+
+    Parameters
+    ----------
+    outgoing : Transaction
+        The leg the user labelled as money leaving an account (must be negative).
+    incoming : Transaction
+        The leg the user labelled as money arriving (must be positive).
+
+    Raises
+    ------
+    TransferPairError
+        If the pair violates any invariant. The exception's ``reason`` is a
+        stable, value-free code (a module ``REASON_*`` constant); no financial
+        values are included.
+    """
+    if outgoing.account_id == incoming.account_id:
+        raise TransferPairError(REASON_SAME_ACCOUNT)
+    if outgoing.money.currency != incoming.money.currency:
+        raise TransferPairError(REASON_CURRENCY_MISMATCH)
+    for leg in (outgoing, incoming):
+        if leg.status is TransactionStatus.REJECTED:
+            raise TransferPairError(REASON_REJECTED)
+        if leg.role is not TransactionRole.PERSONAL:
+            raise TransferPairError(REASON_NOT_PERSONAL)
+        if leg.money.amount == 0:
+            raise TransferPairError(REASON_ZERO_AMOUNT)
+    if not (outgoing.money.amount < 0 and incoming.money.amount > 0):
+        raise TransferPairError(REASON_NOT_OPPOSITE_SIGNS)
