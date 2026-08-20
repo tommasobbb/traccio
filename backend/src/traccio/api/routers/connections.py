@@ -14,6 +14,7 @@ Data safety (``.claude/rules/data-safety.md``): these handlers log only the
 or the authorization url (which embeds ``state``).
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -25,7 +26,7 @@ from traccio.api.deps import current_user_id, get_bank_provider, get_token_ciphe
 from traccio.api.schemas.connections import (
     StartConnectionRequest,
     StartConnectionResponse,
-    SyncAccountsResponse,
+    SyncResponse,
 )
 from traccio.core.config import get_settings
 from traccio.core.crypto import TokenCipher
@@ -36,6 +37,7 @@ from traccio.db.repositories import (
     find_pending_connection_id,
     get_connection_credentials,
     upsert_account,
+    upsert_transaction,
 )
 from traccio.db.session import get_session
 from traccio.domain.enums import ConnectionStatus
@@ -177,20 +179,20 @@ def connection_callback(
     return HTMLResponse(content=_SUCCESS_PAGE)
 
 
-@router.post("/connections/{connection_id}/sync", response_model=SyncAccountsResponse)
+@router.post("/connections/{connection_id}/sync", response_model=SyncResponse)
 def sync_connection(
     connection_id: UUID,
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
     provider: Annotated[BankProvider, Depends(get_bank_provider)],
     cipher: Annotated[TokenCipher, Depends(get_token_cipher_dep)],
-) -> SyncAccountsResponse:
-    """Sync the accounts reachable through an active connection.
+) -> SyncResponse:
+    """Sync the accounts and transactions reachable through an active connection.
 
     Reads the encrypted consent secret, decrypts it, lists the accounts the
-    consent exposes, and upserts each one (idempotent on stable identity, so a
-    re-sync updates rather than duplicates). Scoped to the current user. This
-    slice discovers accounts only; transactions join this endpoint later.
+    consent exposes and upserts each one, then fetches and upserts each account's
+    transactions over a greedy history window. Idempotent on stable identity, so
+    a re-sync updates rather than duplicates. Scoped to the current user.
 
     Parameters
     ----------
@@ -207,38 +209,55 @@ def sync_connection(
 
     Returns
     -------
-    SyncAccountsResponse
-        How many accounts were discovered and persisted.
+    SyncResponse
+        How many accounts and transactions were discovered and persisted.
     """
     encrypted = get_connection_credentials(session, user_id=user_id, connection_id=connection_id)
     if encrypted is None:
         raise HTTPException(status_code=404, detail="unknown or inactive connection")
 
     credentials = cipher.decrypt(encrypted)
+    # PSU-present: the user is actively waiting, so this is not subject to the
+    # background fetch budget (docs/openbanking.md).
+    context = SyncContext(psu_present=True)
+    since = datetime.now(UTC) - timedelta(days=get_settings().initial_history_days)
     try:
-        provider_accounts = provider.list_accounts(
-            credentials=credentials, context=SyncContext(psu_present=True)
-        )
+        provider_accounts = provider.list_accounts(credentials=credentials, context=context)
+        transactions_synced = 0
+        for provider_account in provider_accounts:
+            account = upsert_account(
+                session,
+                account=Account(
+                    user_id=user_id,
+                    connection_id=connection_id,
+                    kind=provider_account.kind,
+                    currency=provider_account.currency,
+                    identification_hash=provider_account.identification_hash,
+                    name=provider_account.name,
+                ),
+            )
+            transactions = provider.fetch_transactions(
+                credentials=credentials,
+                account=account,
+                since=since,
+                until=None,
+                context=context,
+            )
+            for transaction in transactions:
+                upsert_transaction(session, transaction=transaction)
+            transactions_synced += len(transactions)
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail="provider account listing failed") from exc
+        raise HTTPException(status_code=502, detail="provider sync failed") from exc
 
-    for provider_account in provider_accounts:
-        upsert_account(
-            session,
-            account=Account(
-                user_id=user_id,
-                connection_id=connection_id,
-                kind=provider_account.kind,
-                currency=provider_account.currency,
-                identification_hash=provider_account.identification_hash,
-                name=provider_account.name,
-            ),
-        )
     session.commit()
 
     logger.info(
         "connections.sync",
         connection_id=str(connection_id),
         accounts_synced=len(provider_accounts),
+        transactions_synced=transactions_synced,
     )
-    return SyncAccountsResponse(accounts_synced=len(provider_accounts))
+    return SyncResponse(
+        accounts_synced=len(provider_accounts),
+        transactions_synced=transactions_synced,
+    )

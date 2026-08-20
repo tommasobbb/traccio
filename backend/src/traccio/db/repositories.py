@@ -12,10 +12,16 @@ from uuid import UUID
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from traccio.db.mappers import account_to_row, connection_to_row, row_to_account
-from traccio.db.models import AccountRow, ConnectionRow
-from traccio.domain.enums import ConnectionStatus
-from traccio.domain.models import Account, Connection
+from traccio.db.mappers import (
+    account_to_row,
+    connection_to_row,
+    row_to_account,
+    row_to_transaction,
+    transaction_to_row,
+)
+from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
+from traccio.domain.enums import ConnectionStatus, TransactionStatus
+from traccio.domain.models import Account, Connection, Transaction
 
 
 def create_connection(session: Session, *, connection: Connection, auth_state: str) -> None:
@@ -180,6 +186,64 @@ def upsert_account(session: Session, *, account: Account) -> Account:
     existing.currency = account.currency
     existing.name = account.name
     return row_to_account(existing)
+
+
+def upsert_transaction(session: Session, *, transaction: Transaction) -> Transaction:
+    """Insert a transaction or update a still-pending one in place.
+
+    Idempotent on ``(account_id, stable_key)`` — the unique constraint that makes
+    a re-sync change nothing (``docs/architecture.md``). Read-then-write (no
+    dialect-specific upsert) so it behaves the same on SQLite and PostgreSQL. The
+    caller owns the transaction boundary and commits.
+
+    Conflict handling follows the domain's immutability rule
+    (``docs/domain.md``):
+
+    - An existing **booked** row is immutable — corrections arrive as new
+      transactions — so it is returned untouched.
+    - An existing **pending** row is the *same* movement transitioning state (its
+      amount/description routinely change on settlement), so the bank-sourced
+      fields are refreshed. User- and detection-owned fields (``role``,
+      ``display_description``) are **never** overwritten by a sync, and the
+      ``id`` is preserved so references survive.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    transaction : Transaction
+        The normalized domain transaction to persist. Its ``account_id`` and
+        ``stable_key`` identify the row.
+
+    Returns
+    -------
+    Transaction
+        The persisted transaction: the newly inserted one, the refreshed pending
+        one, or the untouched booked one.
+    """
+    existing = session.scalars(
+        select(TransactionRow).where(
+            TransactionRow.account_id == transaction.account_id,
+            TransactionRow.stable_key == transaction.stable_key,
+        )
+    ).one_or_none()
+    if existing is None:
+        row = transaction_to_row(transaction)
+        session.add(row)
+        return row_to_transaction(row)
+
+    if existing.status is TransactionStatus.BOOKED:
+        return row_to_transaction(existing)
+
+    existing.amount = transaction.money.amount
+    existing.currency = transaction.money.currency
+    existing.booked_at = transaction.booked_at
+    existing.value_date = transaction.value_date
+    existing.description = transaction.description
+    existing.status = transaction.status
+    existing.entry_reference = transaction.entry_reference
+    existing.key_strategy = transaction.key_strategy
+    return row_to_transaction(existing)
 
 
 def list_accounts(session: Session, user_id: UUID) -> list[Account]:

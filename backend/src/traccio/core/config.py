@@ -56,6 +56,13 @@ class Settings(BaseSettings):
         Whitelisted URL the bank returns the user to after SCA. Must match both
         the redirect registered in the Enable Banking Control Panel and the
         backend callback endpoint (``GET /connections/callback``).
+    initial_history_days : int
+        How far back a sync requests transactions. The initial sync after a new
+        connection is the only chance at full history (banks serve it just for
+        the ~1h post-authorization window; ``docs/openbanking.md``), so this is
+        deliberately generous. Deduplication makes re-fetching the same window
+        harmless; incremental, budget-aware windowing lands with the background
+        scheduler.
     """
 
     model_config = SettingsConfigDict(
@@ -86,6 +93,9 @@ class Settings(BaseSettings):
     # Must match the redirect registered in the Control Panel and the callback
     # endpoint. https is mandatory; localhost is accepted (docs/openbanking.md).
     enable_banking_redirect_url: str = "https://localhost:8000/connections/callback"
+    # Greedy lookback for the initial history fetch (the ~1h post-auth window is
+    # the only shot at full history). Dedup makes re-fetching harmless. ~2 years.
+    initial_history_days: int = 730
 
 
 @lru_cache

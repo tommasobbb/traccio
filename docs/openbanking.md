@@ -114,8 +114,68 @@ The adapter normalizes each into a provider-agnostic `ProviderAccount`; the
   `Account.name`. The `AccountResource.name` field is the **account-holder
   name** — personal data — and is never stored or logged (`.claude/rules/data-safety.md`).
 
-Sign convention, stable transaction identity, and `booked_at`/`value_date` are
-transaction-level duties documented alongside `fetch_transactions` (a later slice).
+## Transaction retrieval
+
+Once accounts are known, each one's transactions are fetched with the stored
+`session_id` by the same `POST /connections/{id}/sync`, which drives the adapter's
+`fetch_transactions`. The endpoint is
+`GET /accounts/{account_uid}/transactions?date_from=…&date_to=…`, paginated: a
+response carries a `continuation_key` while more pages remain, passed back on the
+next call until it is absent. The provider follows the pages and normalizes each
+entry; the `api/` handler upserts each transaction idempotently.
+
+**Account UID resolution.** The transactions endpoint is keyed by Enable
+Banking's session-scoped `account_uid`, but the stored domain `Account` carries
+only the stable `identification_hash` (the `uid` deliberately does not cross the
+adapter boundary). So `fetch_transactions` re-resolves the uid each call: it lists
+the session's uids and matches on the `identification_hash` from each account's
+details. This is stateless at the cost of a few extra detail calls — acceptable
+at the handful-of-accounts scale a personal sync runs at.
+
+**Greedy history window.** The initial sync after a new connection is the only
+chance at full history — most banks serve it only for the ~1h following
+authorization, then roughly 90 days. So the sync requests a deliberately wide
+`date_from` (`TRACCIO_INITIAL_HISTORY_DAYS`, ~2 years by default). Deduplication
+makes re-fetching the same window harmless; incremental, budget-aware windowing
+lands with the background scheduler.
+
+**Normalization duties for this adapter:**
+
+- **Sign.** Enable Banking sends an unsigned `amount` plus an ISO 20022
+  `credit_debit_indicator`: `DBIT` → money left the account (stored **negative**),
+  `CRDT` → money arrived (stored **positive**), any other value refused. This is
+  the account-holder's perspective, so it is already correct for current, savings,
+  and card accounts alike, and no kind is inverted today. Should a specific bank be
+  found to report card movements inverted, the per-bank branch is added in the one
+  `_normalize_sign(kind, cents)` seam — and recorded below — never scattered across
+  call sites (`docs/domain.md`: "a purchase is stored negative, for every account
+  type").
+- **Amount → integer cents.** The `amount` is a decimal *string* (e.g. `"12.34"`),
+  parsed with `Decimal` and scaled ×100 — never through `float` (root `CLAUDE.md`).
+  M1 targets two-decimal currencies (EUR, GBP, …); an amount with sub-cent
+  precision is **refused** rather than rounded. A zero- or three-decimal currency
+  (JPY, BHD) would need its own scale and is a future item.
+- **Stable identity.** Prefer the bank's `entry_reference` (`KeyStrategy.ENTRY_REFERENCE`;
+  ISO 20022 caps it well under the `stable_key` column). Absent, derive a SHA-256
+  over `(account_id, value_date, amount, currency, description)` — a 64-char digest,
+  deterministic across syncs but `KeyStrategy.DERIVED_HASH` (lower confidence: two
+  identical coffees on the same day collide). The strategy is stored so dedup can
+  tell the cases apart.
+- **Dates.** `booking_date` → `booked_at` (absent while pending), `value_date` →
+  `value_date`; ISO dates parse to tz-aware UTC.
+- **Description.** The `remittance_information` lines are joined **verbatim** as
+  the raw `description` — Enable Banking does not enrich (no clean merchant name).
+  A cleaned `display_description` is produced separately, later.
+- **Status.** `BOOK` → `booked`, `PDNG` → `pending`; any other code (e.g. `INFO`)
+  is refused, so an unmodelled status surfaces on the first real sync rather than
+  masquerading as a booked movement.
+
+**Persistence and dedup.** Each transaction is upserted on the
+`(account_id, stable_key)` unique constraint (idempotency enforced at the schema
+level, `docs/architecture.md`). A booked row is immutable; a still-pending row is
+the same movement transitioning state, so its bank-sourced fields are refreshed on
+settlement — but a sync **never** overwrites the user/detection-owned `role` or
+`display_description`.
 
 ## Credential handling
 

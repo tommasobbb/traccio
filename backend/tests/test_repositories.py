@@ -13,10 +13,21 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from traccio.db.base import Base
-from traccio.db.models import AccountRow, ConnectionRow
-from traccio.db.repositories import get_connection_credentials, upsert_account
-from traccio.domain import Account
-from traccio.domain.enums import AccountKind, ConnectionStatus
+from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
+from traccio.db.repositories import (
+    get_connection_credentials,
+    upsert_account,
+    upsert_transaction,
+)
+from traccio.domain import Account, Transaction
+from traccio.domain.enums import (
+    AccountKind,
+    ConnectionStatus,
+    KeyStrategy,
+    TransactionRole,
+    TransactionStatus,
+)
+from traccio.domain.money import Money
 
 
 def _engine() -> Engine:
@@ -145,6 +156,232 @@ def test_upsert_account_separates_users_with_the_same_hash() -> None:
     # The uniqueness is (user_id, identification_hash): two users, two rows.
     assert len(rows) == 2
     assert {r.user_id for r in rows} == {user_a, user_b}
+
+
+def _transaction(
+    *,
+    account_id: UUID,
+    user_id: UUID,
+    stable_key: str = "ENTRY-01",
+    amount: int = -1234,
+    description: str = "TEST MERCHANT 01",
+    status: TransactionStatus = TransactionStatus.PENDING,
+    role: TransactionRole = TransactionRole.PERSONAL,
+) -> Transaction:
+    return Transaction(
+        user_id=user_id,
+        account_id=account_id,
+        money=Money(amount=amount, currency="EUR"),
+        description=description,
+        status=status,
+        role=role,
+        entry_reference=stable_key,
+        stable_key=stable_key,
+        key_strategy=KeyStrategy.ENTRY_REFERENCE,
+    )
+
+
+def test_upsert_transaction_inserts_a_new_transaction() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        result = upsert_transaction(
+            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+        )
+        session.commit()
+        inserted_id = result.id
+
+    with Session(engine) as session:
+        rows = list(session.scalars(select(TransactionRow)).all())
+    assert len(rows) == 1
+    assert rows[0].id == inserted_id
+    assert rows[0].stable_key == "ENTRY-01"
+
+
+def test_upsert_transaction_is_idempotent_on_account_and_stable_key() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        first = upsert_transaction(
+            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+        )
+        session.commit()
+        first_id = first.id
+
+    # Re-syncing the same entry (same account_id + stable_key) does not duplicate.
+    with Session(engine) as session:
+        again = upsert_transaction(
+            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+        )
+        session.commit()
+        assert again.id == first_id
+
+    with Session(engine) as session:
+        rows = list(session.scalars(select(TransactionRow)).all())
+    assert len(rows) == 1
+
+
+def test_upsert_transaction_pending_becomes_booked_in_place() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        pending = upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-1000,
+                description="PENDING TEXT",
+                status=TransactionStatus.PENDING,
+            ),
+        )
+        session.commit()
+        pending_id = pending.id
+
+    # The same movement settles: amount and description shift, status flips.
+    with Session(engine) as session:
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-1050,
+                description="BOOKED TEXT",
+                status=TransactionStatus.BOOKED,
+            ),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        rows = list(session.scalars(select(TransactionRow)).all())
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.id == pending_id  # same row, not a second one
+    assert row.status is TransactionStatus.BOOKED
+    assert row.amount == -1050
+    assert row.description == "BOOKED TEXT"
+
+
+def test_upsert_transaction_update_preserves_user_owned_fields() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id, user_id=user_id, status=TransactionStatus.PENDING
+            ),
+        )
+        session.commit()
+
+    # The user (or detection) assigns a role and a cleaned description on the row.
+    with Session(engine) as session:
+        row = session.scalars(select(TransactionRow)).one()
+        row.role = TransactionRole.TRANSFER
+        row.display_description = "Cleaned name"
+        session.commit()
+
+    # A later sync updates the pending entry; it must not clobber those fields.
+    with Session(engine) as session:
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id, user_id=user_id, status=TransactionStatus.BOOKED
+            ),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.scalars(select(TransactionRow)).one()
+    assert row.status is TransactionStatus.BOOKED
+    assert row.role is TransactionRole.TRANSFER
+    assert row.display_description == "Cleaned name"
+
+
+def test_upsert_transaction_booked_row_is_immutable() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-1234,
+                description="ORIGINAL",
+                status=TransactionStatus.BOOKED,
+            ),
+        )
+        session.commit()
+
+    # A re-sync that reports different content for a booked entry is ignored.
+    with Session(engine) as session:
+        upsert_transaction(
+            session,
+            transaction=_transaction(
+                account_id=account.id,
+                user_id=user_id,
+                amount=-9999,
+                description="TAMPERED",
+                status=TransactionStatus.BOOKED,
+            ),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.scalars(select(TransactionRow)).one()
+    assert row.amount == -1234
+    assert row.description == "ORIGINAL"
+
+
+def test_upsert_transaction_same_key_on_different_accounts_are_separate() -> None:
+    engine = _engine()
+    user_id = uuid4()
+
+    with Session(engine) as session:
+        account_a = upsert_account(
+            session,
+            account=_account(user_id=user_id, connection_id=uuid4(), identification_hash="HASH-A"),
+        )
+        account_b = upsert_account(
+            session,
+            account=_account(user_id=user_id, connection_id=uuid4(), identification_hash="HASH-B"),
+        )
+        upsert_transaction(
+            session,
+            transaction=_transaction(account_id=account_a.id, user_id=user_id, stable_key="SHARED"),
+        )
+        upsert_transaction(
+            session,
+            transaction=_transaction(account_id=account_b.id, user_id=user_id, stable_key="SHARED"),
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        rows = list(session.scalars(select(TransactionRow)).all())
+    # Uniqueness is (account_id, stable_key): the same key on two accounts is two rows.
+    assert len(rows) == 2
+    assert {r.account_id for r in rows} == {account_a.id, account_b.id}
 
 
 def test_get_connection_credentials_returns_active_ciphertext() -> None:

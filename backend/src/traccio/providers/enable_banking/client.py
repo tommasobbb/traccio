@@ -17,9 +17,9 @@ composes this client. The endpoints here:
 - ``GET /sessions/{session_id}`` — the account UIDs a stored session exposes.
 - ``GET /accounts/{account_uid}/details`` — full details for one account
   (type, currency, stable identification hash).
-
-The transaction endpoint — which returns domain objects, not raw payloads —
-lands in a later slice.
+- ``GET /accounts/{account_uid}/transactions`` — one page of an account's
+  transactions; the provider follows the ``continuation_key`` across pages and
+  normalizes each entry into a domain object.
 
 Data safety (``.claude/rules/data-safety.md``): this module never logs the JWT,
 the credentials, or any response body. ``/auth`` and ``/sessions`` responses
@@ -213,6 +213,48 @@ class EnableBankingClient:
             ``product``. Normalized into a domain object by the provider, not here.
         """
         return cast(dict[str, Any], self._request_json("GET", f"/accounts/{account_uid}/details"))
+
+    def get_account_transactions(
+        self,
+        account_uid: str,
+        *,
+        date_from: str,
+        date_to: str | None = None,
+        continuation_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Retrieve one page of an account's transactions.
+
+        ``GET /accounts/{account_uid}/transactions``. Enable Banking paginates:
+        a response carries a ``continuation_key`` when more pages remain, which
+        is passed back on the next call. Following the pages is the provider's
+        job — this returns a single raw page.
+
+        Parameters
+        ----------
+        account_uid : str
+            An account UID from :meth:`get_session`.
+        date_from : str
+            Inclusive lower bound of the window, ISO date (``YYYY-MM-DD``).
+        date_to : str or None, optional
+            Inclusive upper bound, ISO date. Omitted means up to now.
+        continuation_key : str or None, optional
+            The paging token returned by a previous page; omitted for the first.
+
+        Returns
+        -------
+        dict
+            Raw provider response: a ``transactions`` array and, when more pages
+            remain, a ``continuation_key``. Normalized by the provider, not here.
+        """
+        params = {"date_from": date_from}
+        if date_to is not None:
+            params["date_to"] = date_to
+        if continuation_key is not None:
+            params["continuation_key"] = continuation_key
+        return cast(
+            dict[str, Any],
+            self._request_json("GET", f"/accounts/{account_uid}/transactions", params=params),
+        )
 
     def close(self) -> None:
         """Close the underlying HTTP connection pool."""
