@@ -242,7 +242,8 @@ def sync_connection(
     # PSU-present: the user is actively waiting, so this is not subject to the
     # background fetch budget (docs/openbanking.md).
     context = SyncContext(psu_present=True)
-    since = datetime.now(UTC) - timedelta(days=settings.initial_history_days)
+    now = datetime.now(UTC)
+    since = now - timedelta(days=settings.initial_history_days)
     try:
         provider_accounts = provider.list_accounts(credentials=credentials, context=context)
         transactions_synced = 0
@@ -266,7 +267,7 @@ def sync_connection(
                 context=context,
             )
             for transaction in transactions:
-                upsert_transaction(session, transaction=transaction)
+                upsert_transaction(session, transaction=transaction, now=now)
             transactions_synced += len(transactions)
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail="provider sync failed") from exc

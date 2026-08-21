@@ -160,3 +160,21 @@ class TransactionsResponse(BaseModel):
     """
 
     transactions: list[TransactionResponse]
+
+
+class PrunePendingResponse(BaseModel):
+    """The outcome of pruning abandoned pending transactions.
+
+    Only a count is returned, never row contents
+    (``.claude/rules/data-safety.md``) — mirrors ``SyncResponse``'s
+    counts-only shape (``api/schemas/connections.py``).
+
+    Attributes
+    ----------
+    pruned : int
+        How many pending transactions were deleted (see
+        ``db/repositories.py::prune_stale_pending_transactions`` for the
+        eligibility rule).
+    """
+
+    pruned: int

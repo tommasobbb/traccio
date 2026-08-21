@@ -77,6 +77,14 @@ class Settings(BaseSettings):
         ``active``. Expiry is a first-class product concern
         (``docs/openbanking.md``): the client warns before a consent lapses,
         because an expired one silently stops producing data.
+    pending_transaction_ttl_days : int
+        How many days a ``pending`` transaction may go unseen by a sync before
+        ``POST /transactions/prune-pending`` considers it abandoned
+        (``db/repositories.py::prune_stale_pending_transactions``,
+        ``docs/domain.md``: "pending transactions that neither settle nor
+        reappear within a defined window are dropped"). Chosen conservatively:
+        card authorization holds can legitimately sit for weeks depending on
+        merchant category.
     """
 
     model_config = SettingsConfigDict(
@@ -118,6 +126,9 @@ class Settings(BaseSettings):
     # How many days before expiry a consent is surfaced as "expiring soon".
     # See domain/consent.py and docs/openbanking.md's expiry-warning constraint.
     consent_warning_window_days: int = 14
+    # How many days a pending transaction may go unseen by a sync before it is
+    # considered abandoned. See db/repositories.py::prune_stale_pending_transactions.
+    pending_transaction_ttl_days: int = 30
 
 
 @lru_cache

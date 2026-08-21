@@ -247,6 +247,17 @@ class TransactionRow(Base):
         the same reason as ``suggested_category_id``. The **only** writer is
         :func:`traccio.db.repositories.set_confirmed_category`, called only from
         an explicit user action — never from sync or detection.
+    last_synced_at : datetime or None
+        When a sync last observed this row (insert, a pending refresh, or a
+        terminal row re-seen unchanged). ``None`` for a row that predates this
+        column. Deliberately **absent from the domain model** — like
+        ``event_id``, this is sync-process bookkeeping, not something a bank
+        reports. The only writer is
+        :func:`traccio.db.repositories.upsert_transaction`; the only reader
+        besides that is :func:`traccio.db.repositories.prune_stale_pending_transactions`,
+        which ages a still-``pending`` row off it (``docs/domain.md``:
+        "pending transactions that neither settle nor reappear within a
+        defined window are dropped").
     """
 
     __tablename__ = "transactions"
@@ -276,6 +287,9 @@ class TransactionRow(Base):
     )
     confirmed_category_id: Mapped[UUID | None] = mapped_column(
         Uuid(), ForeignKey("categories.id"), nullable=True, index=True
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
     )
 
 

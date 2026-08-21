@@ -8,10 +8,14 @@ never see ORM types.
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from sqlalchemy import CursorResult
 
 from traccio.db.mappers import (
     account_to_row,
@@ -299,7 +303,7 @@ def upsert_account(session: Session, *, account: Account) -> Account:
     return row_to_account(existing)
 
 
-def upsert_transaction(session: Session, *, transaction: Transaction) -> Transaction:
+def upsert_transaction(session: Session, *, transaction: Transaction, now: datetime) -> Transaction:
     """Insert a transaction or update a still-pending one in place.
 
     Idempotent on ``(account_id, stable_key)`` — the unique constraint that makes
@@ -320,6 +324,13 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
       **never** overwritten by a sync, and the ``id`` is preserved so references
       survive.
 
+    Every path — insert, pending refresh, or terminal row re-seen unchanged —
+    stamps ``last_synced_at = now``: it means "a sync last observed this row,"
+    not "this row's content last changed." A still-``pending`` row that keeps
+    getting stamped never goes stale;
+    :func:`prune_stale_pending_transactions` is what ages one off once syncs
+    stop reporting it.
+
     Parameters
     ----------
     session : Session
@@ -327,6 +338,11 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
     transaction : Transaction
         The normalized domain transaction to persist. Its ``account_id`` and
         ``stable_key`` identify the row.
+    now : datetime
+        The current time, timezone-aware, stamped onto ``last_synced_at``.
+        Passed in (the caller's sync already reads the clock once for its
+        ``since`` window) rather than read internally, so this stays testable
+        with no clock.
 
     Returns
     -------
@@ -342,11 +358,14 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
     ).one_or_none()
     if existing is None:
         row = transaction_to_row(transaction)
+        row.last_synced_at = now
         session.add(row)
         return row_to_transaction(row)
 
     if existing.status is not TransactionStatus.PENDING:
-        # Terminal (booked or rejected): immutable, returned untouched.
+        # Terminal (booked or rejected): content immutable, but a sync did
+        # observe it again.
+        existing.last_synced_at = now
         return row_to_transaction(existing)
 
     existing.amount = transaction.money.amount
@@ -357,7 +376,70 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
     existing.status = transaction.status
     existing.entry_reference = transaction.entry_reference
     existing.key_strategy = transaction.key_strategy
+    existing.last_synced_at = now
     return row_to_transaction(existing)
+
+
+def prune_stale_pending_transactions(session: Session, *, user_id: UUID, cutoff: datetime) -> int:
+    """Delete abandoned pending transactions, per ``docs/domain.md``.
+
+    "Pending transactions that neither settle nor reappear within a defined
+    window are dropped, not kept as ghosts." A row qualifies only if **all**
+    of the following hold, scoped by ``user_id``:
+
+    - ``status == pending`` — a terminal row is never touched.
+    - ``last_synced_at`` is set and older than ``cutoff`` — a row with no
+      recorded ``last_synced_at`` (it predates the column) is treated as *not
+      yet eligible*, never as eligible by default; it becomes prunable once a
+      sync stamps it, or is simply left alone forever, no worse than today's
+      baseline of never pruning anything.
+    - ``role == personal`` — a transfer, advance, or reimbursement leg is
+      never still ``personal`` (``validate_advance``/``validate_reimbursement``/
+      ``validate_transfer_pair`` all require it), so this one check rules out
+      all three without joining their tables.
+    - ``event_id IS NULL`` — membership is orthogonal to ``role``
+      (``docs/domain.md``), so it needs its own check.
+    - ``confirmed_category_id IS NULL`` — a user confirmation, unlike a
+      ``suggested_category_id``, is not safe to lose silently.
+
+    This is a hard ``DELETE``, matching the domain rule's "dropped, not kept
+    as ghosts" — there is no soft-delete/tombstone concept in this schema.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose transactions to prune; the query is scoped to it.
+    cutoff : datetime
+        Rows with ``last_synced_at`` strictly before this instant are
+        eligible. Passed in (the caller computes it from
+        ``Settings.pending_transaction_ttl_days``) rather than read
+        internally, so this stays testable with no clock.
+
+    Returns
+    -------
+    int
+        How many rows were deleted.
+    """
+    # Session.execute() is typed to return the generic Result[Any]; a Core
+    # DELETE always actually returns a CursorResult, which is what carries
+    # rowcount. Cast at this one edge, per .claude/rules/python.md.
+    result = cast(
+        "CursorResult[Any]",
+        session.execute(
+            delete(TransactionRow).where(
+                TransactionRow.user_id == user_id,
+                TransactionRow.status == TransactionStatus.PENDING,
+                TransactionRow.last_synced_at.is_not(None),
+                TransactionRow.last_synced_at < cutoff,
+                TransactionRow.role == TransactionRole.PERSONAL,
+                TransactionRow.event_id.is_(None),
+                TransactionRow.confirmed_category_id.is_(None),
+            )
+        ),
+    )
+    return result.rowcount
 
 
 def list_accounts(session: Session, user_id: UUID) -> list[Account]:

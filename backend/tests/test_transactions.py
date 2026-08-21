@@ -20,7 +20,7 @@ from traccio.core.config import get_settings
 from traccio.db.base import Base
 from traccio.db.models import TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, TransactionStatus
+from traccio.domain.enums import KeyStrategy, TransactionRole, TransactionStatus
 
 
 def _tx(
@@ -32,6 +32,10 @@ def _tx(
     booked_at: datetime | None,
     value_date: datetime | None,
     status: TransactionStatus = TransactionStatus.BOOKED,
+    role: TransactionRole = TransactionRole.PERSONAL,
+    last_synced_at: datetime | None = None,
+    event_id: UUID | None = None,
+    confirmed_category_id: UUID | None = None,
 ) -> TransactionRow:
     """Build a synthetic transaction row for ``user_id``."""
     return TransactionRow(
@@ -45,9 +49,13 @@ def _tx(
         description=description,
         display_description=None,
         status=status,
+        role=role,
         entry_reference=stable_key,
         stable_key=stable_key,
         key_strategy=KeyStrategy.ENTRY_REFERENCE,
+        last_synced_at=last_synced_at,
+        event_id=event_id,
+        confirmed_category_id=confirmed_category_id,
     )
 
 
@@ -276,3 +284,154 @@ def test_transactions_expose_null_category_ids_when_uncategorized() -> None:
     assert row["suggested_category_id"] is None
     assert row["confirmed_category_id"] is None
     assert row["effective_category_id"] is None
+
+
+# --- POST /transactions/prune-pending ----------------------------------------
+
+_STALE = datetime(2020, 1, 1, tzinfo=UTC)  # far past pending_transaction_ttl_days
+_FRESH = datetime.now(UTC)  # inside the window
+
+
+def test_prune_pending_deletes_a_stale_eligible_transaction() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=uuid4(),
+                stable_key="TX-STALE",
+                description="TEST MERCHANT STALE",
+                booked_at=None,
+                value_date=None,
+                status=TransactionStatus.PENDING,
+                last_synced_at=_STALE,
+            )
+        )
+        session.commit()
+
+    response = _client(engine).post("/transactions/prune-pending")
+
+    assert response.status_code == 200
+    assert response.json() == {"pruned": 1}
+    assert _client(engine).get("/transactions").json() == {"transactions": []}
+
+
+def test_prune_pending_leaves_ineligible_rows() -> None:
+    """A row inside the window, still linked (role), assigned to an event, or
+    carrying a confirmed category must all survive the same call."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-FRESH",
+                    description="TEST MERCHANT FRESH",
+                    booked_at=None,
+                    value_date=None,
+                    status=TransactionStatus.PENDING,
+                    last_synced_at=_FRESH,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-NEVER-SYNCED",
+                    description="TEST MERCHANT NEVER SYNCED",
+                    booked_at=None,
+                    value_date=None,
+                    status=TransactionStatus.PENDING,
+                    last_synced_at=None,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-TRANSFER",
+                    description="TEST MERCHANT TRANSFER",
+                    booked_at=None,
+                    value_date=None,
+                    status=TransactionStatus.PENDING,
+                    # role != personal alone is proof of a link (see
+                    # prune_stale_pending_transactions); transfer avoids
+                    # needing a real Advance row just to render effective_amount.
+                    role=TransactionRole.TRANSFER,
+                    last_synced_at=_STALE,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-EVENT",
+                    description="TEST MERCHANT EVENT",
+                    booked_at=None,
+                    value_date=None,
+                    status=TransactionStatus.PENDING,
+                    event_id=uuid4(),
+                    last_synced_at=_STALE,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-CATEGORIZED",
+                    description="TEST MERCHANT CATEGORIZED",
+                    booked_at=None,
+                    value_date=None,
+                    status=TransactionStatus.PENDING,
+                    confirmed_category_id=uuid4(),
+                    last_synced_at=_STALE,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-BOOKED",
+                    description="TEST MERCHANT BOOKED",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    status=TransactionStatus.BOOKED,
+                    last_synced_at=_STALE,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).post("/transactions/prune-pending")
+
+    assert response.status_code == 200
+    assert response.json() == {"pruned": 0}
+    remaining = {
+        t["description"] for t in _client(engine).get("/transactions").json()["transactions"]
+    }
+    assert remaining == {
+        "TEST MERCHANT FRESH",
+        "TEST MERCHANT NEVER SYNCED",
+        "TEST MERCHANT TRANSFER",
+        "TEST MERCHANT EVENT",
+        "TEST MERCHANT CATEGORIZED",
+        "TEST MERCHANT BOOKED",
+    }
+
+
+def test_prune_pending_is_user_scoped() -> None:
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=stranger_id,
+                account_id=uuid4(),
+                stable_key="TX-STRANGER",
+                description="STRANGER MERCHANT",
+                booked_at=None,
+                value_date=None,
+                status=TransactionStatus.PENDING,
+                last_synced_at=_STALE,
+            )
+        )
+        session.commit()
+
+    response = _client(engine).post("/transactions/prune-pending")
+
+    # A stranger's stale pending row is invisible to the dev user's prune call.
+    assert response.status_code == 200
+    assert response.json() == {"pruned": 0}

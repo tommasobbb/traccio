@@ -6,6 +6,7 @@ router, the same rule that puts ``/events/{id}/transactions`` on the events
 router rather than here (see ``api/routers/events.py``).
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -15,15 +16,18 @@ from sqlalchemy.orm import Session
 from traccio.api.deps import current_user_id
 from traccio.api.schemas.transactions import (
     ConfirmCategoryRequest,
+    PrunePendingResponse,
     TransactionResponse,
     TransactionsResponse,
 )
+from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     get_category,
     get_transaction,
     list_advances,
     list_transactions,
+    prune_stale_pending_transactions,
     set_confirmed_category,
     sum_reimbursements_by_advance,
 )
@@ -182,3 +186,41 @@ def clear_transaction_category(
     )
     session.commit()
     logger.info("transactions.clear_category", transaction_id=str(transaction_id))
+
+
+@router.post("/transactions/prune-pending", response_model=PrunePendingResponse)
+def prune_pending_transactions(
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> PrunePendingResponse:
+    """Delete abandoned pending transactions, per ``docs/domain.md``.
+
+    "Pending transactions that neither settle nor reappear within a defined
+    window are dropped, not kept as ghosts." Explicit and on-demand — like
+    ``POST /rules/apply`` (ADR 0005) — rather than wired into sync, until a
+    background scheduler (M3) makes that worth the added write path inside
+    sync. Never touches a row the user has acted on: see
+    :func:`~traccio.db.repositories.prune_stale_pending_transactions` for the
+    full eligibility rule (still ``pending``, unseen by a sync for
+    ``Settings.pending_transaction_ttl_days``, still ``personal``, not in an
+    event, no confirmed category).
+
+    Parameters
+    ----------
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user whose pending transactions to prune.
+
+    Returns
+    -------
+    PrunePendingResponse
+        How many rows were deleted.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=get_settings().pending_transaction_ttl_days)
+    pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=cutoff)
+    session.commit()
+
+    # Log a count, never row contents (see data-safety rules).
+    logger.info("transactions.prune_pending", pruned=pruned)
+    return PrunePendingResponse(pruned=pruned)

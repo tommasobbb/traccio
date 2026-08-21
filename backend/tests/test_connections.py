@@ -292,6 +292,10 @@ def test_sync_persists_accounts_and_is_idempotent() -> None:
     txs = _transactions(engine)
     assert len(txs) == 2
     assert {t.account_id for t in txs} == {a.id for a in accounts}
+    # Every row is stamped as observed by this sync (prune_stale_pending_transactions
+    # ages a pending row off this, once syncs stop refreshing it).
+    first_synced_at = {t.id: t.last_synced_at for t in txs}
+    assert all(ts is not None for ts in first_synced_at.values())
 
     # Re-syncing updates in place rather than duplicating, for both resources.
     again = client.post(f"/connections/{connection_id}/sync")
@@ -299,6 +303,9 @@ def test_sync_persists_accounts_and_is_idempotent() -> None:
     assert again.json() == {"accounts_synced": 2, "transactions_synced": 2}
     assert len(_accounts(engine)) == 2
     assert len(_transactions(engine)) == 2
+    # The re-sync re-observed the same rows, so their stamp does not go backwards.
+    for tx in _transactions(engine):
+        assert tx.last_synced_at >= first_synced_at[tx.id]
 
 
 def test_sync_unknown_connection_is_not_found() -> None:
