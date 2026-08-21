@@ -44,8 +44,24 @@ def test_connection_round_trips() -> None:
         user_id=uuid4(),
         provider="enable_banking",
         institution_name="TEST BANK 01",
+        country="IT",
         status=ConnectionStatus.ACTIVE,
         expires_at=datetime(2026, 6, 1, tzinfo=UTC),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    assert row_to_connection(connection_to_row(connection)) == connection
+
+
+def test_connection_round_trips_with_no_country() -> None:
+    """A connection created before `country` was persisted has it as None."""
+    connection = Connection(
+        id=uuid4(),
+        user_id=uuid4(),
+        provider="enable_banking",
+        institution_name="LEGACY BANK",
+        country=None,
+        status=ConnectionStatus.ACTIVE,
+        expires_at=None,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert row_to_connection(connection_to_row(connection)) == connection

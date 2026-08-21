@@ -9,16 +9,17 @@ synthetic (see ``.claude/rules/data-safety.md``).
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import Engine, create_engine, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from traccio.api.deps import get_bank_provider, get_token_cipher_dep
 from traccio.api.main import create_app
+from traccio.core.config import get_settings
 from traccio.core.crypto import TokenCipher
 from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
@@ -182,6 +183,7 @@ def test_start_connection_creates_pending_and_returns_url() -> None:
     assert row.status is ConnectionStatus.PENDING
     assert row.provider == "enable_banking"
     assert row.institution_name == "Test Bank 01"
+    assert row.country == "IT"
     assert row.auth_state == _STATE
     assert row.encrypted_credentials is None
 
@@ -338,6 +340,10 @@ def test_list_connections_returns_the_users_connections_without_secrets() -> Non
     assert body["institution_name"] == "Test Bank 01"
     assert body["status"] == ConnectionStatus.ACTIVE.value
     assert body["expires_at"] is not None
+    # consent_state is derived, not the raw status: _EXPIRES_AT is far enough in
+    # the future (relative to the real clock the endpoint reads) to stay "active".
+    assert body["consent_state"] == "active"
+    assert isinstance(body["days_until_expiry"], int)
     # No secret material is ever projected (data-safety): neither the consent
     # secret nor the anti-CSRF state, and not even the field names.
     assert "encrypted_credentials" not in body
@@ -371,3 +377,98 @@ def test_list_connections_excludes_other_users() -> None:
     assert response.status_code == 200
     # The stranger's connection is invisible to the user-scoped query.
     assert response.json() == {"connections": []}
+
+
+def test_sync_refuses_a_lapsed_consent() -> None:
+    """A stored ACTIVE connection past its expires_at is refused before the
+    provider is ever called — the derived consent_state, not the stored status,
+    gates the sync (see domain/consent.py)."""
+    engine = _sqlite_engine()
+    cipher = TokenCipher(Fernet.generate_key().decode())
+    client = _client(engine, cipher)
+    connection_id = _activate_a_connection(client)
+
+    # Simulate a consent that lapsed since activation.
+    with Session(engine) as session:
+        session.execute(
+            update(ConnectionRow)
+            .where(ConnectionRow.id == UUID(connection_id))
+            .values(expires_at=datetime(2020, 1, 1, tzinfo=UTC))
+        )
+        session.commit()
+
+    response = client.post(f"/connections/{connection_id}/sync")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "consent_expired"
+    assert _accounts(engine) == []
+
+
+def test_reauthorize_reissues_state_and_reactivates_the_same_connection() -> None:
+    """Re-auth re-arms the existing row rather than creating a new connection,
+    and accounts/history survive because identification_hash is stable across
+    re-authorizations (docs/openbanking.md)."""
+    engine = _sqlite_engine()
+    cipher = TokenCipher(Fernet.generate_key().decode())
+    client = _client(engine, cipher)
+    connection_id = _activate_a_connection(client)
+    client.post(f"/connections/{connection_id}/sync")
+    assert len(_accounts(engine)) == 2
+
+    response = client.post(f"/connections/{connection_id}/reauthorize")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connection_id"] == connection_id
+    assert body["authorization_url"] == "https://sca.example/go"
+    row = _connections(engine)[0]
+    assert row.auth_state == _STATE
+    assert row.status is ConnectionStatus.ACTIVE  # unchanged until the callback lands
+
+    # Completing the callback re-activates the SAME row — no second connection.
+    callback = client.get("/connections/callback", params={"code": "AUTH-CODE-02", "state": _STATE})
+    assert callback.status_code == 200
+    assert len(_connections(engine)) == 1
+
+    # A re-sync matches the same identification hashes and updates in place.
+    again = client.post(f"/connections/{connection_id}/sync")
+    assert again.status_code == 200
+    assert len(_accounts(engine)) == 2
+
+
+def test_reauthorize_unknown_connection_is_not_found() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    response = client.post(f"/connections/{uuid4()}/reauthorize")
+
+    assert response.status_code == 404
+
+
+def test_reauthorize_without_a_stored_country_is_refused() -> None:
+    """A connection created before `country` was persisted cannot be
+    re-authorized in place; the client falls back to POST /connections."""
+    engine = _sqlite_engine()
+    connection_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            ConnectionRow(
+                id=connection_id,
+                user_id=get_settings().dev_user_id,
+                provider="enable_banking",
+                institution_name="LEGACY BANK",
+                country=None,
+                status=ConnectionStatus.ACTIVE,
+                expires_at=datetime(2020, 1, 1, tzinfo=UTC),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                encrypted_credentials=None,
+                auth_state=None,
+            )
+        )
+        session.commit()
+
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+    response = client.post(f"/connections/{connection_id}/reauthorize")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "country_unknown"

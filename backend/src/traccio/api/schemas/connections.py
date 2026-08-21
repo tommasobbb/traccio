@@ -9,7 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from traccio.domain.enums import ConnectionStatus
+from traccio.domain.consent import consent_state, days_until_expiry
+from traccio.domain.enums import ConnectionStatus, ConsentState
 from traccio.domain.models import Connection
 
 
@@ -81,10 +82,19 @@ class ConnectionResponse(BaseModel):
     institution_name : str
         Human-readable bank name for display.
     status : ConnectionStatus
-        Consent lifecycle state.
+        Consent lifecycle state, as last reported by the provider. See
+        ``consent_state`` for the field the client should actually render.
+    consent_state : ConsentState
+        The *actual*, time-aware state — ``status`` re-read against
+        ``expires_at`` and the current time by
+        :func:`~traccio.domain.consent.consent_state`. Derived here, once; the
+        client renders this and never recomputes it from ``expires_at``.
+    days_until_expiry : int or None
+        Whole days until ``expires_at`` (negative once lapsed), or ``None`` when
+        ``expires_at`` is unset. A display figure — ``consent_state`` is the
+        authoritative expired/not-expired call.
     expires_at : datetime or None
-        Consent expiry; ``None`` while pending. Surfacing an upcoming expiry is
-        a product concern the client renders from this field.
+        Consent expiry, as reported by the provider; ``None`` while pending.
     created_at : datetime
         When the connection was created.
     """
@@ -93,17 +103,27 @@ class ConnectionResponse(BaseModel):
     provider: str
     institution_name: str
     status: ConnectionStatus
+    consent_state: ConsentState
+    days_until_expiry: int | None
     expires_at: datetime | None
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, connection: Connection) -> "ConnectionResponse":
+    def from_domain(
+        cls, connection: Connection, *, now: datetime, warning_window_days: int
+    ) -> "ConnectionResponse":
         """Project a domain :class:`~traccio.domain.models.Connection`.
 
         Parameters
         ----------
         connection : Connection
             The domain connection to project.
+        now : datetime
+            The current time, used to derive ``consent_state`` and
+            ``days_until_expiry``.
+        warning_window_days : int
+            How many days before expiry count as "expiring soon" (see
+            ``Settings.consent_warning_window_days``).
 
         Returns
         -------
@@ -115,6 +135,10 @@ class ConnectionResponse(BaseModel):
             provider=connection.provider,
             institution_name=connection.institution_name,
             status=connection.status,
+            consent_state=consent_state(
+                connection, now=now, warning_window_days=warning_window_days
+            ),
+            days_until_expiry=days_until_expiry(connection, now=now),
             expires_at=connection.expires_at,
             created_at=connection.created_at,
         )

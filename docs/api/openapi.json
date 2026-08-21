@@ -292,12 +292,26 @@
         "type": "object"
       },
       "ConnectionResponse": {
-        "description": "One connection as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Connection`. It\ncarries no secret material by construction: the consent secret and the\nanti-CSRF ``auth_state`` live only on the ORM row, never on the domain model\nthis is built from (see ``.claude/rules/data-safety.md``). ``user_id`` is\nimplied by the caller and omitted.\n\nAttributes\n----------\nid : UUID\n    Stable connection identifier.\nprovider : str\n    Adapter that produced the connection (e.g. ``\"enable_banking\"``).\ninstitution_name : str\n    Human-readable bank name for display.\nstatus : ConnectionStatus\n    Consent lifecycle state.\nexpires_at : datetime or None\n    Consent expiry; ``None`` while pending. Surfacing an upcoming expiry is\n    a product concern the client renders from this field.\ncreated_at : datetime\n    When the connection was created.",
+        "description": "One connection as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Connection`. It\ncarries no secret material by construction: the consent secret and the\nanti-CSRF ``auth_state`` live only on the ORM row, never on the domain model\nthis is built from (see ``.claude/rules/data-safety.md``). ``user_id`` is\nimplied by the caller and omitted.\n\nAttributes\n----------\nid : UUID\n    Stable connection identifier.\nprovider : str\n    Adapter that produced the connection (e.g. ``\"enable_banking\"``).\ninstitution_name : str\n    Human-readable bank name for display.\nstatus : ConnectionStatus\n    Consent lifecycle state, as last reported by the provider. See\n    ``consent_state`` for the field the client should actually render.\nconsent_state : ConsentState\n    The *actual*, time-aware state \u2014 ``status`` re-read against\n    ``expires_at`` and the current time by\n    :func:`~traccio.domain.consent.consent_state`. Derived here, once; the\n    client renders this and never recomputes it from ``expires_at``.\ndays_until_expiry : int or None\n    Whole days until ``expires_at`` (negative once lapsed), or ``None`` when\n    ``expires_at`` is unset. A display figure \u2014 ``consent_state`` is the\n    authoritative expired/not-expired call.\nexpires_at : datetime or None\n    Consent expiry, as reported by the provider; ``None`` while pending.\ncreated_at : datetime\n    When the connection was created.",
         "properties": {
+          "consent_state": {
+            "$ref": "#/components/schemas/ConsentState"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "days_until_expiry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Until Expiry"
           },
           "expires_at": {
             "anyOf": [
@@ -333,6 +347,8 @@
           "provider",
           "institution_name",
           "status",
+          "consent_state",
+          "days_until_expiry",
           "expires_at",
           "created_at"
         ],
@@ -367,6 +383,19 @@
         ],
         "title": "ConnectionsResponse",
         "type": "object"
+      },
+      "ConsentState": {
+        "description": "The *actual*, time-aware state of a consent \u2014 what the client renders.\n\nDerived by :func:`~traccio.domain.consent.consent_state`, never stored: a\nstored ``ConnectionStatus.ACTIVE`` says only what the provider last reported,\nnot whether the 180-day consent window has since lapsed. This enum is what\nanswers \"is this consent still good right now\" (see ``docs/openbanking.md``\n\"Operational constraints\" \u2014 expiry is a first-class product concern, not a\ntuning parameter).\n\nAttributes\n----------\nPENDING : str\n    Authorization started but not yet completed. Mirrors\n    :attr:`ConnectionStatus.PENDING`.\nACTIVE : str\n    Consent usable for syncing and not close to expiry.\nEXPIRING_SOON : str\n    Still usable, but ``expires_at`` falls within the warning window \u2014 the\n    client should prompt the user to re-authorize before it lapses.\nEXPIRED : str\n    Past ``expires_at``; syncing is refused until the user re-authorizes.\nREVOKED : str\n    Consent withdrawn by the user or the bank. Mirrors\n    :attr:`ConnectionStatus.REVOKED`.\nERROR : str\n    The connection is in a failed state and cannot sync. Mirrors\n    :attr:`ConnectionStatus.ERROR`.",
+        "enum": [
+          "pending",
+          "active",
+          "expiring_soon",
+          "expired",
+          "revoked",
+          "error"
+        ],
+        "title": "ConsentState",
+        "type": "string"
       },
       "CreateAdvanceRequest": {
         "description": "Body for creating an advance on a transaction.\n\nAttributes\n----------\ntransaction_id : UUID\n    The outgoing transaction to mark as an advance. Must be the caller's, a\n    ``personal`` non-``rejected`` spend.\nown_share : int\n    The part of the advance the user actually owes, a positive magnitude in\n    the transaction's currency; ``0 <= own_share <= |amount|``.\nparticipants : list[ParticipantSchema]\n    Optional people who owe the user back (may be empty).",
@@ -1899,9 +1928,50 @@
         "summary": "Connection Callback"
       }
     },
+    "/connections/{connection_id}/reauthorize": {
+      "post": {
+        "description": "Re-authorize an existing connection whose consent has lapsed or is close to it.\n\nUnlike ``POST /connections``, this does not create a new connection: it\nre-arms the existing row with a freshly issued anti-CSRF ``state`` and starts\na new SCA authorization for the same institution and country. Completing it\nthrough the usual ``GET /connections/callback`` activates this same\nconnection in place \u2014 its accounts and their transaction history stay\nattached, since Enable Banking documents ``identification_hash`` as stable\nacross re-authorizations (``docs/openbanking.md``). Scoped to the current\nuser.\n\nParameters\n----------\nconnection_id : UUID\n    The connection to re-authorize.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\n\nReturns\n-------\nStartConnectionResponse\n    The same connection id and a fresh authorization url.",
+        "operationId": "reauthorize_connection_connections__connection_id__reauthorize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connection Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartConnectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reauthorize Connection"
+      }
+    },
     "/connections/{connection_id}/sync": {
       "post": {
-        "description": "Sync the accounts and transactions reachable through an active connection.\n\nReads the encrypted consent secret, decrypts it, lists the accounts the\nconsent exposes and upserts each one, then fetches and upserts each account's\ntransactions over a greedy history window. Idempotent on stable identity, so\na re-sync updates rather than duplicates. Scoped to the current user.\n\nParameters\n----------\nconnection_id : UUID\n    The active connection to sync.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\ncipher : Fernet cipher\n    Decrypts the stored consent secret.\n\nReturns\n-------\nSyncResponse\n    How many accounts and transactions were discovered and persisted.",
+        "description": "Sync the accounts and transactions reachable through an active connection.\n\nReads the encrypted consent secret, decrypts it, lists the accounts the\nconsent exposes and upserts each one, then fetches and upserts each account's\ntransactions over a greedy history window. Idempotent on stable identity, so\na re-sync updates rather than duplicates. Scoped to the current user.\n\nRefuses fast on a lapsed consent: a stored ``status`` of ``active`` does not\nby itself mean the 180-day consent window still holds (see\n``domain/consent.py``), so this checks the *derived* state first rather than\nletting the provider call fail with an opaque error.\n\nParameters\n----------\nconnection_id : UUID\n    The active connection to sync.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\ncipher : Fernet cipher\n    Decrypts the stored consent secret.\n\nReturns\n-------\nSyncResponse\n    How many accounts and transactions were discovered and persisted.",
         "operationId": "sync_connection_connections__connection_id__sync_post",
         "parameters": [
           {

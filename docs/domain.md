@@ -47,18 +47,49 @@ One authorized link between a `User` and one bank (technically, one PSD2
 consent obtained through the aggregator).
 
 Key properties:
-- `status`: `pending` | `active` | `expired` | `revoked` | `error`
-- `expires_at`: consent expiry. For most banks the maximum session lifetime
-  is 180 days, after which the user must re-authorize from scratch.
+- `status`: `pending` | `active` | `expired` | `revoked` | `error` — the last
+  status the *provider* reported. It does not by itself say whether the
+  180-day consent window has since elapsed; see "Expiry" below.
+- `country`: ISO 3166-1 alpha-2 country of the institution, kept alongside
+  `institution_name` so a later re-authorization can call the provider again
+  without asking the user to pick the bank a second time.
+- `expires_at`: consent expiry, as reported by the provider. For most banks
+  the maximum session lifetime is 180 days, after which the user must
+  re-authorize.
 - Credentials/tokens are **encrypted at rest**, never logged, never returned
   by any API endpoint, not even to the owning user.
 
 A `Connection` is not an `Account`. One consent typically exposes several
-accounts, and re-authorizing creates a new consent for the same accounts.
+accounts.
 
-**Expiry is a first-class product concern, not an error case.** The client
-must surface an upcoming expiry before it happens, because an expired
-connection silently stops producing data.
+**Expiry is a first-class product concern, not an error case.** `status` alone
+is not the truth about whether a consent still works — it is only ever
+updated by the provider (activation, revocation, an error). The *actual*,
+time-aware state is `ConsentState`, derived by `domain/consent.py::consent_state`
+by re-reading a stored `active` status against `expires_at` and the current
+time: `pending` / `revoked` / `error` / a provider-reported `expired` pass
+through unchanged; a stored `active` becomes `expiring_soon` inside the
+warning window (`Settings.consent_warning_window_days`, default 14 days) or
+`expired` once `expires_at` has passed. This is deliberately derived, never
+stored — the same reasoning as `Advance.settled` (see `Reimbursement`
+below): a stored expiry flag needs a background job to stay true and is wrong
+between runs, while deriving it from `now` is correct the instant it is read.
+`GET /connections` returns both `status` and `consent_state`; the client
+renders `consent_state`.
+
+**Re-authorizing reuses the same `Connection` row**, rather than creating a
+new one: `POST /connections/{id}/reauthorize` re-arms it with a fresh
+anti-CSRF `state` and starts a new SCA authorization for the same institution
+and country; completing the usual callback activates that same row in place.
+Its accounts, and their transaction history, stay attached — the provider
+documents the account-level stable identity as holding across
+re-authorizations (`docs/openbanking.md`). A connection created before
+`country` was recorded (`None`) cannot be re-authorized this way; the client
+falls back to a fresh `POST /connections`.
+
+Syncing a connection whose derived `consent_state` is `expired` is refused
+(`409`) before the provider is ever called, rather than surfacing whatever
+opaque error the provider returns for a dead session.
 
 ---
 

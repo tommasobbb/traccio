@@ -112,8 +112,12 @@ class ConnectionRow(Base):
         Adapter that produced the connection (e.g. ``"enable_banking"``).
     institution_name : str
         Human-readable bank name for display.
+    country : str or None
+        ISO 3166-1 alpha-2 country of the institution, as supplied when
+        authorization started. ``None`` for connections created before this
+        column existed.
     status : ConnectionStatus
-        Consent lifecycle state.
+        Consent lifecycle state, as last reported by the provider.
     expires_at : datetime or None
         Consent expiry; ``None`` while pending.
     created_at : datetime
@@ -126,7 +130,8 @@ class ConnectionRow(Base):
     auth_state : str or None
         The anti-CSRF ``state`` issued when authorization started, used to match
         the SCA callback back to this pending connection. Unique; cleared to
-        ``None`` once the connection is activated.
+        ``None`` once the connection is activated, re-set to a fresh value on
+        re-authorization.
     """
 
     __tablename__ = "connections"
@@ -136,6 +141,7 @@ class ConnectionRow(Base):
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
     provider: Mapped[str] = mapped_column(String(64))
     institution_name: Mapped[str] = mapped_column(String(255))
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     status: Mapped[ConnectionStatus] = mapped_column(_enum_column(ConnectionStatus))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
