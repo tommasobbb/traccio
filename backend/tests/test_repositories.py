@@ -16,6 +16,7 @@ from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     get_connection_credentials,
+    list_transactions_in_period,
     prune_stale_pending_transactions,
     upsert_account,
     upsert_transaction,
@@ -704,3 +705,206 @@ def test_prune_is_user_scoped() -> None:
     # A stranger's stale pending row is invisible to the user-scoped prune.
     assert pruned == 0
     assert stranger_row_id in _remaining_ids(engine)
+
+
+# --- list_transactions_in_period ---------------------------------------------
+
+
+def _seed_dated_row(
+    engine: Engine,
+    *,
+    user_id: UUID,
+    account_id: UUID,
+    stable_key: str,
+    booked_at: datetime | None,
+    value_date: datetime | None,
+) -> UUID:
+    """Insert a TransactionRow with an explicit (booked_at, value_date) pair,
+    bypassing upsert_transaction so both fields can be set independently."""
+    row_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            TransactionRow(
+                id=row_id,
+                user_id=user_id,
+                account_id=account_id,
+                amount=-1234,
+                currency="EUR",
+                booked_at=booked_at,
+                value_date=value_date,
+                description="TEST MERCHANT 01",
+                status=TransactionStatus.BOOKED,
+                role=TransactionRole.PERSONAL,
+                entry_reference=stable_key,
+                stable_key=stable_key,
+                key_strategy=KeyStrategy.ENTRY_REFERENCE,
+            )
+        )
+        session.commit()
+    return row_id
+
+
+def test_list_transactions_in_period_excludes_rows_before_start() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="BEFORE",
+        booked_at=datetime(2026, 7, 31, tzinfo=UTC),
+        value_date=None,
+    )
+    in_range_id = _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="IN-RANGE",
+        booked_at=datetime(2026, 8, 15, tzinfo=UTC),
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(
+            session,
+            user_id,
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+
+    assert [t.id for t in found] == [in_range_id]
+
+
+def test_list_transactions_in_period_end_is_exclusive() -> None:
+    """Half-open [start, end): a row landing exactly on `end` belongs to the
+    next period, not this one — see ADR 0007."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="ON-BOUNDARY",
+        booked_at=datetime(2026, 9, 1, tzinfo=UTC),
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(
+            session,
+            user_id,
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+
+    assert found == []
+
+
+def test_list_transactions_in_period_start_is_inclusive() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="ON-START",
+        booked_at=datetime(2026, 8, 1, tzinfo=UTC),
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(
+            session,
+            user_id,
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+
+    assert [t.id for t in found] == [row_id]
+
+
+def test_list_transactions_in_period_falls_back_to_value_date() -> None:
+    """A still-pending row with no booked_at is dated by value_date instead —
+    the same coalesce() already used to order the read-back endpoints."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="PENDING",
+        booked_at=None,
+        value_date=datetime(2026, 8, 15, tzinfo=UTC),
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(
+            session,
+            user_id,
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+
+    assert [t.id for t in found] == [row_id]
+
+
+def test_list_transactions_in_period_row_with_no_date_is_excluded_by_a_bound() -> None:
+    """coalesce(booked_at, value_date) is NULL when both are unset, so a bound
+    on that side excludes it — it cannot be judged "in range"."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="NO-DATE",
+        booked_at=None,
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(
+            session,
+            user_id,
+            start=datetime(2026, 8, 1, tzinfo=UTC),
+            end=datetime(2026, 9, 1, tzinfo=UTC),
+        )
+
+    assert found == []
+
+
+def test_list_transactions_in_period_row_with_no_date_is_included_with_no_bounds() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_dated_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="NO-DATE",
+        booked_at=None,
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(session, user_id, start=None, end=None)
+
+    assert [t.id for t in found] == [row_id]
+
+
+def test_list_transactions_in_period_is_user_scoped() -> None:
+    engine = _engine()
+    user_id, stranger_id = uuid4(), uuid4()
+    account_id = uuid4()
+    _seed_dated_row(
+        engine,
+        user_id=stranger_id,
+        account_id=account_id,
+        stable_key="STRANGER",
+        booked_at=datetime(2026, 8, 15, tzinfo=UTC),
+        value_date=None,
+    )
+
+    with Session(engine) as session:
+        found = list_transactions_in_period(session, user_id, start=None, end=None)
+
+    assert found == []

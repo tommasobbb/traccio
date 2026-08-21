@@ -574,6 +574,53 @@ def list_transactions(
     return [row_to_transaction(row) for row in rows]
 
 
+def list_transactions_in_period(
+    session: Session, user_id: UUID, *, start: datetime | None, end: datetime | None
+) -> list[Transaction]:
+    """Return the user's transactions within a period, for dashboard aggregation.
+
+    Scoped by ``user_id``. The "when" of a transaction, for this purpose, is
+    ``coalesce(booked_at, value_date)`` — the same expression already used to
+    order :func:`list_transactions` and :func:`list_all_transactions`, so a
+    period filter and the read-back ordering never disagree about which date a
+    row belongs to. The period is **half-open** ``[start, end)``: ``start`` is
+    inclusive, ``end`` is exclusive, so consecutive calendar periods (e.g. one
+    month after another) never double-count a row that falls exactly on the
+    boundary. Either bound may be ``None`` to leave that side open.
+
+    A row whose ``coalesce(booked_at, value_date)`` is ``NULL`` (both unset) is
+    excluded by any bound on that side, but included when the corresponding
+    bound is ``None`` — there is no date to compare, so it can only be judged
+    "in range" when nothing constrains that range.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose transactions to return; the query is scoped to it.
+    start : datetime or None
+        Inclusive lower bound, or ``None`` for no lower bound.
+    end : datetime or None
+        Exclusive upper bound, or ``None`` for no upper bound.
+
+    Returns
+    -------
+    list[Transaction]
+        Domain transactions owned by ``user_id`` within the period (empty if
+        none), newest first.
+    """
+    when = func.coalesce(TransactionRow.booked_at, TransactionRow.value_date)
+    query = select(TransactionRow).where(TransactionRow.user_id == user_id)
+    if start is not None:
+        query = query.where(when >= start)
+    if end is not None:
+        query = query.where(when < end)
+    query = query.order_by(when.desc(), TransactionRow.id)
+    rows = session.scalars(query).all()
+    return [row_to_transaction(row) for row in rows]
+
+
 def get_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) -> Transaction | None:
     """Return a single transaction by id, scoped by ``user_id``.
 

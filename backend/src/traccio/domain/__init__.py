@@ -2,6 +2,7 @@
 
 from traccio.domain.categories import default_categories, effective_category
 from traccio.domain.consent import consent_state, days_until_expiry
+from traccio.domain.dashboard import CurrencySummary, summarize
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import (
     AccountKind,
@@ -41,6 +42,7 @@ __all__ = [
     "ConnectionStatus",
     "ConsentState",
     "CurrencyCode",
+    "CurrencySummary",
     "Event",
     "EventStatus",
     "KeyStrategy",
@@ -61,4 +63,5 @@ __all__ = [
     "effective_category",
     "event_total",
     "rule_matches",
+    "summarize",
 ]

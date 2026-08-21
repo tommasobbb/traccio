@@ -44,11 +44,10 @@ from traccio.db.repositories import (
     unassign_transaction_from_event,
 )
 from traccio.db.session import get_session
-from traccio.domain.advances import derive_advance
-from traccio.domain.enums import AdvanceStatus, EventStatus, TransactionRole
+from traccio.domain.enums import EventStatus
 from traccio.domain.events import event_total
-from traccio.domain.models import Advance, Event, Transaction
-from traccio.domain.money import Money
+from traccio.domain.models import Event
+from traccio.services.advances import spending_shares
 
 logger = get_logger(__name__)
 
@@ -67,49 +66,18 @@ def _load_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event:
     return event
 
 
-def _spending_shares(
-    members: list[Transaction], *, advance_by_tx: dict[UUID, Advance], reimbursed: dict[UUID, Money]
-) -> dict[UUID, Money]:
-    """Return the signed spending share of each advance member, keyed by tx id.
-
-    Mirrors the ``GET /transactions`` projection: an advance's contribution to the
-    total is its derived spending share, which depends on the declared
-    ``own_share``, the reimbursements received, and whether it was written off (a
-    write-off moves the outstanding amount back into spending). Non-advance
-    members are absent from the map — :func:`~traccio.domain.events.event_total`
-    does not need a share for them.
-    """
-    shares: dict[UUID, Money] = {}
-    for member in members:
-        if member.role is not TransactionRole.ADVANCE:
-            continue
-        advance = advance_by_tx.get(member.id)
-        if advance is None:
-            continue
-        currency = advance.own_share.currency
-        received = reimbursed.get(advance.id, Money(amount=0, currency=currency))
-        state = derive_advance(
-            member,
-            advance.own_share,
-            received,
-            written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
-        )
-        shares[member.id] = state.spending_share
-    return shares
-
-
 def _event_response(session: Session, *, user_id: UUID, event: Event) -> EventResponse:
     """Project an event with its derived net total and member count threaded in.
 
     Resolves each advance member's spending share (via
-    :func:`~traccio.domain.advances.derive_advance`) so the pure
+    :func:`~traccio.services.advances.spending_shares`) so the pure
     :func:`~traccio.domain.events.event_total` can sum ``effective_amount`` across
     the members in the event's single currency.
     """
     members = list_event_members(session, user_id=user_id, event_id=event.id)
     advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
     reimbursed = sum_reimbursements_by_advance(session, user_id)
-    shares = _spending_shares(members, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
+    shares = spending_shares(members, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
     total = event_total(members, advance_shares=shares)
     return EventResponse.from_domain(event, total=total, member_count=len(members))
 
