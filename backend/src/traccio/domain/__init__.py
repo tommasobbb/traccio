@@ -5,14 +5,17 @@ from traccio.domain.enums import (
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
+    EventStatus,
     KeyStrategy,
     TransactionRole,
     TransactionStatus,
 )
+from traccio.domain.events import event_total
 from traccio.domain.models import (
     Account,
     Advance,
     Connection,
+    Event,
     Participant,
     Reimbursement,
     Transaction,
@@ -29,6 +32,8 @@ __all__ = [
     "Connection",
     "ConnectionStatus",
     "CurrencyCode",
+    "Event",
+    "EventStatus",
     "KeyStrategy",
     "Money",
     "Participant",
@@ -39,4 +44,5 @@ __all__ = [
     "Transfer",
     "User",
     "effective_amount",
+    "event_total",
 ]
