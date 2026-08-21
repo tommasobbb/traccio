@@ -159,6 +159,71 @@ def activate_connection(
     )
 
 
+def set_connection_auth_state(
+    session: Session, *, user_id: UUID, connection_id: UUID, auth_state: str
+) -> None:
+    """Re-arm an existing connection with a freshly issued anti-CSRF ``state``.
+
+    Used by re-authorization: unlike :func:`create_connection`, this does not
+    create a new row — it lets an already-``active`` (or ``expired``) connection
+    go through the SCA handshake again while keeping its id, and therefore its
+    accounts and their transaction history, attached.
+    :func:`find_pending_connection_id` matches on ``auth_state`` alone, not on
+    ``status``, so the callback finds this row regardless of its current status.
+    Scoped by ``user_id``. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the connection; the update is scoped to it.
+    connection_id : UUID
+        The connection to re-arm.
+    auth_state : str
+        The freshly generated anti-CSRF ``state`` for this authorization
+        attempt.
+    """
+    session.execute(
+        update(ConnectionRow)
+        .where(ConnectionRow.id == connection_id, ConnectionRow.user_id == user_id)
+        .values(auth_state=auth_state)
+    )
+
+
+def get_connection(session: Session, *, user_id: UUID, connection_id: UUID) -> Connection | None:
+    """Return a single connection by id, scoped by ``user_id``.
+
+    Returns ``None`` when no connection with that id belongs to the user, so a
+    request naming another user's (or an unknown) connection cannot read it.
+    Unlike :func:`get_connection_credentials`, this returns the domain object
+    (status, ``expires_at``, ``country``) regardless of status, for callers that
+    need to reason about a connection that is not currently active (e.g. the
+    consent-expiry gate and re-authorization).
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the connection; the query is scoped to it.
+    connection_id : UUID
+        The connection to fetch.
+
+    Returns
+    -------
+    Connection or None
+        The domain connection, or ``None`` if it does not exist or is not the
+        caller's.
+    """
+    row = session.scalars(
+        select(ConnectionRow).where(
+            ConnectionRow.id == connection_id, ConnectionRow.user_id == user_id
+        )
+    ).one_or_none()
+    return None if row is None else row_to_connection(row)
+
+
 def get_connection_credentials(
     session: Session, *, user_id: UUID, connection_id: UUID
 ) -> str | None:

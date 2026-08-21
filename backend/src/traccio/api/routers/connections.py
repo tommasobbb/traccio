@@ -37,13 +37,16 @@ from traccio.db.repositories import (
     activate_connection,
     create_connection,
     find_pending_connection_id,
+    get_connection,
     get_connection_credentials,
     list_connections,
+    set_connection_auth_state,
     upsert_account,
     upsert_transaction,
 )
 from traccio.db.session import get_session
-from traccio.domain.enums import ConnectionStatus
+from traccio.domain.consent import consent_state
+from traccio.domain.enums import ConnectionStatus, ConsentState
 from traccio.domain.models import Account, Connection
 from traccio.providers.base import BankProvider, ProviderError, SyncContext
 
@@ -100,6 +103,7 @@ def start_connection(
         user_id=user_id,
         provider=provider.name,
         institution_name=body.institution,
+        country=body.country,
         status=ConnectionStatus.PENDING,
     )
     create_connection(session, connection=connection, auth_state=start.session_reference)
@@ -197,6 +201,11 @@ def sync_connection(
     transactions over a greedy history window. Idempotent on stable identity, so
     a re-sync updates rather than duplicates. Scoped to the current user.
 
+    Refuses fast on a lapsed consent: a stored ``status`` of ``active`` does not
+    by itself mean the 180-day consent window still holds (see
+    ``domain/consent.py``), so this checks the *derived* state first rather than
+    letting the provider call fail with an opaque error.
+
     Parameters
     ----------
     connection_id : UUID
@@ -215,6 +224,16 @@ def sync_connection(
     SyncResponse
         How many accounts and transactions were discovered and persisted.
     """
+    connection = get_connection(session, user_id=user_id, connection_id=connection_id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="unknown connection")
+    settings = get_settings()
+    state = consent_state(
+        connection, now=datetime.now(UTC), warning_window_days=settings.consent_warning_window_days
+    )
+    if state is ConsentState.EXPIRED:
+        raise HTTPException(status_code=409, detail="consent_expired")
+
     encrypted = get_connection_credentials(session, user_id=user_id, connection_id=connection_id)
     if encrypted is None:
         raise HTTPException(status_code=404, detail="unknown or inactive connection")
@@ -223,7 +242,7 @@ def sync_connection(
     # PSU-present: the user is actively waiting, so this is not subject to the
     # background fetch budget (docs/openbanking.md).
     context = SyncContext(psu_present=True)
-    since = datetime.now(UTC) - timedelta(days=get_settings().initial_history_days)
+    since = datetime.now(UTC) - timedelta(days=settings.initial_history_days)
     try:
         provider_accounts = provider.list_accounts(credentials=credentials, context=context)
         transactions_synced = 0
@@ -292,6 +311,76 @@ def connections(
     found = list_connections(session, user_id)
     # Log a count, never connection contents (see data-safety rules).
     logger.info("connections.list", count=len(found))
+    now = datetime.now(UTC)
+    warning_window_days = get_settings().consent_warning_window_days
     return ConnectionsResponse(
-        connections=[ConnectionResponse.from_domain(connection) for connection in found]
+        connections=[
+            ConnectionResponse.from_domain(
+                connection, now=now, warning_window_days=warning_window_days
+            )
+            for connection in found
+        ]
+    )
+
+
+@router.post("/connections/{connection_id}/reauthorize", response_model=StartConnectionResponse)
+def reauthorize_connection(
+    connection_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+    provider: Annotated[BankProvider, Depends(get_bank_provider)],
+) -> StartConnectionResponse:
+    """Re-authorize an existing connection whose consent has lapsed or is close to it.
+
+    Unlike ``POST /connections``, this does not create a new connection: it
+    re-arms the existing row with a freshly issued anti-CSRF ``state`` and starts
+    a new SCA authorization for the same institution and country. Completing it
+    through the usual ``GET /connections/callback`` activates this same
+    connection in place — its accounts and their transaction history stay
+    attached, since Enable Banking documents ``identification_hash`` as stable
+    across re-authorizations (``docs/openbanking.md``). Scoped to the current
+    user.
+
+    Parameters
+    ----------
+    connection_id : UUID
+        The connection to re-authorize.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the connection belongs to.
+    provider : BankProvider
+        The bank adapter (Enable Banking).
+
+    Returns
+    -------
+    StartConnectionResponse
+        The same connection id and a fresh authorization url.
+    """
+    connection = get_connection(session, user_id=user_id, connection_id=connection_id)
+    if connection is None:
+        raise HTTPException(status_code=404, detail="unknown connection")
+    if connection.country is None:
+        # Created before `country` was persisted; nothing to re-authorize with.
+        # The client falls back to POST /connections for a fresh connection.
+        raise HTTPException(status_code=409, detail="country_unknown")
+
+    redirect_url = get_settings().enable_banking_redirect_url
+    try:
+        start = provider.start_authorization(
+            institution=connection.institution_name,
+            country=connection.country,
+            redirect_url=redirect_url,
+        )
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail="provider authorization failed") from exc
+
+    set_connection_auth_state(
+        session, user_id=user_id, connection_id=connection_id, auth_state=start.session_reference
+    )
+    session.commit()
+
+    logger.info("connections.reauthorize", connection_id=str(connection_id))
+    return StartConnectionResponse(
+        connection_id=connection_id, authorization_url=start.authorization_url
     )

@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     transfer_window_days : int
         Maximum whole-day gap between the two legs of a suggested transfer;
         settlement is not simultaneous.
+    consent_warning_window_days : int
+        How many whole days before a consent's ``expires_at`` it is surfaced as
+        ``expiring_soon`` (see ``domain/consent.py::consent_state``) rather than
+        ``active``. Expiry is a first-class product concern
+        (``docs/openbanking.md``): the client warns before a consent lapses,
+        because an expired one silently stops producing data.
     """
 
     model_config = SettingsConfigDict(
@@ -109,6 +115,9 @@ class Settings(BaseSettings):
     # settlement. See docs/domain.md and services/transfers.py.
     transfer_amount_tolerance_cents: int = 100
     transfer_window_days: int = 4
+    # How many days before expiry a consent is surfaced as "expiring soon".
+    # See domain/consent.py and docs/openbanking.md's expiry-warning constraint.
+    consent_warning_window_days: int = 14
 
 
 @lru_cache

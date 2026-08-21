@@ -181,3 +181,41 @@ class RuleMatchKind(StrEnum):
     CONTAINS = "contains"
     STARTS_WITH = "starts_with"
     EQUALS = "equals"
+
+
+class ConsentState(StrEnum):
+    """The *actual*, time-aware state of a consent — what the client renders.
+
+    Derived by :func:`~traccio.domain.consent.consent_state`, never stored: a
+    stored ``ConnectionStatus.ACTIVE`` says only what the provider last reported,
+    not whether the 180-day consent window has since lapsed. This enum is what
+    answers "is this consent still good right now" (see ``docs/openbanking.md``
+    "Operational constraints" — expiry is a first-class product concern, not a
+    tuning parameter).
+
+    Attributes
+    ----------
+    PENDING : str
+        Authorization started but not yet completed. Mirrors
+        :attr:`ConnectionStatus.PENDING`.
+    ACTIVE : str
+        Consent usable for syncing and not close to expiry.
+    EXPIRING_SOON : str
+        Still usable, but ``expires_at`` falls within the warning window — the
+        client should prompt the user to re-authorize before it lapses.
+    EXPIRED : str
+        Past ``expires_at``; syncing is refused until the user re-authorizes.
+    REVOKED : str
+        Consent withdrawn by the user or the bank. Mirrors
+        :attr:`ConnectionStatus.REVOKED`.
+    ERROR : str
+        The connection is in a failed state and cannot sync. Mirrors
+        :attr:`ConnectionStatus.ERROR`.
+    """
+
+    PENDING = "pending"
+    ACTIVE = "active"
+    EXPIRING_SOON = "expiring_soon"
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+    ERROR = "error"

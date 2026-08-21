@@ -74,11 +74,18 @@ class Connection(BaseModel):
         ``"enable_banking"``).
     institution_name : str
         Human-readable bank name for display.
+    country : str or None
+        ISO 3166-1 alpha-2 country of the institution, as supplied when
+        authorization started (``start_authorization`` needs it again on
+        re-auth). ``None`` only for connections created before this field
+        existed; a re-auth on one of those is refused (see
+        ``api/routers/connections.py``) rather than guessing a country.
     status : ConnectionStatus
-        Lifecycle state of the consent.
+        Lifecycle state of the consent, as last reported by the provider. See
+        ``domain/consent.py::consent_state`` for the actual, time-aware state —
+        this field alone does not account for ``expires_at`` elapsing.
     expires_at : datetime or None
-        Consent expiry. Surfacing an upcoming expiry is a product concern, not
-        an error case. ``None`` while pending.
+        Consent expiry, as reported by the provider. ``None`` while pending.
     created_at : datetime
         When the connection was created (timezone-aware, UTC).
     """
@@ -89,6 +96,7 @@ class Connection(BaseModel):
     user_id: UUID
     provider: str
     institution_name: str
+    country: str | None = None
     status: ConnectionStatus
     expires_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)

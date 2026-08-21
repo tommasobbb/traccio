@@ -226,17 +226,38 @@ bank SCA apps often fail to open from a WebView (`client/CLAUDE.md`).
 These are hard constraints on product design, not tuning parameters.
 
 - **Consent lifetime.** For most banks the maximum session lifetime is
-  **180 days**, after which the user must re-authorize from scratch
+  **180 days**, after which the user must re-authorize
   (`docs/domain.md`, `Connection.expires_at`). Expiry is a first-class product
-  concern: the client warns before it happens, because an expired connection
-  silently stops producing data.
+  concern: an expired connection silently stops producing data. **Backend
+  shipped 2026-08-21** (ADR 0006): `domain/consent.py::consent_state`
+  re-reads a stored `active` status against `expires_at` and the clock, never
+  storing an expiry flag; `GET /connections` exposes `consent_state` +
+  `days_until_expiry`, `POST /connections/{id}/sync` refuses (`409
+  consent_expired`) before calling the provider on a lapsed consent, and
+  `POST /connections/{id}/reauthorize` re-arms the *same* connection row for
+  a fresh SCA round rather than creating a new one. **Surfacing the warning in
+  the client UI remains M3 client catch-up.**
 - **Background fetch budget.** Many banks allow only **~4 background fetches
   per day per consent**; exceeding it gets the consent throttled
-  (`docs/domain.md`, Sync). The background scheduler tracks consumption per
-  connection and refuses rather than overruns.
+  (`docs/domain.md`, Sync). Blocked on the M3 background scheduler — there is
+  no background sync yet (every sync is a manual `POST`), so there is nothing
+  to budget.
 - **PSU-present headers.** User-present requests (the user is actively
-  waiting) carry the PSU headers signalling this and are not subject to the
-  background budget. The adapter sets these headers based on the sync mode.
+  waiting) carry PSU headers signalling this and are not subject to the
+  background budget. Confirmed against the Enable Banking reference
+  (2026-08-21): the header set is `Psu-Ip-Address`, `Psu-User-Agent`,
+  `Psu-Referer`, `Psu-Accept`, `Psu-Accept-Charset`, `Psu-Accept-Encoding`,
+  `Psu-Accept-language`, `Psu-Geo-Location` — **all-or-nothing** per request
+  (providing some but not the bank's `required_psu_headers` set returns
+  `PSU_HEADER_NOT_PROVIDED`), and which ones a given bank actually requires
+  comes from `required_psu_headers` on its ASPSP details, not a fixed list.
+  **Not yet implemented**: `providers/base.py::SyncContext(psu_present=...)`
+  is threaded through `EnableBankingProvider.list_accounts`/
+  `fetch_transactions` but both discard it (`del context`) — no header is
+  actually sent. Doing this properly needs a design decision this backend
+  doesn't have yet (where a PSU IP/user-agent enters a headless HTTP API), so
+  it stays open as its own backlog item rather than folded into the
+  consent-lifecycle slice above.
 - **Environment ladder.** Sandbox (test banks) → restricted production (own
   linked accounts, free) → unrestricted production (manual review, contract,
   KYB — M4 only).

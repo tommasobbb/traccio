@@ -1,11 +1,13 @@
 """Entities, value objects, and derivation rules; imports nothing."""
 
 from traccio.domain.categories import default_categories, effective_category
+from traccio.domain.consent import consent_state, days_until_expiry
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import (
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
+    ConsentState,
     EventStatus,
     KeyStrategy,
     RuleMatchKind,
@@ -37,6 +39,7 @@ __all__ = [
     "Category",
     "Connection",
     "ConnectionStatus",
+    "ConsentState",
     "CurrencyCode",
     "Event",
     "EventStatus",
@@ -51,6 +54,8 @@ __all__ = [
     "TransactionStatus",
     "Transfer",
     "User",
+    "consent_state",
+    "days_until_expiry",
     "default_categories",
     "effective_amount",
     "effective_category",
