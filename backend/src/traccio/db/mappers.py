@@ -18,6 +18,7 @@ from traccio.db.models import (
     ConnectionRow,
     EventRow,
     ReimbursementRow,
+    RuleRow,
     TransactionRow,
     TransferRow,
     UserRow,
@@ -30,6 +31,7 @@ from traccio.domain.models import (
     Event,
     Participant,
     Reimbursement,
+    Rule,
     Transaction,
     Transfer,
     User,
@@ -112,8 +114,8 @@ def transaction_to_row(transaction: Transaction) -> TransactionRow:
     here would mean a sync could set or clear a category, which is exactly the
     automated write ``docs/domain.md`` §Category forbids for ``confirmed``.
     The only writers are :func:`traccio.db.repositories.set_confirmed_category`
-    (explicit user action) and, later, the categorization engine for
-    ``suggested`` — neither goes through this function.
+    (explicit user action) and :func:`traccio.db.repositories.set_suggested_categories`
+    (the rules engine) — neither goes through this function.
     """
     return TransactionRow(
         id=transaction.id,
@@ -320,5 +322,29 @@ def row_to_category(row: CategoryRow) -> Category:
         id=row.id,
         user_id=row.user_id,
         name=row.name,
+        created_at=row.created_at,
+    )
+
+
+def rule_to_row(rule: Rule) -> RuleRow:
+    """Translate a domain :class:`Rule` into a :class:`RuleRow`."""
+    return RuleRow(
+        id=rule.id,
+        user_id=rule.user_id,
+        category_id=rule.category_id,
+        match_kind=rule.match_kind,
+        pattern=rule.pattern,
+        created_at=rule.created_at,
+    )
+
+
+def row_to_rule(row: RuleRow) -> Rule:
+    """Translate a :class:`RuleRow` into a domain :class:`Rule`."""
+    return Rule(
+        id=row.id,
+        user_id=row.user_id,
+        category_id=row.category_id,
+        match_kind=row.match_kind,
+        pattern=row.pattern,
         created_at=row.created_at,
     )

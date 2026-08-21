@@ -47,6 +47,7 @@ from traccio.domain.enums import (
     ConnectionStatus,
     EventStatus,
     KeyStrategy,
+    RuleMatchKind,
     TransactionRole,
     TransactionStatus,
 )
@@ -232,9 +233,9 @@ class TransactionRow(Base):
         **is** on the domain model (see :class:`~traccio.domain.models.Transaction`)
         because a category is an attribute of the movement, not a
         cross-transaction grouping. Read by
-        :mod:`traccio.db.mappers`; never written by it — the only writer this
-        slice is the repository's ``seed``/engine path, and no such path exists
-        yet (the rules engine is a later slice).
+        :mod:`traccio.db.mappers`; never written by it — the only writer is
+        :func:`traccio.db.repositories.set_suggested_categories`, called from
+        ``POST /rules/apply`` (:mod:`traccio.services.categorization`).
     confirmed_category_id : UUID or None
         The user-confirmed category, or ``None``. Also on the domain model, for
         the same reason as ``suggested_category_id``. The **only** writer is
@@ -529,4 +530,44 @@ class CategoryRow(Base):
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class RuleRow(Base):
+    """Persisted :class:`~traccio.domain.models.Rule`.
+
+    Unique on ``(user_id, match_kind, pattern)`` — the same predicate and
+    pattern twice has no meaning. Applied by
+    :mod:`traccio.services.categorization` to write
+    ``transactions.suggested_category_id`` via
+    :func:`traccio.db.repositories.set_suggested_categories`; deleting the
+    target category also deletes rules pointing at it (handled in the
+    repository, not a DB cascade, to stay portable).
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key.
+    user_id : UUID
+        Owning user (foreign key, indexed).
+    category_id : UUID
+        The category assigned when this rule matches (foreign key, indexed).
+    match_kind : RuleMatchKind
+        The predicate applied to a transaction's ``description``.
+    pattern : str
+        The text to match against, case-insensitive. Never logged (see
+        ``.claude/rules/data-safety.md``).
+    created_at : datetime
+        Creation timestamp (timezone-aware, UTC); the tiebreak when two rules
+        match with an equal-length pattern.
+    """
+
+    __tablename__ = "rules"
+    __table_args__ = (UniqueConstraint("user_id", "match_kind", "pattern"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
+    category_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("categories.id"), index=True)
+    match_kind: Mapped[RuleMatchKind] = mapped_column(_enum_column(RuleMatchKind))
+    pattern: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

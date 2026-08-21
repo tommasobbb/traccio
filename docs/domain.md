@@ -371,6 +371,38 @@ during categorization. Rules run before the automatic engine and win over it,
 but still write to `suggested_category_id` — they are automation, not a user
 confirming an individual transaction.
 
+**Implementation note** (2026-08-21): a rule matches on `Transaction.description`
+— the raw bank text — never `display_description`, since no code path
+populates that field today; matching against it would silently change
+behaviour the day cleanup lands. Matching is one of three case-insensitive
+predicates (`RuleMatchKind`): `contains`, `starts_with`, `equals`. Deliberately
+no regex and no amount/account conditions — the rules engine is meant to stay
+"cheap and its accuracy... knowable" (`tasks/ROADMAP.md`), not a second
+pattern language to maintain.
+
+When two rules match the same transaction, the **longer `pattern` wins** (ties
+break by `created_at` ascending, then `id`) — `"AMAZON PRIME"` beats
+`"AMAZON"` because it is the more specific match. There is deliberately no
+stored `priority`: the user raises a rule's precedence by sharpening its
+pattern, not by reordering a list. `services/categorization.py::evaluation_order`
+is the one place this ordering is computed, shared by `GET /rules` (so what
+the user sees is the order rules actually fire in) and by rule application.
+
+`POST /rules/apply` is the only path that writes `suggested_category_id`, and
+it is a **full, idempotent recompute**: every one of the user's transactions is
+re-evaluated from scratch, so a transaction whose matching rule was deleted
+since the last run has its stale suggestion cleared to `None`, not left
+untouched. A transaction with a `confirmed_category_id` still receives a
+suggestion underneath it — the suggestion layer is a pure function of
+`(rules, transactions)` and does not know about confirmation;
+`effective_category` is what makes the confirmed value win. Deleting a
+`Category` also deletes every `Rule` targeting it (see
+`db/repositories.py::delete_rules_for_category`) — a rule pointing at a
+category that no longer exists is broken, and the automation layer is
+disposable by the same reasoning already applied to a category's own
+`suggested_category_id` references. Applying rules is never wired into sync;
+it stays an explicit user action, like transfer detection.
+
 ---
 
 ## Sync

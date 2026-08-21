@@ -157,3 +157,27 @@ class KeyStrategy(StrEnum):
 
     ENTRY_REFERENCE = "entry_reference"
     DERIVED_HASH = "derived_hash"
+
+
+class RuleMatchKind(StrEnum):
+    """How a :class:`~traccio.domain.models.Rule` matches a transaction's
+    ``description``.
+
+    Matching is always case-insensitive over the raw bank text; see
+    ``domain/rules.py::rule_matches``. Deliberately no regex — deterministic,
+    user-legible predicates only (``tasks/ROADMAP.md``: "the rules engine is
+    cheap and its accuracy is knowable").
+
+    Attributes
+    ----------
+    CONTAINS : str
+        The pattern appears anywhere in the description.
+    STARTS_WITH : str
+        The description begins with the pattern.
+    EQUALS : str
+        The description equals the pattern exactly (after casefolding).
+    """
+
+    CONTAINS = "contains"
+    STARTS_WITH = "starts_with"
+    EQUALS = "equals"
