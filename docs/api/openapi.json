@@ -538,6 +538,57 @@
         "title": "CreateRuleRequest",
         "type": "object"
       },
+      "CurrencySummaryResponse": {
+        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "net": {
+            "title": "Net",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "spending",
+          "income",
+          "net",
+          "transaction_count"
+        ],
+        "title": "CurrencySummaryResponse",
+        "type": "object"
+      },
+      "DashboardSummaryResponse": {
+        "description": "Envelope for the dashboard summary.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncurrencies : list[CurrencySummaryResponse]\n    One entry per currency present in the period, sorted by currency code.\n    Empty if no transactions fall within the period.",
+        "properties": {
+          "currencies": {
+            "items": {
+              "$ref": "#/components/schemas/CurrencySummaryResponse"
+            },
+            "title": "Currencies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "currencies"
+        ],
+        "title": "DashboardSummaryResponse",
+        "type": "object"
+      },
       "EventResponse": {
         "description": "One event as returned to the client, with its derived total.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the event.\nname : str\n    Human-readable name for the occasion.\nstart_date : date or None\n    Optional first day of the occasion.\nend_date : date or None\n    Optional last day of the occasion.\nstatus : EventStatus\n    Lifecycle state (``active`` or ``closed``); purely organizational.\nmember_count : int\n    How many transactions are grouped under the event.\ntotal : int\n    The net cost of the event in minor units (cents): the sum of its members'\n    ``effective_amount`` (transfers count zero, advances only the user's\n    share, reimbursements zero). ``0`` for an empty event.\ncurrency : str or None\n    ISO 4217 code of ``total`` \u2014 the members' shared currency. ``null`` for an\n    empty event, which has no currency of its own.\ncreated_at : datetime\n    When the event was created (timezone-aware, UTC).",
         "properties": {
@@ -2022,6 +2073,71 @@
           }
         },
         "summary": "Sync Connection"
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. There is no FX in Traccio, so a period spanning multiple currencies\nreturns one entry per currency rather than a combined total. Scoped to the\ncurrent user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.",
+        "operationId": "dashboard_summary_dashboard_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashboard Summary"
       }
     },
     "/events": {

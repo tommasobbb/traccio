@@ -32,10 +32,8 @@ from traccio.db.repositories import (
     sum_reimbursements_by_advance,
 )
 from traccio.db.session import get_session
-from traccio.domain.advances import derive_advance
-from traccio.domain.enums import AdvanceStatus, TransactionRole
 from traccio.domain.models import Advance
-from traccio.domain.money import Money
+from traccio.services.advances import spending_shares
 
 logger = get_logger(__name__)
 
@@ -80,33 +78,19 @@ def transactions(
     # An advance transaction's effective_amount is its derived spending share,
     # which depends on the declared own_share, the reimbursements received, and
     # whether the advance was written off (a write-off moves the outstanding
-    # amount into spending). Map each advanced transaction to its Advance and the
-    # reimbursed total so the projection can derive the signed share once per row.
-    # (role=advance is only ever set alongside an Advance row, so the map is
-    # always consistent — see the advances router.)
+    # amount into spending). Resolve each advanced transaction's signed share
+    # once per row (role=advance is only ever set alongside an Advance row, so
+    # the map is always consistent — see the advances router).
     advance_by_tx: dict[UUID, Advance] = {
         advance.transaction_id: advance for advance in list_advances(session, user_id)
     }
     reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
+    shares = spending_shares(found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance)
 
-    responses: list[TransactionResponse] = []
-    for transaction in found:
-        share: Money | None = None
-        if transaction.role is TransactionRole.ADVANCE:
-            advance = advance_by_tx.get(transaction.id)
-            if advance is not None:
-                currency = advance.own_share.currency
-                reimbursed = reimbursed_by_advance.get(
-                    advance.id, Money(amount=0, currency=currency)
-                )
-                state = derive_advance(
-                    transaction,
-                    advance.own_share,
-                    reimbursed,
-                    written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
-                )
-                share = state.spending_share
-        responses.append(TransactionResponse.from_domain(transaction, advance_own_share=share))
+    responses = [
+        TransactionResponse.from_domain(transaction, advance_own_share=shares.get(transaction.id))
+        for transaction in found
+    ]
 
     # Log a count, never transaction contents (see data-safety rules).
     logger.info("transactions.list", count=len(responses))

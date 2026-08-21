@@ -469,6 +469,36 @@ transactions.
 
 ---
 
+## Dashboard
+
+The read-side answer to "how much did I actually spend and receive": a
+summary derived from `effective_amount` alone (ADR 0007), never raw `amount`
+— the same invariant every other derived value follows
+(`docs/architecture.md`), made user-visible here as a headline number for the
+first time. A transfer between the user's own accounts does not inflate
+spending; an advance counts only the user's declared share; a reimbursement
+is not income. Nothing is stored — recomputed on every read, like an event's
+total.
+
+One summary per currency present in the period, never summed across them —
+there is no FX in Traccio. Within a currency, `spending` and `income` are
+**positive magnitudes** (same convention as `Advance.receivable`/
+`outstanding`) and `net` is the one signed figure. A transaction whose
+`effective_amount` is zero (a transfer leg, a reimbursement, a rejected
+movement) contributes to neither total, but is still counted.
+
+The period is measured on the same `coalesce(booked_at, value_date)`
+expression the transaction read-back endpoints already order by, and is
+**half-open** (`start` inclusive, `end` exclusive) so consecutive periods
+never overlap. A transaction with neither date set is excluded by any bound
+on that side, and included only when the period is fully open. Pending
+transactions are included — money already committed is not a maybe.
+
+No category breakdown yet; the aggregation's signature is additive, so this
+is a later, unblocked extension (`tasks/backlog.md`).
+
+---
+
 ## Budget
 
 A user-defined spending limit for a `Category` over a period. Computed from
