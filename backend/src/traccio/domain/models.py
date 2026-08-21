@@ -170,6 +170,19 @@ class Transaction(BaseModel):
         The key used for idempotent deduplication.
     key_strategy : KeyStrategy
         Which strategy produced ``stable_key`` (bank reference vs derived hash).
+    suggested_category_id : UUID or None
+        Written by the categorization engine, overwritten freely on every
+        re-run. ``None`` until an engine exists to fill it (see
+        ``tasks/backlog.md`` §M2). Unlike ``event_id``, both category ids live
+        on this domain model rather than staying db-only: a category is an
+        attribute of the movement, like ``role``, not a cross-transaction
+        grouping.
+    confirmed_category_id : UUID or None
+        Set only by direct user action; **never overwritten by any automated
+        process** — any code path that writes it without a user action is a
+        bug (see ``docs/domain.md`` §Category). The effective category is
+        derived by :func:`~traccio.domain.categories.effective_category`
+        (confirmed wins, else suggested), never recomputed inline.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -187,6 +200,8 @@ class Transaction(BaseModel):
     entry_reference: str | None = None
     stable_key: str
     key_strategy: KeyStrategy
+    suggested_category_id: UUID | None = None
+    confirmed_category_id: UUID | None = None
 
 
 class Transfer(BaseModel):
@@ -374,4 +389,34 @@ class Event(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     status: EventStatus = EventStatus.ACTIVE
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Category(BaseModel):
+    """What kind of spending a transaction represents (groceries, rent, ...).
+
+    User-scoped: renaming or deleting a category never affects another user's
+    (see ``docs/domain.md`` §Category). A user is seeded from a shared default
+    set (:func:`~traccio.domain.categories.default_categories`) but the row
+    itself belongs to them from creation — there is no shared "global" row.
+    Deliberately flat: no ``kind``/``is_income`` flag (already carried by the
+    sign of ``effective_amount``) and no parent for hierarchy (YAGNI).
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the category within Traccio.
+    user_id : UUID
+        Owning user.
+    name : str
+        Human-readable name (e.g. ``"Groceries"``), unique per user.
+    created_at : datetime
+        When the category was created (timezone-aware, UTC).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    name: str
     created_at: datetime = Field(default_factory=_now)

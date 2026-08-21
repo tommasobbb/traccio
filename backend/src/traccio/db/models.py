@@ -5,9 +5,14 @@ distinct from the pure :mod:`traccio.domain.models` types they persist; the
 translation between the two lives in :mod:`traccio.db.mappers`, never in
 ``domain``.
 
-Enums are stored as their string ``.value`` (portable ``VARCHAR`` with a check
-constraint rather than a native PostgreSQL enum type), so adding a member does
-not require a type migration and the stored values stay human-readable.
+Enums are stored as their string ``.value`` in a portable ``VARCHAR`` (no native
+PostgreSQL enum type and no check constraint — ``_enum_column`` leaves
+``create_constraint`` at its SQLAlchemy default of ``False``), so adding a member
+never requires a type migration. The column width is still sized to the longest
+current member at the time of the migration that adds it, so a *later* member
+longer than that (e.g. ``rejected`` vs. the original ``pending``/``booked``) does
+need a width-widening migration — see
+``d1f4b6a29c73_widen_transaction_status.py`` for the one this bit already.
 
 Schema-level invariants (see ``docs/architecture.md``):
 
@@ -50,8 +55,9 @@ from traccio.domain.enums import (
 def _enum_column(enum: type[StrEnum]) -> SAEnum:
     """Build a portable string-backed column type for a :class:`StrEnum`.
 
-    Persists the enum's ``.value`` (not its member ``name``) as a ``VARCHAR``
-    with a check constraint, rather than a native database enum type.
+    Persists the enum's ``.value`` (not its member ``name``) as a plain
+    ``VARCHAR``, rather than a native database enum type or a check constraint
+    (``create_constraint`` is left at its SQLAlchemy default of ``False``).
 
     Parameters
     ----------
@@ -221,6 +227,19 @@ class TransactionRow(Base):
         not a role). Deliberately **absent from the domain model** — it is a
         db-only grouping column (like ``connections.auth_state``), managed by the
         repository, not the mappers.
+    suggested_category_id : UUID or None
+        The engine-suggested category, or ``None``. Unlike ``event_id``, this
+        **is** on the domain model (see :class:`~traccio.domain.models.Transaction`)
+        because a category is an attribute of the movement, not a
+        cross-transaction grouping. Read by
+        :mod:`traccio.db.mappers`; never written by it — the only writer this
+        slice is the repository's ``seed``/engine path, and no such path exists
+        yet (the rules engine is a later slice).
+    confirmed_category_id : UUID or None
+        The user-confirmed category, or ``None``. Also on the domain model, for
+        the same reason as ``suggested_category_id``. The **only** writer is
+        :func:`traccio.db.repositories.set_confirmed_category`, called only from
+        an explicit user action — never from sync or detection.
     """
 
     __tablename__ = "transactions"
@@ -244,6 +263,12 @@ class TransactionRow(Base):
     key_strategy: Mapped[KeyStrategy] = mapped_column(_enum_column(KeyStrategy))
     event_id: Mapped[UUID | None] = mapped_column(
         Uuid(), ForeignKey("events.id"), nullable=True, index=True
+    )
+    suggested_category_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("categories.id"), nullable=True, index=True
+    )
+    confirmed_category_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("categories.id"), nullable=True, index=True
     )
 
 
@@ -474,4 +499,34 @@ class EventRow(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[EventStatus] = mapped_column(_enum_column(EventStatus))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class CategoryRow(Base):
+    """Persisted :class:`~traccio.domain.models.Category`.
+
+    User-scoped and unique on ``(user_id, name)`` — two users may use the same
+    name, but one user cannot have two categories with the same name. Seeded
+    from :func:`~traccio.domain.categories.default_categories` at
+    :func:`traccio.db.repositories.seed_default_categories`, but every row is
+    owned by its user from creation; there is no shared "global" row.
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key.
+    user_id : UUID
+        Owning user (foreign key, indexed).
+    name : str
+        Human-readable name, unique per user.
+    created_at : datetime
+        Creation timestamp (timezone-aware, UTC).
+    """
+
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

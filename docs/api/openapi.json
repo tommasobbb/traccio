@@ -188,6 +188,64 @@
         "title": "AssignTransactionRequest",
         "type": "object"
       },
+      "CategoriesResponse": {
+        "description": "Envelope for the categories list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncategories : list[CategoryResponse]\n    The user's categories, alphabetically by name.",
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryResponse"
+            },
+            "title": "Categories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "categories"
+        ],
+        "title": "CategoriesResponse",
+        "type": "object"
+      },
+      "CategoryResponse": {
+        "description": "One category as returned to the client.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the category.\nname : str\n    Human-readable name.\ncreated_at : datetime\n    When the category was created (timezone-aware, UTC).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "title": "CategoryResponse",
+        "type": "object"
+      },
+      "ConfirmCategoryRequest": {
+        "description": "Body for confirming a transaction's category.\n\nAttributes\n----------\ncategory_id : UUID\n    The category to confirm. Must belong to the caller.",
+        "properties": {
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category_id"
+        ],
+        "title": "ConfirmCategoryRequest",
+        "type": "object"
+      },
       "ConfirmTransferRequest": {
         "description": "Body for confirming a suggestion as a transfer.\n\nNames the two legs by role: the outgoing (negative) leg left one account and\nthe incoming (positive) leg arrived in another. Both must belong to the\ncaller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).",
         "properties": {
@@ -312,6 +370,20 @@
           "own_share"
         ],
         "title": "CreateAdvanceRequest",
+        "type": "object"
+      },
+      "CreateCategoryRequest": {
+        "description": "Body for creating a category.\n\nAttributes\n----------\nname : str\n    The category's name, e.g. ``\"Groceries\"``. Stripped and validated by\n    :func:`~traccio.domain.categories.normalize_category_name`.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateCategoryRequest",
         "type": "object"
       },
       "CreateEventRequest": {
@@ -644,6 +716,20 @@
         "title": "RejectTransferRequest",
         "type": "object"
       },
+      "RenameCategoryRequest": {
+        "description": "Body for renaming a category.\n\nAttributes\n----------\nname : str\n    The new name. Stripped and validated by\n    :func:`~traccio.domain.categories.normalize_category_name`.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RenameCategoryRequest",
+        "type": "object"
+      },
       "StartConnectionRequest": {
         "description": "Request to begin authorizing a bank connection.\n\nAttributes\n----------\ninstitution : str\n    The bank's provider-scoped identifier (Enable Banking ASPSP ``name``).\ncountry : str\n    ISO 3166-1 alpha-2 country of the bank.",
         "properties": {
@@ -703,7 +789,7 @@
         "type": "object"
       },
       "TransactionResponse": {
-        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\n    What the bank reported; used only for balance reconciliation.\neffective_amount : int\n    How much counts as real personal spending, derived from ``role`` and\n    ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).\n    In the same ``currency`` as ``amount``. Every dashboard/budget total\n    flows from this, never from ``amount``.\ncurrency : str\n    ISO 4217 code of both ``amount`` and ``effective_amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.",
+        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\n    What the bank reported; used only for balance reconciliation.\neffective_amount : int\n    How much counts as real personal spending, derived from ``role`` and\n    ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).\n    In the same ``currency`` as ``amount``. Every dashboard/budget total\n    flows from this, never from ``amount``.\ncurrency : str\n    ISO 4217 code of both ``amount`` and ``effective_amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.\nsuggested_category_id : UUID or None\n    Written by the categorization engine, overwritten freely on every\n    re-run. ``None`` until an engine exists (see ``tasks/backlog.md`` \u00a7M2).\nconfirmed_category_id : UUID or None\n    Set only by explicit user action via\n    ``POST /transactions/{id}/category``; never by automation.\neffective_category_id : UUID or None\n    The category that actually applies: ``confirmed`` if set, else\n    ``suggested``, else ``None`` (see\n    :func:`~traccio.domain.categories.effective_category`). The client\n    renders this and never re-implements the fallback.",
         "properties": {
           "account_id": {
             "format": "uuid",
@@ -725,6 +811,18 @@
               }
             ],
             "title": "Booked At"
+          },
+          "confirmed_category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Category Id"
           },
           "currency": {
             "title": "Currency",
@@ -749,6 +847,18 @@
             "title": "Effective Amount",
             "type": "integer"
           },
+          "effective_category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Category Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -759,6 +869,18 @@
           },
           "status": {
             "$ref": "#/components/schemas/TransactionStatus"
+          },
+          "suggested_category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Category Id"
           },
           "value_date": {
             "anyOf": [
@@ -784,7 +906,10 @@
           "description",
           "display_description",
           "status",
-          "role"
+          "role",
+          "suggested_category_id",
+          "confirmed_category_id",
+          "effective_category_id"
         ],
         "title": "TransactionResponse",
         "type": "object"
@@ -1350,6 +1475,166 @@
           }
         },
         "summary": "Write Off Advance"
+      }
+    },
+    "/categories": {
+      "get": {
+        "description": "List the current user's categories, alphabetically by name.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose categories to return.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories, alphabetically (empty if none).",
+        "operationId": "categories_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Categories"
+      },
+      "post": {
+        "description": "Create a category.\n\nScoped to the current user. A ``409`` if the (normalized) name collides\nwith one of the user's existing categories; a ``422`` if the name is blank\nor too long.\n\nParameters\n----------\nbody : CreateCategoryRequest\n    The category's name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The created category.",
+        "operationId": "create_category_endpoint_categories_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Category Endpoint"
+      }
+    },
+    "/categories/defaults": {
+      "post": {
+        "description": "Seed the shared default categories, then return the user's full list.\n\nIdempotent: inserts the default set only when the user currently has zero\ncategories (see :func:`~traccio.db.repositories.seed_default_categories`),\nso calling it again after the user has renamed or deleted some is a no-op,\nnever a resurrection.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user to seed.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories after seeding (the defaults, or whatever they\n    already had).",
+        "operationId": "seed_defaults_categories_defaults_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Seed Defaults"
+      }
+    },
+    "/categories/{category_id}": {
+      "delete": {
+        "description": "Delete a category.\n\nRefuses (``409``) when the category is confirmed on any of the user's\ntransactions \u2014 that layer is user-typed data, and nulling it as a side\neffect of this delete would be an automated write to\n``confirmed_category_id`` (see the module docstring). Any ``suggested``\nreferences are cleared, since that layer is disposable by design. A ``404``\nif the category is unknown or not the caller's.\n\nParameters\n----------\ncategory_id : UUID\n    The category to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.",
+        "operationId": "remove_category_categories__category_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Category"
+      }
+    },
+    "/categories/{category_id}/rename": {
+      "post": {
+        "description": "Rename a category \u2014 its only mutation.\n\nA ``404`` if the category is unknown or not the caller's; a ``409`` if the\nnew (normalized) name collides with a *different* one of the user's\ncategories (renaming to the category's own current name is a no-op\nsuccess); a ``422`` if the name is blank or too long.\n\nParameters\n----------\ncategory_id : UUID\n    The category to rename.\nbody : RenameCategoryRequest\n    The new name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The category under its new name.",
+        "operationId": "rename_category_endpoint_categories__category_id__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Category Endpoint"
       }
     },
     "/connections": {
@@ -1931,6 +2216,82 @@
           }
         },
         "summary": "Transactions"
+      }
+    },
+    "/transactions/{transaction_id}/category": {
+      "delete": {
+        "description": "Clear a transaction's confirmed category, falling back to any suggestion.\n\nIdempotent: clearing when nothing is confirmed still succeeds (a ``409`` is\nnever raised for \"already clear\"). A ``404`` if the transaction is unknown\nor not the caller's.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to clear.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.",
+        "operationId": "clear_transaction_category_transactions__transaction_id__category_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Transaction Category"
+      },
+      "post": {
+        "description": "Confirm a category on a transaction \u2014 the explicit user action.\n\nSets ``confirmed_category_id`` via\n:func:`~traccio.db.repositories.set_confirmed_category` \u2014 the only writer\nof that column \u2014 which then wins over any suggestion in the derived\n``effective_category_id`` (see\n:func:`~traccio.domain.categories.effective_category`). A ``404`` if the\ntransaction or the category is unknown or not the caller's \u2014 a stranger's\ncategory id is indistinguishable from an unknown one, so this doubles as\nthe cross-user gate.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to categorize.\nbody : ConfirmCategoryRequest\n    The category to confirm.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user both the transaction and category belong to.",
+        "operationId": "confirm_transaction_category_transactions__transaction_id__category_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Transaction Category"
       }
     },
     "/transfers": {

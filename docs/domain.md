@@ -226,10 +226,12 @@ transaction row (at most one event per transaction), a db-only column managed by
 the repository — an event is a reporting lens, so it deliberately does not appear
 on the domain `Transaction` or extend `TransactionRole`. The event total is the
 single **net** figure, derived by the pure `domain/events.py::event_total` over
-members' `effective_amount`; the **by-category** breakdown waits on
-categorization existing at all, and membership **suggestions** from the date
-range are a later slice (the dates are stored as hints, nothing consumes them
-yet) — both tracked in `tasks/backlog.md`. A mixed-currency event has no single
+members' `effective_amount`. Categorization now exists (see §Category,
+2026-08-21), so the **by-category** breakdown is unblocked in principle, but
+extending `event_total` to group members by category is still its own later
+slice, not shipped here. Membership **suggestions** from the date range are
+also a later slice (the dates are stored as hints, nothing consumes them yet)
+— both tracked in `tasks/backlog.md`. A mixed-currency event has no single
 total (no FX in Traccio) and is refused.
 
 ---
@@ -336,6 +338,29 @@ action is a bug.
 
 Categories are user-scoped, seeded from a shared default set at signup. A
 user renaming "Groceries" must not affect anyone else.
+
+**Implementation note** (2026-08-21): unlike `Event`'s `event_id`, both
+`suggested_category_id` and `confirmed_category_id` **do** live on the domain
+`Transaction` — a category is an attribute of the movement, like `role`, not a
+cross-transaction grouping, and every derived total downstream (a dashboard, a
+budget, the event-by-category breakdown) is a function of
+`(effective_amount, effective_category)`. The asymmetry that protects
+"never overwritten by any automated process" is structural, not just
+discipline: `db/mappers.py::row_to_transaction` reads both ids,
+`transaction_to_row` writes neither, so a sync has no path to touch either
+column. `db/repositories.py::set_confirmed_category` is the **only** writer of
+`confirmed_category_id` in the codebase, called only from the two
+`POST`/`DELETE /transactions/{id}/category` endpoints — an explicit user
+action every time. `domain/categories.py::effective_category` is the one place
+the fallback rule is evaluated. There is no `set_suggested_category` yet; the
+categorization engine that would call it is a later slice
+(`tasks/backlog.md`). Seeding happens at `POST /categories/defaults`
+(idempotent: only when the user has zero categories) rather than at signup,
+since there is no signup flow before M4. Deleting a category refuses (`409`)
+if it is `confirmed` on any transaction — nulling user-confirmed data as a
+side effect of deleting a different entity would itself be the automated
+write the rule forbids — but clears any `suggested` references, since that
+layer is disposable by design.
 
 ---
 

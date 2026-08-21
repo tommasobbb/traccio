@@ -15,12 +15,14 @@ from sqlalchemy.orm import Session
 from traccio.db.mappers import (
     account_to_row,
     advance_to_row,
+    category_to_row,
     connection_to_row,
     event_to_row,
     participant_to_row,
     reimbursement_to_row,
     row_to_account,
     row_to_advance,
+    row_to_category,
     row_to_connection,
     row_to_event,
     row_to_reimbursement,
@@ -33,6 +35,7 @@ from traccio.db.models import (
     AccountRow,
     AdvanceParticipantRow,
     AdvanceRow,
+    CategoryRow,
     ConnectionRow,
     EventRow,
     ReimbursementRow,
@@ -40,6 +43,7 @@ from traccio.db.models import (
     TransferDismissalRow,
     TransferRow,
 )
+from traccio.domain.categories import default_categories
 from traccio.domain.enums import (
     AdvanceStatus,
     ConnectionStatus,
@@ -50,6 +54,7 @@ from traccio.domain.enums import (
 from traccio.domain.models import (
     Account,
     Advance,
+    Category,
     Connection,
     Event,
     Reimbursement,
@@ -239,7 +244,8 @@ def upsert_transaction(session: Session, *, transaction: Transaction) -> Transac
     - An existing **pending** row is the *same* movement transitioning state (its
       amount/description routinely change on settlement, and it may settle to
       ``booked`` or be ``rejected``), so the bank-sourced fields are refreshed.
-      User- and detection-owned fields (``role``, ``display_description``) are
+      User- and detection-owned fields (``role``, ``display_description``,
+      ``event_id``, ``suggested_category_id``, ``confirmed_category_id``) are
       **never** overwritten by a sync, and the ``id`` is preserved so references
       survive.
 
@@ -1236,3 +1242,283 @@ def list_event_members(session: Session, *, user_id: UUID, event_id: UUID) -> li
         )
     ).all()
     return [row_to_transaction(row) for row in rows]
+
+
+def create_category(session: Session, *, category: Category) -> Category:
+    """Persist a new category.
+
+    The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    category : Category
+        The domain category to store.
+
+    Returns
+    -------
+    Category
+        The persisted category.
+    """
+    session.add(category_to_row(category))
+    return category
+
+
+def get_category(session: Session, *, user_id: UUID, category_id: UUID) -> Category | None:
+    """Return a single category by id, scoped by ``user_id``.
+
+    Returns ``None`` when no category with that id belongs to the user, so a
+    request naming another user's (or an unknown) category cannot read it —
+    this is the cross-user gate the category-confirming endpoints rely on.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the category; the query is scoped to it.
+    category_id : UUID
+        The category to fetch.
+
+    Returns
+    -------
+    Category or None
+        The domain category, or ``None`` if not found for this user.
+    """
+    row = session.scalars(
+        select(CategoryRow).where(CategoryRow.id == category_id, CategoryRow.user_id == user_id)
+    ).one_or_none()
+    return None if row is None else row_to_category(row)
+
+
+def list_categories(session: Session, user_id: UUID) -> list[Category]:
+    """Return the user's categories, alphabetically by name.
+
+    Alphabetical rather than the ``created_at`` order used elsewhere: this list
+    is what a category picker renders, and a picker wants alphabetical, not
+    chronological.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose categories to return; the query is scoped to it.
+
+    Returns
+    -------
+    list[Category]
+        Domain categories owned by ``user_id``, ordered by name (empty if
+        none).
+    """
+    rows = session.scalars(
+        select(CategoryRow).where(CategoryRow.user_id == user_id).order_by(CategoryRow.name)
+    ).all()
+    return [row_to_category(row) for row in rows]
+
+
+def category_name_exists(session: Session, *, user_id: UUID, name: str) -> bool:
+    """Return whether the user already has a category with this exact name.
+
+    A read-then-write check (rather than catching the unique constraint's
+    ``IntegrityError``) so create and rename behave identically on SQLite and
+    PostgreSQL.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner to check within; the query is scoped to it.
+    name : str
+        The exact name to look for (already normalized by the caller).
+
+    Returns
+    -------
+    bool
+        ``True`` if the user has a category with this name.
+    """
+    return (
+        session.scalars(
+            select(CategoryRow.id).where(CategoryRow.user_id == user_id, CategoryRow.name == name)
+        ).first()
+        is not None
+    )
+
+
+def rename_category(session: Session, *, user_id: UUID, category_id: UUID, name: str) -> None:
+    """Rename a category, scoped by ``user_id``.
+
+    A category's only mutable field. Scoped by ``user_id``; a no-op if no row
+    matches. The caller checks the new name does not collide with another of the
+    user's categories before calling this. The caller owns the transaction
+    boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the category; the update is scoped to it.
+    category_id : UUID
+        The category to rename.
+    name : str
+        The new name (already normalized by the caller).
+    """
+    session.execute(
+        update(CategoryRow)
+        .where(CategoryRow.id == category_id, CategoryRow.user_id == user_id)
+        .values(name=name)
+    )
+
+
+def delete_category(session: Session, *, user_id: UUID, category_id: UUID) -> Category | None:
+    """Delete a category and return it, clearing its suggestions first.
+
+    Clears ``suggested_category_id`` on every transaction that references this
+    category — that layer is "overwritten freely on every re-run"
+    (``docs/domain.md`` §Category), so it is disposable and the categorization
+    engine will re-fill it later. Cleared explicitly (not via a DB cascade) to
+    stay portable across SQLite and PostgreSQL, and so the delete does not
+    violate a plain foreign key.
+
+    Does **not** touch ``confirmed_category_id`` — the caller (the API layer)
+    is expected to have already refused the delete via
+    :func:`category_is_confirmed_on_any_transaction` when any transaction has
+    this category confirmed; nulling user-confirmed data as a side effect of
+    deleting a different entity is exactly the automated write to
+    ``confirmed_category_id`` the project rule forbids. Returns ``None`` when no
+    category with that id belongs to the user. The caller owns the transaction
+    boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the category; the query and delete are scoped to it.
+    category_id : UUID
+        The category to delete.
+
+    Returns
+    -------
+    Category or None
+        The deleted category, or ``None`` if not found for this user.
+    """
+    row = session.scalars(
+        select(CategoryRow).where(CategoryRow.id == category_id, CategoryRow.user_id == user_id)
+    ).one_or_none()
+    if row is None:
+        return None
+    category = row_to_category(row)
+    session.execute(
+        update(TransactionRow)
+        .where(
+            TransactionRow.user_id == user_id,
+            TransactionRow.suggested_category_id == category_id,
+        )
+        .values(suggested_category_id=None)
+    )
+    session.delete(row)
+    return category
+
+
+def category_is_confirmed_on_any_transaction(
+    session: Session, *, user_id: UUID, category_id: UUID
+) -> bool:
+    """Return whether any of the user's transactions has this category confirmed.
+
+    The guard behind refusing to delete a category still in active use: the API
+    layer calls this before :func:`delete_category` and returns ``409`` if it is
+    ``True``, since deleting would otherwise require nulling user-confirmed data
+    (see :func:`delete_category`).
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner to check within; the query is scoped to it.
+    category_id : UUID
+        The category to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if at least one of the user's transactions has this category as
+        its ``confirmed_category_id``.
+    """
+    return (
+        session.scalars(
+            select(TransactionRow.id).where(
+                TransactionRow.user_id == user_id,
+                TransactionRow.confirmed_category_id == category_id,
+            )
+        ).first()
+        is not None
+    )
+
+
+def seed_default_categories(session: Session, *, user_id: UUID) -> list[Category]:
+    """Create the shared default categories for a user, once.
+
+    Idempotent by construction: inserts :func:`~traccio.domain.categories.default_categories`
+    only when the user currently has zero categories, so a user who deliberately
+    deleted all of theirs does not have them silently resurrected on a repeat
+    call. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user to seed.
+
+    Returns
+    -------
+    list[Category]
+        The categories just created, or an empty list if the user already had
+        at least one.
+    """
+    existing = session.scalars(select(CategoryRow.id).where(CategoryRow.user_id == user_id)).first()
+    if existing is not None:
+        return []
+    created = default_categories(user_id)
+    for category in created:
+        session.add(category_to_row(category))
+    return created
+
+
+def set_confirmed_category(
+    session: Session, *, user_id: UUID, transaction_id: UUID, category_id: UUID | None
+) -> None:
+    """Set or clear a transaction's ``confirmed_category_id``, scoped by ``user_id``.
+
+    **The only write path to ``confirmed_category_id`` in the codebase.** Called
+    only from an explicit user action (confirming or clearing a category on a
+    transaction) — never from sync, detection, or the categorization engine (see
+    ``docs/domain.md`` §Category: "any code path that writes to
+    ``confirmed_category_id`` without direct user action is a bug"). Scoped by
+    ``user_id``; a no-op if no row matches. The caller checks the category
+    exists and belongs to the user before calling this with a non-``None`` value;
+    this only performs the write. The caller owns the transaction boundary and
+    commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the transaction; the update is scoped to it.
+    transaction_id : UUID
+        The transaction whose confirmed category to set or clear.
+    category_id : UUID or None
+        The category to confirm, or ``None`` to clear back to the suggestion (if
+        any).
+    """
+    session.execute(
+        update(TransactionRow)
+        .where(TransactionRow.id == transaction_id, TransactionRow.user_id == user_id)
+        .values(confirmed_category_id=category_id)
+    )

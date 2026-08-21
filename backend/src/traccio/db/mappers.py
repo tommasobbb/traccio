@@ -14,6 +14,7 @@ from traccio.db.models import (
     AccountRow,
     AdvanceParticipantRow,
     AdvanceRow,
+    CategoryRow,
     ConnectionRow,
     EventRow,
     ReimbursementRow,
@@ -24,6 +25,7 @@ from traccio.db.models import (
 from traccio.domain.models import (
     Account,
     Advance,
+    Category,
     Connection,
     Event,
     Participant,
@@ -103,6 +105,15 @@ def transaction_to_row(transaction: Transaction) -> TransactionRow:
     """Translate a domain :class:`Transaction` into a :class:`TransactionRow`.
 
     Splits ``money`` into the ``amount`` and ``currency`` columns.
+
+    Deliberately does **not** write ``suggested_category_id`` or
+    ``confirmed_category_id`` — same as it never wrote ``event_id``. This
+    mapper is used to build the row for a fresh sync, so a written category id
+    here would mean a sync could set or clear a category, which is exactly the
+    automated write ``docs/domain.md`` §Category forbids for ``confirmed``.
+    The only writers are :func:`traccio.db.repositories.set_confirmed_category`
+    (explicit user action) and, later, the categorization engine for
+    ``suggested`` — neither goes through this function.
     """
     return TransactionRow(
         id=transaction.id,
@@ -125,7 +136,8 @@ def transaction_to_row(transaction: Transaction) -> TransactionRow:
 def row_to_transaction(row: TransactionRow) -> Transaction:
     """Translate a :class:`TransactionRow` into a domain :class:`Transaction`.
 
-    Recomposes ``money`` from the ``amount`` and ``currency`` columns.
+    Recomposes ``money`` from the ``amount`` and ``currency`` columns. Reads
+    (but, unlike this function's counterpart, never writes) both category ids.
     """
     return Transaction(
         id=row.id,
@@ -141,6 +153,8 @@ def row_to_transaction(row: TransactionRow) -> Transaction:
         entry_reference=row.entry_reference,
         stable_key=row.stable_key,
         key_strategy=row.key_strategy,
+        suggested_category_id=row.suggested_category_id,
+        confirmed_category_id=row.confirmed_category_id,
     )
 
 
@@ -286,5 +300,25 @@ def row_to_event(row: EventRow) -> Event:
         start_date=row.start_date,
         end_date=row.end_date,
         status=row.status,
+        created_at=row.created_at,
+    )
+
+
+def category_to_row(category: Category) -> CategoryRow:
+    """Translate a domain :class:`Category` into a :class:`CategoryRow`."""
+    return CategoryRow(
+        id=category.id,
+        user_id=category.user_id,
+        name=category.name,
+        created_at=category.created_at,
+    )
+
+
+def row_to_category(row: CategoryRow) -> Category:
+    """Translate a :class:`CategoryRow` into a domain :class:`Category`."""
+    return Category(
+        id=row.id,
+        user_id=row.user_id,
+        name=row.name,
         created_at=row.created_at,
     )

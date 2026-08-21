@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from traccio.db.base import Base
-from traccio.db.models import AccountRow, TransactionRow
+from traccio.db.models import AccountRow, CategoryRow, TransactionRow
 from traccio.domain.enums import (
     AccountKind,
     KeyStrategy,
@@ -77,3 +77,21 @@ def test_duplicate_account_identity_per_user_is_rejected(session: Session) -> No
     session.add(_account(user_id, "hash-01"))
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_duplicate_category_name_per_user_is_rejected(session: Session) -> None:
+    """Same (user_id, name) twice violates the category-name uq."""
+    user_id = uuid4()
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    session.add(CategoryRow(id=uuid4(), user_id=user_id, name="Groceries", created_at=now))
+    session.add(CategoryRow(id=uuid4(), user_id=user_id, name="Groceries", created_at=now))
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_same_category_name_for_two_users_is_accepted(session: Session) -> None:
+    """The uniqueness is per user, not global."""
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    session.add(CategoryRow(id=uuid4(), user_id=uuid4(), name="Groceries", created_at=now))
+    session.add(CategoryRow(id=uuid4(), user_id=uuid4(), name="Groceries", created_at=now))
+    session.commit()  # does not raise

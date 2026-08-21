@@ -10,8 +10,10 @@ from uuid import uuid4
 
 from traccio.db.mappers import (
     account_to_row,
+    category_to_row,
     connection_to_row,
     row_to_account,
+    row_to_category,
     row_to_connection,
     row_to_transaction,
     row_to_user,
@@ -24,7 +26,7 @@ from traccio.domain.enums import (
     KeyStrategy,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Connection, Transaction, User
+from traccio.domain.models import Account, Category, Connection, Transaction, User
 from traccio.domain.money import Money
 
 
@@ -84,3 +86,65 @@ def test_transaction_round_trips_and_recomposes_money() -> None:
     restored = row_to_transaction(row)
     assert restored == transaction
     assert restored.money == Money(amount=-1234, currency="EUR")
+
+
+def test_transaction_to_row_never_writes_category_ids() -> None:
+    """A sync must not be able to set or clear either category id.
+
+    ``transaction_to_row`` is used to build the row for a fresh sync; the only
+    writers of ``confirmed_category_id`` and ``suggested_category_id`` are the
+    explicit-user-action repository functions (see ``docs/domain.md``
+    §Category). This pins that as an executable invariant, not just a comment.
+    """
+    transaction = Transaction(
+        id=uuid4(),
+        user_id=uuid4(),
+        account_id=uuid4(),
+        money=Money(amount=-1234, currency="EUR"),
+        description="TEST MERCHANT 01",
+        status=TransactionStatus.BOOKED,
+        stable_key="key-01",
+        key_strategy=KeyStrategy.ENTRY_REFERENCE,
+        suggested_category_id=uuid4(),
+        confirmed_category_id=uuid4(),
+    )
+
+    row = transaction_to_row(transaction)
+
+    assert row.suggested_category_id is None
+    assert row.confirmed_category_id is None
+
+
+def test_row_to_transaction_carries_category_ids() -> None:
+    """Unlike ``transaction_to_row``, reading a row does surface both ids."""
+    suggested = uuid4()
+    confirmed = uuid4()
+    row = transaction_to_row(
+        Transaction(
+            id=uuid4(),
+            user_id=uuid4(),
+            account_id=uuid4(),
+            money=Money(amount=-1234, currency="EUR"),
+            description="TEST MERCHANT 01",
+            status=TransactionStatus.BOOKED,
+            stable_key="key-01",
+            key_strategy=KeyStrategy.ENTRY_REFERENCE,
+        )
+    )
+    row.suggested_category_id = suggested
+    row.confirmed_category_id = confirmed
+
+    restored = row_to_transaction(row)
+
+    assert restored.suggested_category_id == suggested
+    assert restored.confirmed_category_id == confirmed
+
+
+def test_category_round_trips() -> None:
+    category = Category(
+        id=uuid4(),
+        user_id=uuid4(),
+        name="Groceries",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    assert row_to_category(category_to_row(category)) == category
