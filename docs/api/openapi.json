@@ -173,6 +173,21 @@
         "title": "AdvancesResponse",
         "type": "object"
       },
+      "AssignTransactionRequest": {
+        "description": "Body for assigning a transaction to an event.\n\nAttributes\n----------\ntransaction_id : UUID\n    The transaction to group under the event. Must be the caller's and not\n    already a member of a different event.",
+        "properties": {
+          "transaction_id": {
+            "format": "uuid",
+            "title": "Transaction Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transaction_id"
+        ],
+        "title": "AssignTransactionRequest",
+        "type": "object"
+      },
       "ConfirmTransferRequest": {
         "description": "Body for confirming a suggestion as a transfer.\n\nNames the two legs by role: the outgoing (negative) leg left one account and\nthe incoming (positive) leg arrived in another. Both must belong to the\ncaller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).",
         "properties": {
@@ -299,6 +314,44 @@
         "title": "CreateAdvanceRequest",
         "type": "object"
       },
+      "CreateEventRequest": {
+        "description": "Body for creating an event.\n\nAttributes\n----------\nname : str\n    Human-readable name for the occasion (e.g. ``\"Turkey 2026\"``).\nstart_date : date or None\n    Optional first day of the occasion; a hint, not a membership rule.\nend_date : date or None\n    Optional last day of the occasion.",
+        "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateEventRequest",
+        "type": "object"
+      },
       "CreateReimbursementRequest": {
         "description": "Body for recording a reimbursement against an advance.\n\nAttributes\n----------\namount : int\n    The amount paid back, a positive magnitude in the advance's currency\n    (cents); must be ``> 0``.\ntransaction_id : UUID or None\n    The incoming transaction to link (the caller's, a ``personal``\n    non-``rejected`` credit). Omit for a manual cash reimbursement.\nnote : str or None\n    Optional free-text note.",
         "properties": {
@@ -334,6 +387,110 @@
           "amount"
         ],
         "title": "CreateReimbursementRequest",
+        "type": "object"
+      },
+      "EventResponse": {
+        "description": "One event as returned to the client, with its derived total.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the event.\nname : str\n    Human-readable name for the occasion.\nstart_date : date or None\n    Optional first day of the occasion.\nend_date : date or None\n    Optional last day of the occasion.\nstatus : EventStatus\n    Lifecycle state (``active`` or ``closed``); purely organizational.\nmember_count : int\n    How many transactions are grouped under the event.\ntotal : int\n    The net cost of the event in minor units (cents): the sum of its members'\n    ``effective_amount`` (transfers count zero, advances only the user's\n    share, reimbursements zero). ``0`` for an empty event.\ncurrency : str or None\n    ISO 4217 code of ``total`` \u2014 the members' shared currency. ``null`` for an\n    empty event, which has no currency of its own.\ncreated_at : datetime\n    When the event was created (timezone-aware, UTC).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "start_date",
+          "end_date",
+          "status",
+          "member_count",
+          "total",
+          "currency",
+          "created_at"
+        ],
+        "title": "EventResponse",
+        "type": "object"
+      },
+      "EventStatus": {
+        "description": "Lifecycle state of an :class:`~traccio.domain.models.Event`.\n\nAn event is a reporting lens, not a role: its status organizes the user's\nview (a finished trip vs. an ongoing one) and never affects any\ntransaction's ``effective_amount``.\n\nAttributes\n----------\nACTIVE : str\n    Still accumulating members; the default when an event is created.\nCLOSED : str\n    The occasion is over. Purely organizational \u2014 a closed event still\n    reports its total and can be reopened.",
+        "enum": [
+          "active",
+          "closed"
+        ],
+        "title": "EventStatus",
+        "type": "string"
+      },
+      "EventsResponse": {
+        "description": "Envelope for the events list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nevents : list[EventResponse]\n    The user's events, oldest first.",
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventResponse"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "EventsResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1385,6 +1542,305 @@
           }
         },
         "summary": "Sync Connection"
+      }
+    },
+    "/events": {
+      "get": {
+        "description": "List the current user's events, oldest first.\n\nScoped to the current user. Each event carries its derived net total and\nmember count.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose events to return.\n\nReturns\n-------\nEventsResponse\n    The user's events, oldest first (empty if none).",
+        "operationId": "events_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Events"
+      },
+      "post": {
+        "description": "Create an event.\n\nRecords the occasion's name and optional date range; it starts ``active``\nwith no members and a zero total. Scoped to the current user.\n\nParameters\n----------\nbody : CreateEventRequest\n    The event's name and optional start/end dates.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The created event, with an empty total.",
+        "operationId": "create_event_endpoint_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Event Endpoint"
+      }
+    },
+    "/events/{event_id}": {
+      "delete": {
+        "description": "Delete an event, keeping its member transactions.\n\nRemoves only the grouping: every member's ``event_id`` is cleared and the\ntransactions themselves are untouched (see ``docs/domain.md``). Scoped to the\ncurrent user; a ``404`` if the event is unknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.",
+        "operationId": "remove_event_events__event_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Event"
+      },
+      "get": {
+        "description": "Return one of the current user's events, with its derived total.\n\nScoped to the current user; a ``404`` if the event is unknown or not the\ncaller's.\n\nParameters\n----------\nevent_id : UUID\n    The event to fetch.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The event, with its net total and member count.",
+        "operationId": "event_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Event"
+      }
+    },
+    "/events/{event_id}/close": {
+      "post": {
+        "description": "Mark an event ``closed``.\n\nPurely organizational \u2014 a closed event still reports its total and can be\nreopened; nothing about its members changes. Scoped to the current user; a\n``404`` if the event is unknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event to close.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The event in its ``closed`` state.",
+        "operationId": "close_event_events__event_id__close_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Close Event"
+      }
+    },
+    "/events/{event_id}/reopen": {
+      "post": {
+        "description": "Reopen a closed event, marking it ``active`` again.\n\nScoped to the current user; a ``404`` if the event is unknown or not the\ncaller's.\n\nParameters\n----------\nevent_id : UUID\n    The event to reopen.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The event in its ``active`` state.",
+        "operationId": "reopen_event_events__event_id__reopen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reopen Event"
+      }
+    },
+    "/events/{event_id}/transactions": {
+      "post": {
+        "description": "Group a transaction under an event.\n\nSets the transaction's ``event_id`` \u2014 the membership is a reporting lens and\ndoes not change its ``role`` or ``effective_amount``. A ``404`` if the event\nor transaction is unknown or not the caller's; a ``409`` if the transaction\nalready belongs to a *different* event (one event per transaction).\nRe-assigning to the same event is idempotent. Scoped to the current user.\n\nParameters\n----------\nevent_id : UUID\n    The event to group the transaction under.\nbody : AssignTransactionRequest\n    The transaction to assign.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user both the event and transaction belong to.",
+        "operationId": "assign_transaction_events__event_id__transactions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignTransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Transaction"
+      }
+    },
+    "/events/{event_id}/transactions/{transaction_id}": {
+      "delete": {
+        "description": "Remove a transaction from an event, keeping the transaction.\n\nClears the transaction's ``event_id``. A ``404`` if the event is unknown, or\nif the transaction is unknown or not currently a member of *this* event.\nScoped to the current user.\n\nParameters\n----------\nevent_id : UUID\n    The event to remove the transaction from.\ntransaction_id : UUID\n    The transaction to unassign.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user both the event and transaction belong to.",
+        "operationId": "unassign_transaction_events__event_id__transactions__transaction_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unassign Transaction"
       }
     },
     "/health": {

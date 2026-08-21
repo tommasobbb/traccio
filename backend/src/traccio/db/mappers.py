@@ -15,6 +15,7 @@ from traccio.db.models import (
     AdvanceParticipantRow,
     AdvanceRow,
     ConnectionRow,
+    EventRow,
     ReimbursementRow,
     TransactionRow,
     TransferRow,
@@ -24,6 +25,7 @@ from traccio.domain.models import (
     Account,
     Advance,
     Connection,
+    Event,
     Participant,
     Reimbursement,
     Transaction,
@@ -254,5 +256,35 @@ def row_to_reimbursement(row: ReimbursementRow) -> Reimbursement:
         amount=Money(amount=row.amount, currency=row.currency),
         transaction_id=row.transaction_id,
         note=row.note,
+        created_at=row.created_at,
+    )
+
+
+def event_to_row(event: Event) -> EventRow:
+    """Translate a domain :class:`Event` into an :class:`EventRow`.
+
+    Membership (``transactions.event_id``) is not part of the event and is
+    handled by the repository, not here.
+    """
+    return EventRow(
+        id=event.id,
+        user_id=event.user_id,
+        name=event.name,
+        start_date=event.start_date,
+        end_date=event.end_date,
+        status=event.status,
+        created_at=event.created_at,
+    )
+
+
+def row_to_event(row: EventRow) -> Event:
+    """Translate an :class:`EventRow` into a domain :class:`Event`."""
+    return Event(
+        id=row.id,
+        user_id=row.user_id,
+        name=row.name,
+        start_date=row.start_date,
+        end_date=row.end_date,
+        status=row.status,
         created_at=row.created_at,
     )

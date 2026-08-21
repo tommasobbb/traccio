@@ -16,12 +16,13 @@ Schema-level invariants (see ``docs/architecture.md``):
   makes sync idempotent — a re-import cannot duplicate a row.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
+    Date,
     DateTime,
     ForeignKey,
     String,
@@ -39,6 +40,7 @@ from traccio.domain.enums import (
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
+    EventStatus,
     KeyStrategy,
     TransactionRole,
     TransactionStatus,
@@ -212,6 +214,13 @@ class TransactionRow(Base):
         Key used for idempotent deduplication.
     key_strategy : KeyStrategy
         Which strategy produced ``stable_key``.
+    event_id : UUID or None
+        The event this transaction is grouped under, or ``None``. A transaction
+        belongs to at most one event; membership is set and cleared by explicit
+        user action and is orthogonal to ``role`` (an event is a reporting lens,
+        not a role). Deliberately **absent from the domain model** — it is a
+        db-only grouping column (like ``connections.auth_state``), managed by the
+        repository, not the mappers.
     """
 
     __tablename__ = "transactions"
@@ -233,6 +242,9 @@ class TransactionRow(Base):
     entry_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stable_key: Mapped[str] = mapped_column(String(128))
     key_strategy: Mapped[KeyStrategy] = mapped_column(_enum_column(KeyStrategy))
+    event_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("events.id"), nullable=True, index=True
+    )
 
 
 class TransferRow(Base):
@@ -423,4 +435,43 @@ class ReimbursementRow(Base):
         Uuid(), ForeignKey("transactions.id"), nullable=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class EventRow(Base):
+    """Persisted :class:`~traccio.domain.models.Event`.
+
+    A user-defined grouping of transactions from one occasion. Membership lives
+    on ``transactions.event_id`` (a transaction has at most one event), not in a
+    join table. Deleting an event clears its members' ``event_id`` first (done in
+    the repository, not a DB cascade, to stay portable) — the transactions
+    survive. Nothing about the total is stored here; it is derived from the
+    members (see :func:`~traccio.domain.events.event_total`).
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key.
+    user_id : UUID
+        Owning user (foreign key, indexed).
+    name : str
+        Human-readable name for the occasion.
+    start_date : date or None
+        Optional first day of the occasion (a hint, not a membership rule).
+    end_date : date or None
+        Optional last day of the occasion.
+    status : EventStatus
+        Lifecycle state; ``active`` when created.
+    created_at : datetime
+        Creation timestamp (timezone-aware, UTC).
+    """
+
+    __tablename__ = "events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[EventStatus] = mapped_column(_enum_column(EventStatus))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -10,7 +10,7 @@ Identifiers and timestamps carry ``default_factory`` values for convenience in
 tests and construction; the authoritative values are owned by the ``db/`` layer.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,6 +19,7 @@ from traccio.domain.enums import (
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
+    EventStatus,
     KeyStrategy,
     TransactionRole,
     TransactionStatus,
@@ -328,4 +329,49 @@ class Reimbursement(BaseModel):
     amount: Money
     transaction_id: UUID | None = None
     note: str | None = None
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Event(BaseModel):
+    """A user-defined grouping of transactions from one real-world occasion.
+
+    A trip, a renovation, a wedding — see ``docs/domain.md``. An event exists so
+    the user can ask "what did this actually cost me?" and get an answer in terms
+    of ``effective_amount``: a transfer between own accounts counts zero, an
+    advance counts only the user's share, a reimbursement counts zero.
+
+    An event is a **reporting lens, not a role**: membership is independent of a
+    transaction's :class:`~traccio.domain.enums.TransactionRole` and never
+    changes its ``effective_amount``. A transaction belongs to at most one event.
+    The event total is a pure aggregation over its members
+    (:func:`~traccio.domain.events.event_total`); nothing is stored on the event
+    itself, and deleting an event removes only the grouping, never a transaction.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the event within Traccio.
+    user_id : UUID
+        Owning user. Every member transaction belongs to this user.
+    name : str
+        Human-readable name for the occasion (e.g. ``"Turkey 2026"``).
+    start_date : date or None
+        Optional first day of the occasion. A hint for the user, not a rule that
+        assigns membership (a flight booked months earlier still belongs).
+    end_date : date or None
+        Optional last day of the occasion.
+    status : EventStatus
+        Lifecycle state; ``active`` when created. Purely organizational.
+    created_at : datetime
+        When the event was created (timezone-aware, UTC).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    name: str
+    start_date: date | None = None
+    end_date: date | None = None
+    status: EventStatus = EventStatus.ACTIVE
     created_at: datetime = Field(default_factory=_now)

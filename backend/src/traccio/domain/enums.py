@@ -122,6 +122,26 @@ class AdvanceStatus(StrEnum):
     WRITTEN_OFF = "written_off"
 
 
+class EventStatus(StrEnum):
+    """Lifecycle state of an :class:`~traccio.domain.models.Event`.
+
+    An event is a reporting lens, not a role: its status organizes the user's
+    view (a finished trip vs. an ongoing one) and never affects any
+    transaction's ``effective_amount``.
+
+    Attributes
+    ----------
+    ACTIVE : str
+        Still accumulating members; the default when an event is created.
+    CLOSED : str
+        The occasion is over. Purely organizational — a closed event still
+        reports its total and can be reopened.
+    """
+
+    ACTIVE = "active"
+    CLOSED = "closed"
+
+
 class KeyStrategy(StrEnum):
     """How a transaction's stable deduplication key was produced.
 

@@ -221,6 +221,17 @@ the two are independent: an `Advance` can exist outside any `Event`, and an
 Date range is a hint used to suggest membership, not a rule that assigns it.
 A flight booked three months early belongs to the trip.
 
+**Implementation note** (2026-08-21): membership is a nullable `event_id` on the
+transaction row (at most one event per transaction), a db-only column managed by
+the repository — an event is a reporting lens, so it deliberately does not appear
+on the domain `Transaction` or extend `TransactionRole`. The event total is the
+single **net** figure, derived by the pure `domain/events.py::event_total` over
+members' `effective_amount`; the **by-category** breakdown waits on
+categorization existing at all, and membership **suggestions** from the date
+range are a later slice (the dates are stored as hints, nothing consumes them
+yet) — both tracked in `tasks/backlog.md`. A mixed-currency event has no single
+total (no FX in Traccio) and is refused.
+
 ---
 
 ## Advance
