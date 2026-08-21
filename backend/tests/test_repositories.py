@@ -5,7 +5,7 @@ value is synthetic and the "credential" is an opaque placeholder, never a real
 token (see ``.claude/rules/data-safety.md``).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import Engine, create_engine, select
@@ -16,6 +16,7 @@ from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     get_connection_credentials,
+    prune_stale_pending_transactions,
     upsert_account,
     upsert_transaction,
 )
@@ -28,6 +29,8 @@ from traccio.domain.enums import (
     TransactionStatus,
 )
 from traccio.domain.money import Money
+
+_NOW = datetime(2026, 8, 21, 12, 0, 0, tzinfo=UTC)
 
 
 def _engine() -> Engine:
@@ -190,7 +193,7 @@ def test_upsert_transaction_inserts_a_new_transaction() -> None:
             session, account=_account(user_id=user_id, connection_id=connection_id)
         )
         result = upsert_transaction(
-            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+            session, transaction=_transaction(account_id=account.id, user_id=user_id), now=_NOW
         )
         session.commit()
         inserted_id = result.id
@@ -200,6 +203,10 @@ def test_upsert_transaction_inserts_a_new_transaction() -> None:
     assert len(rows) == 1
     assert rows[0].id == inserted_id
     assert rows[0].stable_key == "ENTRY-01"
+    # SQLite drops tzinfo on a DateTime(timezone=True) column; compare the
+    # wall-clock value regardless.
+    assert rows[0].last_synced_at is not None
+    assert rows[0].last_synced_at.replace(tzinfo=None) == _NOW.replace(tzinfo=None)
 
 
 def test_upsert_transaction_is_idempotent_on_account_and_stable_key() -> None:
@@ -211,7 +218,7 @@ def test_upsert_transaction_is_idempotent_on_account_and_stable_key() -> None:
             session, account=_account(user_id=user_id, connection_id=connection_id)
         )
         first = upsert_transaction(
-            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+            session, transaction=_transaction(account_id=account.id, user_id=user_id), now=_NOW
         )
         session.commit()
         first_id = first.id
@@ -219,7 +226,7 @@ def test_upsert_transaction_is_idempotent_on_account_and_stable_key() -> None:
     # Re-syncing the same entry (same account_id + stable_key) does not duplicate.
     with Session(engine) as session:
         again = upsert_transaction(
-            session, transaction=_transaction(account_id=account.id, user_id=user_id)
+            session, transaction=_transaction(account_id=account.id, user_id=user_id), now=_NOW
         )
         session.commit()
         assert again.id == first_id
@@ -246,6 +253,7 @@ def test_upsert_transaction_pending_becomes_booked_in_place() -> None:
                 description="PENDING TEXT",
                 status=TransactionStatus.PENDING,
             ),
+            now=_NOW,
         )
         session.commit()
         pending_id = pending.id
@@ -261,6 +269,7 @@ def test_upsert_transaction_pending_becomes_booked_in_place() -> None:
                 description="BOOKED TEXT",
                 status=TransactionStatus.BOOKED,
             ),
+            now=_NOW,
         )
         session.commit()
 
@@ -287,6 +296,7 @@ def test_upsert_transaction_update_preserves_user_owned_fields() -> None:
             transaction=_transaction(
                 account_id=account.id, user_id=user_id, status=TransactionStatus.PENDING
             ),
+            now=_NOW,
         )
         session.commit()
 
@@ -307,6 +317,7 @@ def test_upsert_transaction_update_preserves_user_owned_fields() -> None:
             transaction=_transaction(
                 account_id=account.id, user_id=user_id, status=TransactionStatus.BOOKED
             ),
+            now=_NOW,
         )
         session.commit()
 
@@ -335,10 +346,14 @@ def test_upsert_transaction_booked_row_is_immutable() -> None:
                 description="ORIGINAL",
                 status=TransactionStatus.BOOKED,
             ),
+            now=_NOW,
         )
         session.commit()
 
-    # A re-sync that reports different content for a booked entry is ignored.
+    # A re-sync that reports different content for a booked entry is ignored,
+    # but the row is stamped as re-observed (see prune_stale_pending_transactions:
+    # last_synced_at means "a sync saw this," not "this row's content changed").
+    later = _NOW + timedelta(days=1)
     with Session(engine) as session:
         upsert_transaction(
             session,
@@ -349,6 +364,7 @@ def test_upsert_transaction_booked_row_is_immutable() -> None:
                 description="TAMPERED",
                 status=TransactionStatus.BOOKED,
             ),
+            now=later,
         )
         session.commit()
 
@@ -356,6 +372,8 @@ def test_upsert_transaction_booked_row_is_immutable() -> None:
         row = session.scalars(select(TransactionRow)).one()
     assert row.amount == -1234
     assert row.description == "ORIGINAL"
+    assert row.last_synced_at is not None
+    assert row.last_synced_at.replace(tzinfo=None) == later.replace(tzinfo=None)
 
 
 def test_upsert_transaction_rejected_row_is_immutable() -> None:
@@ -375,6 +393,7 @@ def test_upsert_transaction_rejected_row_is_immutable() -> None:
                 description="ORIGINAL",
                 status=TransactionStatus.REJECTED,
             ),
+            now=_NOW,
         )
         session.commit()
 
@@ -389,6 +408,7 @@ def test_upsert_transaction_rejected_row_is_immutable() -> None:
                 description="TAMPERED",
                 status=TransactionStatus.REJECTED,
             ),
+            now=_NOW,
         )
         session.commit()
 
@@ -414,10 +434,12 @@ def test_upsert_transaction_same_key_on_different_accounts_are_separate() -> Non
         upsert_transaction(
             session,
             transaction=_transaction(account_id=account_a.id, user_id=user_id, stable_key="SHARED"),
+            now=_NOW,
         )
         upsert_transaction(
             session,
             transaction=_transaction(account_id=account_b.id, user_id=user_id, stable_key="SHARED"),
+            now=_NOW,
         )
         session.commit()
 
@@ -478,3 +500,207 @@ def test_get_connection_credentials_is_user_scoped() -> None:
 
     # Another user's active connection is invisible to the scoped lookup.
     assert creds is None
+
+
+# --- prune_stale_pending_transactions ---------------------------------------
+
+_CUTOFF = datetime(2026, 8, 21, tzinfo=UTC)
+_STALE = _CUTOFF - timedelta(days=1)  # older than cutoff: eligible
+_FRESH = _CUTOFF + timedelta(days=1)  # newer than cutoff: not eligible
+
+
+def _seed_transaction_row(
+    engine: Engine,
+    *,
+    user_id: UUID,
+    account_id: UUID,
+    stable_key: str = "STALE-01",
+    status: TransactionStatus = TransactionStatus.PENDING,
+    role: TransactionRole = TransactionRole.PERSONAL,
+    last_synced_at: datetime | None,
+    event_id: UUID | None = None,
+    confirmed_category_id: UUID | None = None,
+) -> UUID:
+    """Insert a TransactionRow directly, bypassing upsert_transaction, so every
+    field prune_stale_pending_transactions cares about can be set independently
+    of what a sync would ever produce in one call."""
+    row_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            TransactionRow(
+                id=row_id,
+                user_id=user_id,
+                account_id=account_id,
+                amount=-1234,
+                currency="EUR",
+                booked_at=None,
+                value_date=None,
+                description="TEST MERCHANT 01",
+                status=status,
+                role=role,
+                entry_reference=stable_key,
+                stable_key=stable_key,
+                key_strategy=KeyStrategy.ENTRY_REFERENCE,
+                last_synced_at=last_synced_at,
+                event_id=event_id,
+                confirmed_category_id=confirmed_category_id,
+            )
+        )
+        session.commit()
+    return row_id
+
+
+def _remaining_ids(engine: Engine) -> set[UUID]:
+    with Session(engine) as session:
+        return set(session.scalars(select(TransactionRow.id)).all())
+
+
+def test_prune_deletes_a_stale_eligible_pending_transaction() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine, user_id=user_id, account_id=account_id, last_synced_at=_STALE
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 1
+    assert row_id not in _remaining_ids(engine)
+
+
+def test_prune_skips_a_row_with_no_last_synced_at() -> None:
+    """A row that predates the column is not yet eligible, not eligible by
+    default — see db/repositories.py::prune_stale_pending_transactions."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine, user_id=user_id, account_id=account_id, last_synced_at=None
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert row_id in _remaining_ids(engine)
+
+
+def test_prune_skips_a_row_still_inside_the_window() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine, user_id=user_id, account_id=account_id, last_synced_at=_FRESH
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert row_id in _remaining_ids(engine)
+
+
+def test_prune_skips_terminal_rows_even_if_stale() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    booked_id = _seed_transaction_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="BOOKED-01",
+        status=TransactionStatus.BOOKED,
+        last_synced_at=_STALE,
+    )
+    rejected_id = _seed_transaction_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        stable_key="REJECTED-01",
+        status=TransactionStatus.REJECTED,
+        last_synced_at=_STALE,
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert {booked_id, rejected_id} <= _remaining_ids(engine)
+
+
+def test_prune_skips_a_non_personal_role() -> None:
+    """A transfer/advance/reimbursement leg is never still `personal`
+    (validate_advance/validate_reimbursement/validate_transfer_pair all
+    require it), so a non-personal role is proof of a link this must not
+    silently break."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        role=TransactionRole.ADVANCE,
+        last_synced_at=_STALE,
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert row_id in _remaining_ids(engine)
+
+
+def test_prune_skips_a_row_assigned_to_an_event() -> None:
+    """Event membership is orthogonal to role (docs/domain.md), so it needs
+    its own guard even though the row is still `personal`."""
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine, user_id=user_id, account_id=account_id, event_id=uuid4(), last_synced_at=_STALE
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert row_id in _remaining_ids(engine)
+
+
+def test_prune_skips_a_row_with_a_confirmed_category() -> None:
+    engine = _engine()
+    user_id, account_id = uuid4(), uuid4()
+    row_id = _seed_transaction_row(
+        engine,
+        user_id=user_id,
+        account_id=account_id,
+        confirmed_category_id=uuid4(),
+        last_synced_at=_STALE,
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    assert pruned == 0
+    assert row_id in _remaining_ids(engine)
+
+
+def test_prune_is_user_scoped() -> None:
+    engine = _engine()
+    user_id, stranger_id = uuid4(), uuid4()
+    account_id = uuid4()
+    stranger_row_id = _seed_transaction_row(
+        engine, user_id=stranger_id, account_id=account_id, last_synced_at=_STALE
+    )
+
+    with Session(engine) as session:
+        pruned = prune_stale_pending_transactions(session, user_id=user_id, cutoff=_CUTOFF)
+        session.commit()
+
+    # A stranger's stale pending row is invisible to the user-scoped prune.
+    assert pruned == 0
+    assert stranger_row_id in _remaining_ids(engine)

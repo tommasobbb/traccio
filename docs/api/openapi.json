@@ -693,6 +693,20 @@
         "title": "ParticipantSchema",
         "type": "object"
       },
+      "PrunePendingResponse": {
+        "description": "The outcome of pruning abandoned pending transactions.\n\nOnly a count is returned, never row contents\n(``.claude/rules/data-safety.md``) \u2014 mirrors ``SyncResponse``'s\ncounts-only shape (``api/schemas/connections.py``).\n\nAttributes\n----------\npruned : int\n    How many pending transactions were deleted (see\n    ``db/repositories.py::prune_stale_pending_transactions`` for the\n    eligibility rule).",
+        "properties": {
+          "pruned": {
+            "title": "Pruned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pruned"
+        ],
+        "title": "PrunePendingResponse",
+        "type": "object"
+      },
       "ReimbursementResponse": {
         "description": "One reimbursement as returned to the client.\n\nProjects :class:`~traccio.domain.models.Reimbursement`. Amounts are positive\nmagnitudes in the advance's currency.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the reimbursement.\nadvance_id : UUID\n    The advance this reimbursement pays back.\namount : int\n    The amount paid back, a positive magnitude (cents).\ncurrency : str\n    ISO 4217 code of ``amount`` (the advance's currency).\ntransaction_id : UUID or None\n    The linked incoming transaction, or ``None`` for a manual cash entry.\nnote : str or None\n    Optional free-text note.\ncreated_at : datetime\n    When the reimbursement was recorded (timezone-aware, UTC).",
         "properties": {
@@ -2506,6 +2520,25 @@
           }
         },
         "summary": "Transactions"
+      }
+    },
+    "/transactions/prune-pending": {
+      "post": {
+        "description": "Delete abandoned pending transactions, per ``docs/domain.md``.\n\n\"Pending transactions that neither settle nor reappear within a defined\nwindow are dropped, not kept as ghosts.\" Explicit and on-demand \u2014 like\n``POST /rules/apply`` (ADR 0005) \u2014 rather than wired into sync, until a\nbackground scheduler (M3) makes that worth the added write path inside\nsync. Never touches a row the user has acted on: see\n:func:`~traccio.db.repositories.prune_stale_pending_transactions` for the\nfull eligibility rule (still ``pending``, unseen by a sync for\n``Settings.pending_transaction_ttl_days``, still ``personal``, not in an\nevent, no confirmed category).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose pending transactions to prune.\n\nReturns\n-------\nPrunePendingResponse\n    How many rows were deleted.",
+        "operationId": "prune_pending_transactions_transactions_prune_pending_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrunePendingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Prune Pending Transactions"
       }
     },
     "/transactions/{transaction_id}/category": {

@@ -159,7 +159,22 @@ routinely change slightly on settlement; that is expected, and updating them
 does not violate immutability, which applies only after `booked`.
 
 Pending transactions that neither settle nor reappear within a defined window
-are dropped, not kept as ghosts.
+are dropped, not kept as ghosts. Implemented by
+`db/repositories.py::prune_stale_pending_transactions`, called from the
+explicit `POST /transactions/prune-pending` (mirroring `POST /rules/apply`'s
+precedent — not wired into sync until a background scheduler exists to make
+that worth the added write path). The "window" is measured against
+`last_synced_at`, a sync-process timestamp stamped on every `Transaction` row
+by every sync that observes it (insert, a pending refresh, or a terminal row
+re-seen unchanged) — not against `booked_at`/`value_date`, which are both
+nullable and, per `docs/openbanking.md`'s Revolut findings, not reliably
+correlated with "still pending" in the first place. A row that has never been
+re-stamped by a sync (predates the column) is treated as not yet eligible,
+never as eligible by default. A pending row the user has already acted on —
+linked as a transfer/advance/reimbursement (any `role` other than `personal`),
+assigned to an `Event`, or carrying a `confirmed_category_id` — is never
+pruned, even once stale; a suggested (not confirmed) category is not a
+commitment and does not protect a row.
 
 ### History window
 
