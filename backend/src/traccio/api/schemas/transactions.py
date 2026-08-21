@@ -1,4 +1,4 @@
-"""Response schemas for the transactions endpoint.
+"""Request and response schemas for the transactions endpoints.
 
 The ``amount``/``currency`` pair mirrors how persistence stores
 :class:`~traccio.domain.money.Money` (two columns). ``effective_amount`` is
@@ -6,7 +6,10 @@ derived here from the single pure function
 :func:`~traccio.domain.effective_amount.effective_amount` and returned alongside
 ``amount`` in the same ``currency``. The client renders it and never computes
 spending from ``amount``, or advances and transfers would silently reappear as
-spending (see the invariants in ``docs/architecture.md``).
+spending (see the invariants in ``docs/architecture.md``). ``effective_category_id``
+follows the same discipline via
+:func:`~traccio.domain.categories.effective_category`, so the client never
+re-implements the confirmed-else-suggested fallback.
 """
 
 from datetime import datetime
@@ -14,10 +17,23 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from traccio.domain.categories import effective_category
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import TransactionRole, TransactionStatus
 from traccio.domain.models import Transaction
 from traccio.domain.money import Money
+
+
+class ConfirmCategoryRequest(BaseModel):
+    """Body for confirming a transaction's category.
+
+    Attributes
+    ----------
+    category_id : UUID
+        The category to confirm. Must belong to the caller.
+    """
+
+    category_id: UUID
 
 
 class TransactionResponse(BaseModel):
@@ -58,6 +74,17 @@ class TransactionResponse(BaseModel):
         ``pending`` or ``booked``.
     role : TransactionRole
         How much counts as personal spending; defaults to ``personal``.
+    suggested_category_id : UUID or None
+        Written by the categorization engine, overwritten freely on every
+        re-run. ``None`` until an engine exists (see ``tasks/backlog.md`` §M2).
+    confirmed_category_id : UUID or None
+        Set only by explicit user action via
+        ``POST /transactions/{id}/category``; never by automation.
+    effective_category_id : UUID or None
+        The category that actually applies: ``confirmed`` if set, else
+        ``suggested``, else ``None`` (see
+        :func:`~traccio.domain.categories.effective_category`). The client
+        renders this and never re-implements the fallback.
     """
 
     id: UUID
@@ -71,6 +98,9 @@ class TransactionResponse(BaseModel):
     display_description: str | None
     status: TransactionStatus
     role: TransactionRole
+    suggested_category_id: UUID | None
+    confirmed_category_id: UUID | None
+    effective_category_id: UUID | None
 
     @classmethod
     def from_domain(
@@ -111,6 +141,9 @@ class TransactionResponse(BaseModel):
             display_description=transaction.display_description,
             status=transaction.status,
             role=transaction.role,
+            suggested_category_id=transaction.suggested_category_id,
+            confirmed_category_id=transaction.confirmed_category_id,
+            effective_category_id=effective_category(transaction),
         )
 
 

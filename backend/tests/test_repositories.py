@@ -290,11 +290,14 @@ def test_upsert_transaction_update_preserves_user_owned_fields() -> None:
         )
         session.commit()
 
-    # The user (or detection) assigns a role and a cleaned description on the row.
+    # The user (or detection) assigns a role, a cleaned description, and a
+    # confirmed category on the row.
+    confirmed_category_id = uuid4()
     with Session(engine) as session:
         row = session.scalars(select(TransactionRow)).one()
         row.role = TransactionRole.TRANSFER
         row.display_description = "Cleaned name"
+        row.confirmed_category_id = confirmed_category_id
         session.commit()
 
     # A later sync updates the pending entry; it must not clobber those fields.
@@ -312,6 +315,7 @@ def test_upsert_transaction_update_preserves_user_owned_fields() -> None:
     assert row.status is TransactionStatus.BOOKED
     assert row.role is TransactionRole.TRANSFER
     assert row.display_description == "Cleaned name"
+    assert row.confirmed_category_id == confirmed_category_id
 
 
 def test_upsert_transaction_booked_row_is_immutable() -> None:

@@ -252,3 +252,27 @@ def test_transactions_empty_when_user_has_none() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"transactions": []}
+
+
+def test_transactions_expose_null_category_ids_when_uncategorized() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=uuid4(),
+                stable_key="TX-A",
+                description="TEST MERCHANT 01",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions")
+
+    row = response.json()["transactions"][0]
+    assert row["suggested_category_id"] is None
+    assert row["confirmed_category_id"] is None
+    assert row["effective_category_id"] is None

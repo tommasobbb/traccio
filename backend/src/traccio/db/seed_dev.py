@@ -14,6 +14,7 @@ from uuid import UUID
 from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
 from traccio.db.models import AccountRow, ConnectionRow, UserRow
+from traccio.db.repositories import seed_default_categories
 from traccio.db.session import session_scope
 from traccio.domain.enums import AccountKind, ConnectionStatus
 
@@ -68,8 +69,9 @@ def seed_dev() -> None:
                 created_at=now,
             )
         )
+        created_categories = seed_default_categories(session, user_id=user_id)
 
-    logger.info("seed_dev.done", accounts=2)
+    logger.info("seed_dev.done", accounts=2, categories_created=len(created_categories))
 
 
 if __name__ == "__main__":

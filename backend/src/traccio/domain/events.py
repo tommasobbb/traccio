@@ -13,8 +13,10 @@ each advance member's signed spending share (via
 ``advance_shares``.
 
 Scope (2026-08-21): the total is the single net figure. Breaking it down by
-category is a later slice, gated on categorization existing at all — see
-``tasks/backlog.md`` §M2.
+category is a later slice — categorization now exists
+(:mod:`traccio.domain.categories`), which unblocks it in principle, but
+extending :func:`event_total` to group members by category has not shipped
+yet. See ``tasks/backlog.md`` §M2.
 """
 
 from collections.abc import Mapping, Sequence

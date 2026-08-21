@@ -8,7 +8,9 @@ own: ``currency`` is the members' shared currency, ``null`` for an empty event
 (whose ``total`` is ``0``).
 
 Scope (2026-08-21): the total is a single net figure; a per-category breakdown
-is a later slice, gated on categorization existing (see ``tasks/backlog.md``).
+is a later slice. Categorization now exists (``traccio.domain.categories``),
+which unblocks the breakdown in principle, but it has not shipped yet (see
+``tasks/backlog.md``).
 """
 
 from datetime import date, datetime
