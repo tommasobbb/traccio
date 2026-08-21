@@ -8,6 +8,7 @@ from traccio.domain.enums import (
     ConnectionStatus,
     EventStatus,
     KeyStrategy,
+    RuleMatchKind,
     TransactionRole,
     TransactionStatus,
 )
@@ -20,11 +21,13 @@ from traccio.domain.models import (
     Event,
     Participant,
     Reimbursement,
+    Rule,
     Transaction,
     Transfer,
     User,
 )
 from traccio.domain.money import CurrencyCode, Money
+from traccio.domain.rules import rule_matches
 
 __all__ = [
     "Account",
@@ -41,6 +44,8 @@ __all__ = [
     "Money",
     "Participant",
     "Reimbursement",
+    "Rule",
+    "RuleMatchKind",
     "Transaction",
     "TransactionRole",
     "TransactionStatus",
@@ -50,4 +55,5 @@ __all__ = [
     "effective_amount",
     "effective_category",
     "event_total",
+    "rule_matches",
 ]

@@ -173,6 +173,30 @@
         "title": "AdvancesResponse",
         "type": "object"
       },
+      "ApplyRulesResponse": {
+        "description": "Result of recomputing every rule against the user's transactions.\n\nAttributes\n----------\nrules_applied : int\n    How many rules were evaluated.\nmatched : int\n    How many transactions were assigned a suggested category.\ncleared : int\n    How many transactions had their suggested category cleared (no rule\n    matched, including ones with a stale suggestion from a deleted rule).",
+        "properties": {
+          "cleared": {
+            "title": "Cleared",
+            "type": "integer"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "integer"
+          },
+          "rules_applied": {
+            "title": "Rules Applied",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules_applied",
+          "matched",
+          "cleared"
+        ],
+        "title": "ApplyRulesResponse",
+        "type": "object"
+      },
       "AssignTransactionRequest": {
         "description": "Body for assigning a transaction to an event.\n\nAttributes\n----------\ntransaction_id : UUID\n    The transaction to group under the event. Must be the caller's and not\n    already a member of a different event.",
         "properties": {
@@ -461,6 +485,30 @@
         "title": "CreateReimbursementRequest",
         "type": "object"
       },
+      "CreateRuleRequest": {
+        "description": "Body for creating a rule.\n\nAttributes\n----------\ncategory_id : UUID\n    The category to assign when this rule matches. Must belong to the\n    caller.\nmatch_kind : RuleMatchKind\n    The predicate to apply to a transaction's ``description``.\npattern : str\n    The text to match against. Stripped and validated by\n    :func:`~traccio.domain.rules.normalize_rule_pattern`.",
+        "properties": {
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "match_kind": {
+            "$ref": "#/components/schemas/RuleMatchKind"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category_id",
+          "match_kind",
+          "pattern"
+        ],
+        "title": "CreateRuleRequest",
+        "type": "object"
+      },
       "EventResponse": {
         "description": "One event as returned to the client, with its derived total.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the event.\nname : str\n    Human-readable name for the occasion.\nstart_date : date or None\n    Optional first day of the occasion.\nend_date : date or None\n    Optional last day of the occasion.\nstatus : EventStatus\n    Lifecycle state (``active`` or ``closed``); purely organizational.\nmember_count : int\n    How many transactions are grouped under the event.\ntotal : int\n    The net cost of the event in minor units (cents): the sum of its members'\n    ``effective_amount`` (transfers count zero, advances only the user's\n    share, reimbursements zero). ``0`` for an empty event.\ncurrency : str or None\n    ISO 4217 code of ``total`` \u2014 the members' shared currency. ``null`` for an\n    empty event, which has no currency of its own.\ncreated_at : datetime\n    When the event was created (timezone-aware, UTC).",
         "properties": {
@@ -728,6 +776,69 @@
           "name"
         ],
         "title": "RenameCategoryRequest",
+        "type": "object"
+      },
+      "RuleMatchKind": {
+        "description": "How a :class:`~traccio.domain.models.Rule` matches a transaction's\n``description``.\n\nMatching is always case-insensitive over the raw bank text; see\n``domain/rules.py::rule_matches``. Deliberately no regex \u2014 deterministic,\nuser-legible predicates only (``tasks/ROADMAP.md``: \"the rules engine is\ncheap and its accuracy is knowable\").\n\nAttributes\n----------\nCONTAINS : str\n    The pattern appears anywhere in the description.\nSTARTS_WITH : str\n    The description begins with the pattern.\nEQUALS : str\n    The description equals the pattern exactly (after casefolding).",
+        "enum": [
+          "contains",
+          "starts_with",
+          "equals"
+        ],
+        "title": "RuleMatchKind",
+        "type": "string"
+      },
+      "RuleResponse": {
+        "description": "One rule as returned to the client.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the rule.\ncategory_id : UUID\n    The category assigned when this rule matches.\nmatch_kind : RuleMatchKind\n    The predicate applied to a transaction's ``description``.\npattern : str\n    The text matched against. Returned to its owner over authenticated\n    transport \u2014 it is merchant/counterparty text, never logged (see\n    ``.claude/rules/data-safety.md``).\ncreated_at : datetime\n    When the rule was created (timezone-aware, UTC).",
+        "properties": {
+          "category_id": {
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "match_kind": {
+            "$ref": "#/components/schemas/RuleMatchKind"
+          },
+          "pattern": {
+            "title": "Pattern",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category_id",
+          "match_kind",
+          "pattern",
+          "created_at"
+        ],
+        "title": "RuleResponse",
+        "type": "object"
+      },
+      "RulesResponse": {
+        "description": "Envelope for the rules list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nrules : list[RuleResponse]\n    The user's rules, in evaluation order (the order they fire in \u2014 see\n    :func:`traccio.services.categorization.evaluation_order`).",
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "RulesResponse",
         "type": "object"
       },
       "StartConnectionRequest": {
@@ -2145,6 +2256,115 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/rules": {
+      "get": {
+        "description": "List the current user's rules, in evaluation order.\n\nThe order they are shown in is the order they actually fire in (see\n:func:`~traccio.services.categorization.evaluation_order`).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose rules to return.\n\nReturns\n-------\nRulesResponse\n    The user's rules, most specific first (empty if none).",
+        "operationId": "rules_rules_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rules"
+      },
+      "post": {
+        "description": "Create a rule.\n\nScoped to the current user. A ``404`` if the target category is unknown or\nnot the caller's; a ``409`` if the (normalized) ``(match_kind, pattern)``\ncollides with one of the user's existing rules; a ``422`` if the pattern is\nblank or too long.\n\nParameters\n----------\nbody : CreateRuleRequest\n    The target category, predicate, and pattern.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the rule belongs to.\n\nReturns\n-------\nRuleResponse\n    The created rule.",
+        "operationId": "create_rule_endpoint_rules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Rule Endpoint"
+      }
+    },
+    "/rules/apply": {
+      "post": {
+        "description": "Recompute every rule against the user's transactions.\n\nA full, idempotent recompute \u2014 not incremental: every transaction's\n``suggested_category_id`` is set to the first matching rule's category, or\ncleared to ``None`` if no rule matches (see\n:func:`~traccio.services.categorization.suggest_categories`). Never touches\n``confirmed_category_id``. Detection only suggests\n(``docs/architecture.md``); a transaction with a confirmed category still\nreceives a suggestion underneath it.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose rules and transactions to use.\n\nReturns\n-------\nApplyRulesResponse\n    How many rules were evaluated, and how many transactions were matched\n    vs. cleared.",
+        "operationId": "apply_rules_rules_apply_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyRulesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Apply Rules"
+      }
+    },
+    "/rules/{rule_id}": {
+      "delete": {
+        "description": "Delete a rule.\n\nA ``404`` if the rule is unknown or not the caller's. Deleting a rule does\nnot clear any suggestion it previously produced \u2014 the next ``POST\n/rules/apply`` recomputes from scratch and clears it then.\n\nParameters\n----------\nrule_id : UUID\n    The rule to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the rule belongs to.",
+        "operationId": "remove_rule_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Rule"
       }
     },
     "/transactions": {

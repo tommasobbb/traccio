@@ -15,8 +15,10 @@ from traccio.db.mappers import (
     row_to_account,
     row_to_category,
     row_to_connection,
+    row_to_rule,
     row_to_transaction,
     row_to_user,
+    rule_to_row,
     transaction_to_row,
     user_to_row,
 )
@@ -24,9 +26,10 @@ from traccio.domain.enums import (
     AccountKind,
     ConnectionStatus,
     KeyStrategy,
+    RuleMatchKind,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Category, Connection, Transaction, User
+from traccio.domain.models import Account, Category, Connection, Rule, Transaction, User
 from traccio.domain.money import Money
 
 
@@ -148,3 +151,15 @@ def test_category_round_trips() -> None:
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert row_to_category(category_to_row(category)) == category
+
+
+def test_rule_round_trips() -> None:
+    rule = Rule(
+        id=uuid4(),
+        user_id=uuid4(),
+        category_id=uuid4(),
+        match_kind=RuleMatchKind.CONTAINS,
+        pattern="TEST MERCHANT 01",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    assert row_to_rule(rule_to_row(rule)) == rule

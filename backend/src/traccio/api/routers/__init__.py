@@ -10,6 +10,7 @@ from traccio.api.routers.categories import router as categories_router
 from traccio.api.routers.connections import router as connections_router
 from traccio.api.routers.events import router as events_router
 from traccio.api.routers.health import router as health_router
+from traccio.api.routers.rules import router as rules_router
 from traccio.api.routers.transactions import router as transactions_router
 from traccio.api.routers.transfers import router as transfers_router
 
@@ -20,6 +21,7 @@ __all__ = [
     "connections_router",
     "events_router",
     "health_router",
+    "rules_router",
     "transactions_router",
     "transfers_router",
 ]

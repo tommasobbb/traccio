@@ -21,6 +21,7 @@ from traccio.domain.enums import (
     ConnectionStatus,
     EventStatus,
     KeyStrategy,
+    RuleMatchKind,
     TransactionRole,
     TransactionStatus,
 )
@@ -419,4 +420,42 @@ class Category(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
     name: str
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Rule(BaseModel):
+    """A user-defined mapping from a transaction pattern to a :class:`Category`.
+
+    Applied by the categorization engine (:mod:`traccio.services.categorization`)
+    to write ``Transaction.suggested_category_id`` — automation, never a user
+    confirming an individual transaction (see ``docs/domain.md`` §Rule). A rule
+    only ever writes the *suggested* layer; ``confirmed_category_id`` is set
+    exclusively by direct user action on a transaction.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the rule within Traccio.
+    user_id : UUID
+        Owning user.
+    category_id : UUID
+        The category assigned when this rule matches.
+    match_kind : RuleMatchKind
+        The predicate applied to a transaction's ``description``.
+    pattern : str
+        The text to match against, case-insensitive. Never logged (see
+        ``.claude/rules/data-safety.md`` — it is merchant/counterparty text).
+    created_at : datetime
+        When the rule was created (timezone-aware, UTC). Used as a tiebreak
+        when two rules match with an equal-length pattern (see
+        :func:`traccio.services.categorization.evaluation_order`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    category_id: UUID
+    match_kind: RuleMatchKind
+    pattern: str
     created_at: datetime = Field(default_factory=_now)
