@@ -5,9 +5,14 @@ distinct from the pure :mod:`traccio.domain.models` types they persist; the
 translation between the two lives in :mod:`traccio.db.mappers`, never in
 ``domain``.
 
-Enums are stored as their string ``.value`` (portable ``VARCHAR`` with a check
-constraint rather than a native PostgreSQL enum type), so adding a member does
-not require a type migration and the stored values stay human-readable.
+Enums are stored as their string ``.value`` in a portable ``VARCHAR`` (no native
+PostgreSQL enum type and no check constraint — ``_enum_column`` leaves
+``create_constraint`` at its SQLAlchemy default of ``False``), so adding a member
+never requires a type migration. The column width is still sized to the longest
+current member at the time of the migration that adds it, so a *later* member
+longer than that (e.g. ``rejected`` vs. the original ``pending``/``booked``) does
+need a width-widening migration — see
+``d1f4b6a29c73_widen_transaction_status.py`` for the one this bit already.
 
 Schema-level invariants (see ``docs/architecture.md``):
 
@@ -50,8 +55,9 @@ from traccio.domain.enums import (
 def _enum_column(enum: type[StrEnum]) -> SAEnum:
     """Build a portable string-backed column type for a :class:`StrEnum`.
 
-    Persists the enum's ``.value`` (not its member ``name``) as a ``VARCHAR``
-    with a check constraint, rather than a native database enum type.
+    Persists the enum's ``.value`` (not its member ``name``) as a plain
+    ``VARCHAR``, rather than a native database enum type or a check constraint
+    (``create_constraint`` is left at its SQLAlchemy default of ``False``).
 
     Parameters
     ----------
