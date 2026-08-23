@@ -567,6 +567,22 @@ struct APIClientTests {
         }
     }
 
+    @Test func applyRulesPostsToTheApplyEndpointAndDecodesTheCounts() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/rules/apply")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{ "rules_applied": 4, "matched": 128, "cleared": 401 }"#.utf8))
+        }
+
+        let result = try await client.applyRules()
+        #expect(result.rulesApplied == 4)
+        #expect(result.matched == 128)
+        #expect(result.cleared == 401)
+    }
+
     /// A representative `GET /advances` envelope: one advance, no participants.
     private static let advancesEnvelope = """
         { "advances": [

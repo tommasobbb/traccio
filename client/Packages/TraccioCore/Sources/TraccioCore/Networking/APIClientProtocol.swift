@@ -27,6 +27,7 @@ public protocol APIClientProtocol: Sendable {
     func rules() async throws -> [RuleResponse]
     func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse
     func deleteRule(id: UUID) async throws
+    func applyRules() async throws -> ApplyRulesResponse
     func advances() async throws -> [AdvanceResponse]
     func advance(id: UUID) async throws -> AdvanceResponse
     func createAdvance(_ request: CreateAdvanceRequest) async throws -> AdvanceResponse

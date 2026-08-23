@@ -179,7 +179,15 @@ struct TransactionDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let categoryName {
-                Badge(text: categoryName, style: .neutral)
+                HStack(spacing: 6) {
+                    Badge(text: categoryName, style: .neutral)
+                    // A rule-generated suggestion must not render like an
+                    // explicit user confirmation, now that `POST
+                    // /rules/apply` can produce one.
+                    if model.transaction.confirmedCategoryID == nil {
+                        Badge(text: "Suggerita", style: .neutral)
+                    }
+                }
             }
             Text(model.transaction.displayDescription ?? model.transaction.description)
                 .font(Typography.statFigure)
@@ -252,7 +260,12 @@ struct TransactionDetailView: View {
     }
 
     private func categoryRow(_ category: CategoryResponse) -> some View {
-        let isSelected = category.id == model.transaction.effectiveCategoryID
+        let isConfirmed = category.id == model.transaction.confirmedCategoryID
+        // A suggestion renders as a lightweight tag, never the checkmark
+        // reserved for an explicit confirmation — tapping still confirms it,
+        // same as any other row.
+        let isSuggestedOnly =
+            !isConfirmed && category.id == model.transaction.suggestedCategoryID
         return Button {
             Task { await model.confirm(categoryID: category.id) }
         } label: {
@@ -260,8 +273,11 @@ struct TransactionDetailView: View {
                 Text(category.name)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
+                if isSuggestedOnly {
+                    Badge(text: "Suggerita", style: .neutral)
+                }
                 Spacer()
-                if isSelected {
+                if isConfirmed {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Palette.accent)
                         .accessibilityHidden(true)
@@ -272,7 +288,7 @@ struct TransactionDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(model.isUpdating)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityAddTraits(isConfirmed ? [.isSelected] : [])
     }
 
     private var clearCategoryRow: some View {

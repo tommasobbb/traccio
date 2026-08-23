@@ -298,6 +298,23 @@ public struct APIClient: Sendable {
         try await delete("rules/\(id.uuidString)")
     }
 
+    /// Recompute every one of the caller's rules against every one of their
+    /// transactions.
+    ///
+    /// Mirrors `POST /rules/apply`, `200` with counts. A full, idempotent
+    /// recompute (ADR 0005) — never incremental — that writes only
+    /// `suggested_category_id`, never `confirmed_category_id`. See
+    /// `ApplyRulesResponse`'s docstring: the counts are a snapshot of the
+    /// whole pool, not a change count.
+    ///
+    /// Returns
+    /// -------
+    /// How many rules were evaluated, and how many transactions ended up
+    /// matched vs. cleared.
+    public func applyRules() async throws -> ApplyRulesResponse {
+        try await post("rules/apply")
+    }
+
     /// Fetch the caller's advances.
     ///
     /// Returns

@@ -2,8 +2,8 @@ import SwiftUI
 import TraccioCore
 
 /// "Categorie e regole" — manages the caller's categories and
-/// categorization rules. Running `POST /rules/apply` lands in a later
-/// slice. Reached from the Impostazioni tab (ADR 0009).
+/// categorization rules, and runs `POST /rules/apply`. Reached from the
+/// Impostazioni tab (ADR 0009).
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Categorie/
 /// Regole artboard), so it is built from existing tokens/components — same
@@ -17,6 +17,7 @@ struct CategorizationView: View {
     @State private var editingCategory: CategoryResponse?
     @State private var ruleToDelete: RuleResponse?
     @State private var categoryToDelete: CategoryResponse?
+    @State private var isConfirmingApply = false
 
     /// Create the screen.
     ///
@@ -127,7 +128,6 @@ struct CategorizationView: View {
 
     // MARK: Regole
 
-    /// Running `POST /rules/apply` lands in a later slice.
     private func rulesCard(_ data: CategorizationViewModel.Content) -> some View {
         Card {
             EyebrowLabel(text: "Regole · in ordine di valutazione")
@@ -160,6 +160,7 @@ struct CategorizationView: View {
             Divider().overlay(Palette.separator)
             PillButton(title: "Nuova regola", action: { isPresentingCreateRuleSheet = true })
                 .disabled(data.categories.isEmpty)
+            applyFooter(data)
         }
         .confirmationDialog(
             "Eliminare la regola?",
@@ -173,6 +174,37 @@ struct CategorizationView: View {
             Button("Chiudi", role: .cancel) {}
         } message: { rule in
             Text("La regola su \"\(rule.pattern)\" verrà eliminata.")
+        }
+    }
+
+    /// "Applica regole" — a large, undoable write over every transaction
+    /// (ADR 0005: a full recompute, not incremental), so it asks first
+    /// rather than acting on a single tap, same posture as
+    /// `AdvanceSections`'s destructive actions.
+    private func applyFooter(_ data: CategorizationViewModel.Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let result = model.lastApplyResult {
+                Text(
+                    "\(result.rulesApplied) regole applicate · \(result.matched) movimenti su \(result.matched + result.cleared) hanno un suggerimento"
+                )
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+            }
+            PillButton(
+                title: "Applica regole", isLoading: model.isUpdating,
+                action: { isConfirmingApply = true }
+            )
+            .disabled(data.rules.isEmpty)
+        }
+        .confirmationDialog(
+            "Applicare tutte le regole?", isPresented: $isConfirmingApply, titleVisibility: .visible
+        ) {
+            Button("Applica") { Task { await model.applyRules() } }
+            Button("Chiudi", role: .cancel) {}
+        } message: {
+            Text(
+                "Ricalcola i suggerimenti su tutti i movimenti in base alle regole attuali. Le categorie confermate a mano non vengono toccate."
+            )
         }
     }
 

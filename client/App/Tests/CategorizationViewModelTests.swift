@@ -197,6 +197,53 @@ struct CategorizationViewModelTests {
         #expect(model.actionFailure == .nameTaken)
     }
 
+    @Test func applyRulesPublishesTheCounts() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule()])
+        await client.setCategories([Self.makeCategory()])
+        await client.setApplyRulesResult(ApplyRulesResponse(rulesApplied: 4, matched: 128, cleared: 401))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.applyRules()
+
+        #expect(model.lastApplyResult == ApplyRulesResponse(rulesApplied: 4, matched: 128, cleared: 401))
+        #expect(model.actionFailure == nil)
+    }
+
+    @Test func applyRulesNotifiesSuggestionsChanged() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule()])
+        await client.setCategories([Self.makeCategory()])
+        var notified = 0
+        let model = CategorizationViewModel(client: client, onSuggestionsChanged: { notified += 1 })
+        await model.load()
+
+        await model.applyRules()
+
+        #expect(notified == 1)
+        #expect(await client.applyRulesCallCount == 1)
+    }
+
+    @Test func applyRulesFailureLeavesTheLastResultUntouchedAndNeverNotifies() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule()])
+        await client.setCategories([Self.makeCategory()])
+        await client.setApplyRulesResult(ApplyRulesResponse(rulesApplied: 1, matched: 1, cleared: 0))
+        var notified = 0
+        let model = CategorizationViewModel(client: client, onSuggestionsChanged: { notified += 1 })
+        await model.load()
+        await model.applyRules()
+        #expect(model.lastApplyResult?.matched == 1)
+
+        await client.setApplyRulesError(APIError.badStatus(500))
+        await model.applyRules()
+
+        #expect(model.actionFailure == .generic)
+        #expect(model.lastApplyResult?.matched == 1)
+        #expect(notified == 1)
+    }
+
     @Test func aSecondWriteWhileUpdatingIsIgnored() async throws {
         let client = FakeAPIClient()
         await client.setRules([])

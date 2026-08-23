@@ -3,7 +3,7 @@ import Observation
 import TraccioCore
 
 /// Drives `CategorizationView`: manages categories and categorization
-/// rules. Running `POST /rules/apply` lands in a later slice.
+/// rules, and runs `POST /rules/apply`.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
 /// (`client/CLAUDE.md`). `load()` fails the whole screen if *either* fetch
@@ -53,6 +53,12 @@ final class CategorizationViewModel {
     private(set) var isUpdating = false
     /// The most recent action failure, if any, for the view to surface.
     private(set) var actionFailure: ActionFailure?
+    /// The most recent `POST /rules/apply` result, kept across a subsequent
+    /// `load()` so the footer's count line survives a pull-to-refresh.
+    /// Untouched on a failed apply — see `ApplyRulesResponse`'s docstring for
+    /// why this is a state sentence ("N movimenti su M hanno un
+    /// suggerimento"), never a change count.
+    private(set) var lastApplyResult: ApplyRulesResponse?
 
     /// Client used to reach the backend.
     private let client: any APIClientProtocol
@@ -189,6 +195,19 @@ final class CategorizationViewModel {
     func deleteRule(id: UUID) async {
         await performUpdate { client in
             try await client.deleteRule(id: id)
+        }
+    }
+
+    /// Recompute every rule against every transaction.
+    ///
+    /// A large, undoable write over the whole transaction pool (ADR 0005: a
+    /// full recompute, not incremental) — the view gates this behind an
+    /// explicit confirmation, not a casual tap. On success, publishes the
+    /// counts and notifies `onSuggestionsChanged`.
+    func applyRules() async {
+        await performUpdate(notifiesFreshness: true) { client in
+            let result = try await client.applyRules()
+            self.lastApplyResult = result
         }
     }
 

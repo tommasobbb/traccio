@@ -129,4 +129,16 @@ struct RuleResponseTests {
         )
         #expect(response.rules.isEmpty)
     }
+
+    @Test func decodesApplyResultCounts() throws {
+        let json = """
+            { "rules_applied": 4, "matched": 128, "cleared": 401 }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            ApplyRulesResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.rulesApplied == 4)
+        #expect(response.matched == 128)
+        #expect(response.cleared == 401)
+    }
 }

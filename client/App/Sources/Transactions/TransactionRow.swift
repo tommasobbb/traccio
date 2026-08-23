@@ -111,9 +111,15 @@ struct TransactionRow: View {
             } else if transaction.status == .pending {
                 Badge(text: "In lavorazione", style: .warning)
             } else if let categoryName {
-                Text(categoryName)
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
+                // A rule-generated suggestion must not read like a confirmed
+                // category — appended rather than styled differently, to
+                // avoid a second color claim for one caption.
+                Text(
+                    transaction.confirmedCategoryID == nil
+                        ? "\(categoryName) · suggerita" : categoryName
+                )
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
             }
         }
     }
