@@ -61,4 +61,22 @@ extension TraccioCore {
         formatter.dateFormat = format
         return formatter
     }
+
+    /// Format a `Date` as a timezone-aware ISO 8601 string, for query
+    /// parameters sent to the backend (e.g. `dashboardSummary(start:end:)`).
+    ///
+    /// The counterpart to `iso8601Date(from:)`: this always emits an
+    /// explicit UTC offset, one of the shapes the decoder above accepts, so a
+    /// value round-trips through the API without ambiguity.
+    ///
+    /// Built locally rather than cached in a shared static for the same
+    /// `Sendable` reason as `iso8601Date(from:)`.
+    ///
+    /// - Parameter date: The value to encode.
+    /// - Returns: An ISO 8601 string with a UTC offset.
+    public static func iso8601String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
 }

@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #5856D6; text-decoration: none; }
+    a:hover { color: #423FC0; }
+    .frame {
+      width: 390px; height: 844px; background: #F5F5F7; color: #1C1C1E;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; position: relative;
+      -webkit-font-smoothing: antialiased;
+    }
+    .topbar { flex-shrink: 0; padding: 22px 20px 4px; display: flex; align-items: center; justify-content: space-between; }
+    .title { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: #FFFFFF; border: 1px solid rgba(60,60,67,.08);
+      display: flex; align-items: center; justify-content: center; color: #1C1C1E; flex-shrink: 0;
+    }
+    .scroll { flex: 1; overflow-y: auto; padding: 14px 20px 108px; display: flex; flex-direction: column; gap: 14px; }
+    .banner {
+      display: flex; align-items: flex-start; gap: 12px; background: #FFF1DE; border: 1px solid #FFD8A8;
+      border-radius: 18px; padding: 16px;
+    }
+    .banner-icon { color: #C2660A; flex-shrink: 0; margin-top: 1px; }
+    .banner-text { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .banner-title { font-size: 13.5px; font-weight: 700; color: #8A4B08; line-height: 1.35; }
+    .banner-cta {
+      align-self: flex-start; background: #5856D6; color: #FFFFFF; font-size: 12.5px; font-weight: 700;
+      padding: 8px 14px; border-radius: 999px;
+    }
+    .conn-card {
+      background: #FFFFFF; border-radius: 20px; padding: 18px; border: 1px solid rgba(60,60,67,.06);
+      box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 14px 28px -18px rgba(0,0,0,.20);
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .conn-head { display: flex; align-items: center; gap: 12px; }
+    .bank-mark {
+      width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; flex-shrink: 0;
+    }
+    .conn-name-wrap { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .conn-name { font-size: 15px; font-weight: 700; }
+    .conn-meta { font-size: 11.5px; color: #8E8E93; display: flex; align-items: center; gap: 5px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok { background: #248A3D; }
+    .status-dot.warn { background: #FF9500; }
+    .sync-btn {
+      width: 32px; height: 32px; border-radius: 50%; background: #E5E5EA; color: #6E6E73; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .acct-list { display: flex; flex-direction: column; gap: 1px; }
+    .acct-row {
+      display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid rgba(60,60,67,.06);
+    }
+    .acct-icon { width: 28px; height: 28px; border-radius: 8px; background: #E5E5EA; color: #6E6E73; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .acct-name { font-size: 13px; font-weight: 600; flex: 1; }
+    .acct-currency { font-size: 12px; color: #8E8E93; font-weight: 600; }
+    .add-card {
+      display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px;
+      border: 1.5px dashed rgba(60,60,67,.16); border-radius: 20px; color: #6E6E73; font-size: 13.5px; font-weight: 700;
+    }
+  </style>
+</helmet>
+
+<div class="frame">
+  <div class="topbar">
+    <span class="title">Conti</span>
+    <div class="icon-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <div class="banner">
+      <svg class="banner-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+      <div class="banner-text">
+        <span class="banner-title">Il consenso per Revolut scade tra 9 giorni. Rinnova per continuare a sincronizzare.</span>
+        <span class="banner-cta">Rinnova ora</span>
+      </div>
+    </div>
+
+    <div class="conn-card">
+      <div class="conn-head">
+        <div class="bank-mark" style="background: #1C1C1E; color: #FFFFFF">R</div>
+        <div class="conn-name-wrap">
+          <span class="conn-name">Revolut</span>
+          <span class="conn-meta"><span class="status-dot warn"></span>In scadenza &middot; sincronizzato 4 min fa</span>
+        </div>
+        <div class="sync-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        </div>
+      </div>
+      <div class="acct-list">
+        <div class="acct-row">
+          <div class="acct-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+          <span class="acct-name">Conto corrente</span>
+          <span class="acct-currency">EUR</span>
+        </div>
+        <div class="acct-row">
+          <div class="acct-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+          <span class="acct-name">Conto corrente</span>
+          <span class="acct-currency">CHF</span>
+        </div>
+        <div class="acct-row">
+          <div class="acct-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+          <span class="acct-name">Conto corrente</span>
+          <span class="acct-currency">TRY</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="conn-card">
+      <div class="conn-head">
+        <div class="bank-mark" style="background: #E8E7FB; color: #5856D6">I</div>
+        <div class="conn-name-wrap">
+          <span class="conn-name">Isybank</span>
+          <span class="conn-meta"><span class="status-dot ok"></span>Attivo &middot; sincronizzato 1 ora fa</span>
+        </div>
+        <div class="sync-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        </div>
+      </div>
+      <div class="acct-list">
+        <div class="acct-row">
+          <div class="acct-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg></div>
+          <span class="acct-name">Conto corrente</span>
+          <span class="acct-currency">EUR</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="conn-card">
+      <div class="conn-head">
+        <div class="bank-mark" style="background: #E2F7E6; color: #248A3D">P</div>
+        <div class="conn-name-wrap">
+          <span class="conn-name">PayPal</span>
+          <span class="conn-meta"><span class="status-dot ok"></span>Attivo &middot; sincronizzato 3 ore fa</span>
+        </div>
+        <div class="sync-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        </div>
+      </div>
+      <div class="acct-list">
+        <div class="acct-row">
+          <div class="acct-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg></div>
+          <span class="acct-name">Wallet</span>
+          <span class="acct-currency">multivaluta</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="add-card">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      Collega un nuovo conto
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
