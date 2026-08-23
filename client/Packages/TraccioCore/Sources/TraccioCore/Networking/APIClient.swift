@@ -125,6 +125,18 @@ public struct APIClient: Sendable {
         return envelope.categories
     }
 
+    /// Fetch the caller's advances.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded advances from `GET /advances`, oldest first. Each carries
+    /// the server-derived `receivable`/`reimbursed`/`outstanding`/`excess` —
+    /// the client never recomputes these.
+    public func advances() async throws -> [AdvanceResponse] {
+        let envelope: AdvancesResponse = try await get("advances")
+        return envelope.advances
+    }
+
     /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
     ///
     /// Wraps every failure in an `APIError` so no framework error — which may

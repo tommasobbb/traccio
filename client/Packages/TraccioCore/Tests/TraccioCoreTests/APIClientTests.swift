@@ -222,6 +222,40 @@ struct APIClientTests {
         #expect(categories.count == 1)
         #expect(categories[0].name == "Alimentari")
     }
+
+    /// A representative `GET /advances` envelope: one advance, no participants.
+    private static let advancesEnvelope = """
+        { "advances": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "transaction_id": "22222222-2222-2222-2222-222222222222",
+            "own_share": 1800,
+            "receivable": 3600,
+            "reimbursed": 0,
+            "outstanding": 3600,
+            "excess": 0,
+            "currency": "EUR",
+            "status": "open",
+            "participants": [],
+            "created_at": "2026-08-18T21:40:00+00:00"
+          }
+        ] }
+        """
+
+    @Test func advancesDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/advances")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.advancesEnvelope.utf8))
+        }
+
+        let advances = try await client.advances()
+        #expect(advances.count == 1)
+        #expect(advances[0].ownShare == 1800)
+        #expect(advances[0].status == .open)
+    }
 }
 
 /// A `URLProtocol` that returns a canned response supplied by a handler.

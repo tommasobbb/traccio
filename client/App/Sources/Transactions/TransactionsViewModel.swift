@@ -2,8 +2,9 @@ import Foundation
 import Observation
 import TraccioCore
 
-/// Drives `TransactionsView`: loads a page of transactions plus the category
-/// names needed to label them, and pages in more as the user scrolls.
+/// Drives `TransactionsView`: loads a page of transactions plus the
+/// category/advance/account data needed to label and link them, and pages in
+/// more as the user scrolls.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation, no
 /// arithmetic (that lives in the backend, per `client/CLAUDE.md`). Nothing
@@ -28,6 +29,13 @@ final class TransactionsViewModel {
     /// than failing the whole screen, since the transaction list is the
     /// primary content.
     private(set) var categoryNames: [UUID: String] = [:]
+    /// Transaction id → its advance, for an advance-role row's "quota"
+    /// caption and navigation to `AdvanceDetailView`. Best-effort, same
+    /// reasoning as `categoryNames`.
+    private(set) var advancesByTransactionID: [UUID: AdvanceResponse] = [:]
+    /// Account id → the account, for `AdvanceDetailView`'s header line.
+    /// Best-effort, same reasoning as `categoryNames`.
+    private(set) var accountsByID: [UUID: AccountResponse] = [:]
 
     /// Client used to reach the backend.
     private let client: APIClient
@@ -56,8 +64,9 @@ final class TransactionsViewModel {
         self.pageSize = pageSize
     }
 
-    /// Fetch the first page of transactions and the category names, and
-    /// publish the outcome. Resets any pagination state from a prior load.
+    /// Fetch the first page of transactions plus the category/advance/account
+    /// data, and publish the outcome. Resets any pagination state from a
+    /// prior load.
     ///
     /// A failure is surfaced as `.failed` without carrying the error into the
     /// UI — error details may reference the response and must not be shown
@@ -68,6 +77,8 @@ final class TransactionsViewModel {
         reachedEnd = false
 
         async let categoriesResult = client.categories()
+        async let advancesResult = client.advances()
+        async let accountsResult = client.accounts()
 
         do {
             let page = try await client.transactions(limit: pageSize, offset: 0)
@@ -81,6 +92,14 @@ final class TransactionsViewModel {
 
         if let categories = try? await categoriesResult {
             categoryNames = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.name) })
+        }
+        if let advances = try? await advancesResult {
+            advancesByTransactionID = Dictionary(
+                uniqueKeysWithValues: advances.map { ($0.transactionID, $0) }
+            )
+        }
+        if let accounts = try? await accountsResult {
+            accountsByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
         }
     }
 

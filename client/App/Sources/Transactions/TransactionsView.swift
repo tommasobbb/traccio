@@ -4,12 +4,12 @@ import TraccioCore
 /// The Movimenti screen — the transaction list backing every M2 feature
 /// (transfers, advances, reimbursements, categories) that has no other entry
 /// point in the client yet. Read-only in this slice: no category
-/// confirmation, no transfer confirm/reject, no advance detail — see
-/// `tasks/backlog.md`.
+/// confirmation, no transfer confirm/reject — see `tasks/backlog.md`. An
+/// advance row is the one exception: it links to the read-only
+/// `AdvanceDetailView` (see `TransactionRow`).
 ///
 /// Follows `docs/design/canvas/Transactions.dc.html`, minus the account/
-/// category filter chips and the advance "quota" line (needs `GET
-/// /advances` — a later slice).
+/// category filter chips.
 struct TransactionsView: View {
     @State private var model = TransactionsViewModel()
 
@@ -59,12 +59,17 @@ struct TransactionsView: View {
             EyebrowLabel(text: title(for: group.day))
             VStack(spacing: 6) {
                 ForEach(group.transactions) { transaction in
-                    TransactionRow(transaction: transaction, categoryNames: model.categoryNames)
-                        .onAppear {
-                            if isLastGroup, transaction.id == group.transactions.last?.id {
-                                Task { await model.loadMore() }
-                            }
+                    TransactionRow(
+                        transaction: transaction,
+                        categoryNames: model.categoryNames,
+                        advancesByTransactionID: model.advancesByTransactionID,
+                        accountsByID: model.accountsByID
+                    )
+                    .onAppear {
+                        if isLastGroup, transaction.id == group.transactions.last?.id {
+                            Task { await model.loadMore() }
                         }
+                    }
                 }
             }
         }
