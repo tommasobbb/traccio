@@ -42,6 +42,13 @@ actor FakeAPIClient: APIClientProtocol {
     var createAdvanceToReturn: AdvanceResponse?
     var createAdvanceError: Error?
     var deleteAdvanceError: Error?
+    var writeOffAdvanceToReturn: AdvanceResponse?
+    var writeOffAdvanceError: Error?
+    var reopenAdvanceToReturn: AdvanceResponse?
+    var reopenAdvanceError: Error?
+    var createReimbursementToReturn: ReimbursementResponse?
+    var createReimbursementError: Error?
+    var reimbursementsToReturn: [ReimbursementResponse] = []
     var connectionsToReturn: [ConnectionResponse] = []
     var syncConnectionToReturn = SyncResponse(accountsSynced: 0, transactionsSynced: 0)
     var reauthorizeConnectionToReturn = StartConnectionResponse(
@@ -65,6 +72,9 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var deletedTransferIDs: [UUID] = []
     private(set) var createdAdvanceRequests: [CreateAdvanceRequest] = []
     private(set) var deletedAdvanceIDs: [UUID] = []
+    private(set) var writeOffAdvanceCallCount = 0
+    private(set) var reopenAdvanceCallCount = 0
+    private(set) var createdReimbursementRequests: [CreateReimbursementRequest] = []
 
     /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
     /// legs a confirm/reject call named.
@@ -166,6 +176,30 @@ actor FakeAPIClient: APIClientProtocol {
         deleteAdvanceError = error
     }
 
+    func setWriteOffAdvanceResult(_ advance: AdvanceResponse) {
+        writeOffAdvanceToReturn = advance
+    }
+
+    func setWriteOffAdvanceError(_ error: Error) {
+        writeOffAdvanceError = error
+    }
+
+    func setReopenAdvanceResult(_ advance: AdvanceResponse) {
+        reopenAdvanceToReturn = advance
+    }
+
+    func setReopenAdvanceError(_ error: Error) {
+        reopenAdvanceError = error
+    }
+
+    func setCreateReimbursementResult(_ reimbursement: ReimbursementResponse) {
+        createReimbursementToReturn = reimbursement
+    }
+
+    func setCreateReimbursementError(_ error: Error) {
+        createReimbursementError = error
+    }
+
     // MARK: APIClientProtocol
 
     func accounts() async throws -> [AccountResponse] {
@@ -232,6 +266,33 @@ actor FakeAPIClient: APIClientProtocol {
     func deleteAdvance(id: UUID) async throws {
         if let deleteAdvanceError { throw deleteAdvanceError }
         deletedAdvanceIDs.append(id)
+    }
+
+    func writeOffAdvance(id: UUID) async throws -> AdvanceResponse {
+        writeOffAdvanceCallCount += 1
+        if let writeOffAdvanceError { throw writeOffAdvanceError }
+        guard let writeOffAdvanceToReturn else { throw NotConfigured() }
+        return writeOffAdvanceToReturn
+    }
+
+    func reopenAdvance(id: UUID) async throws -> AdvanceResponse {
+        reopenAdvanceCallCount += 1
+        if let reopenAdvanceError { throw reopenAdvanceError }
+        guard let reopenAdvanceToReturn else { throw NotConfigured() }
+        return reopenAdvanceToReturn
+    }
+
+    func createReimbursement(
+        advanceID: UUID, _ request: CreateReimbursementRequest
+    ) async throws -> ReimbursementResponse {
+        if let createReimbursementError { throw createReimbursementError }
+        createdReimbursementRequests.append(request)
+        guard let createReimbursementToReturn else { throw NotConfigured() }
+        return createReimbursementToReturn
+    }
+
+    func reimbursements(advanceID: UUID) async throws -> [ReimbursementResponse] {
+        reimbursementsToReturn
     }
 
     func connections() async throws -> [ConnectionResponse] {

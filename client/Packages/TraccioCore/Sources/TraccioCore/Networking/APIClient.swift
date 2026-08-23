@@ -259,6 +259,87 @@ public struct APIClient: Sendable {
         try await delete("advances/\(id.uuidString)")
     }
 
+    /// Write off an advance that will never be reimbursed.
+    ///
+    /// Mirrors `POST /advances/{id}/write-off`, `200` with the updated
+    /// advance — `status` becomes `writtenOff` regardless of what is still
+    /// outstanding.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The advance to write off.
+    ///
+    /// Returns
+    /// -------
+    /// The updated advance.
+    public func writeOffAdvance(id: UUID) async throws -> AdvanceResponse {
+        try await post("advances/\(id.uuidString)/write-off")
+    }
+
+    /// Reopen a previously written-off advance.
+    ///
+    /// Mirrors `POST /advances/{id}/reopen`, `200` with the updated advance —
+    /// the inverse of `writeOffAdvance(id:)`.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The advance to reopen.
+    ///
+    /// Returns
+    /// -------
+    /// The updated advance.
+    public func reopenAdvance(id: UUID) async throws -> AdvanceResponse {
+        try await post("advances/\(id.uuidString)/reopen")
+    }
+
+    /// Record a reimbursement against an advance — either a manual cash entry
+    /// or a link to an existing incoming transaction.
+    ///
+    /// Mirrors `POST /advances/{id}/reimbursements`, `201 Created` with the
+    /// created reimbursement. A linked transaction's `role` becomes
+    /// `reimbursement` server-side; the caller re-fetches it via
+    /// `transaction(id:)` to observe the new `effectiveAmount`. The advance's
+    /// derived `reimbursed`/`outstanding`/`status` are not on this response —
+    /// re-fetch via `advance(id:)`.
+    ///
+    /// Parameters
+    /// ----------
+    /// advanceID:
+    ///     The advance being paid back.
+    /// request:
+    ///     The amount, optional linked transaction, and optional note.
+    ///
+    /// Returns
+    /// -------
+    /// The created reimbursement.
+    public func createReimbursement(
+        advanceID: UUID,
+        _ request: CreateReimbursementRequest
+    ) async throws -> ReimbursementResponse {
+        try await post("advances/\(advanceID.uuidString)/reimbursements", body: request)
+    }
+
+    /// Fetch an advance's reimbursements, oldest first.
+    ///
+    /// Mirrors `GET /advances/{id}/reimbursements`.
+    ///
+    /// Parameters
+    /// ----------
+    /// advanceID:
+    ///     The advance whose reimbursements to list.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded reimbursements (empty if none).
+    public func reimbursements(advanceID: UUID) async throws -> [ReimbursementResponse] {
+        let envelope: ReimbursementsResponse = try await get(
+            "advances/\(advanceID.uuidString)/reimbursements"
+        )
+        return envelope.reimbursements
+    }
+
     /// Fetch the caller's bank connections, oldest first.
     ///
     /// Returns

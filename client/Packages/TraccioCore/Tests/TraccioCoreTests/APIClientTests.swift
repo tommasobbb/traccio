@@ -492,6 +492,142 @@ struct APIClientTests {
         }
     }
 
+    @Test func writeOffAdvancePostsToTheWriteOffEndpointAndDecodesTheUpdatedAdvance() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let envelope = """
+            {
+              "id": "\(advanceID.uuidString)",
+              "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "own_share": 1800,
+              "receivable": 3600,
+              "reimbursed": 0,
+              "outstanding": 0,
+              "excess": 0,
+              "currency": "EUR",
+              "status": "written_off",
+              "participants": [],
+              "created_at": "2026-08-18T21:40:00+00:00"
+            }
+            """
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)/write-off")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let advance = try await client.writeOffAdvance(id: advanceID)
+        #expect(advance.status == .writtenOff)
+    }
+
+    @Test func reopenAdvancePostsToTheReopenEndpointAndDecodesTheUpdatedAdvance() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let envelope = """
+            {
+              "id": "\(advanceID.uuidString)",
+              "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "own_share": 1800,
+              "receivable": 3600,
+              "reimbursed": 0,
+              "outstanding": 3600,
+              "excess": 0,
+              "currency": "EUR",
+              "status": "open",
+              "participants": [],
+              "created_at": "2026-08-18T21:40:00+00:00"
+            }
+            """
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)/reopen")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let advance = try await client.reopenAdvance(id: advanceID)
+        #expect(advance.status == .open)
+    }
+
+    @Test func createReimbursementPostsTheRequestAndDecodesTheCreatedReimbursement() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)/reimbursements")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["amount"] as? Int == 1800)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "33333333-3333-3333-3333-333333333333",
+                  "advance_id": "\(advanceID.uuidString)",
+                  "amount": 1800,
+                  "currency": "EUR",
+                  "transaction_id": null,
+                  "note": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let reimbursement = try await client.createReimbursement(
+            advanceID: advanceID, CreateReimbursementRequest(amount: 1800)
+        )
+        #expect(reimbursement.advanceID == advanceID)
+        #expect(reimbursement.amount == 1800)
+    }
+
+    @Test func createReimbursementThrowsBadStatusOnAWrittenOffAdvance() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "advance_written_off"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.createReimbursement(advanceID: UUID(), CreateReimbursementRequest(amount: 100))
+        } throws: { error in
+            guard case APIError.badStatus(422) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func reimbursementsDecodesEnvelope() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let envelope = """
+            { "reimbursements": [
+              {
+                "id": "33333333-3333-3333-3333-333333333333",
+                "advance_id": "\(advanceID.uuidString)",
+                "amount": 1800,
+                "currency": "EUR",
+                "transaction_id": null,
+                "note": null,
+                "created_at": "2026-08-18T21:40:00+00:00"
+              }
+            ] }
+            """
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)/reimbursements")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let reimbursements = try await client.reimbursements(advanceID: advanceID)
+        #expect(reimbursements.count == 1)
+        #expect(reimbursements[0].amount == 1800)
+    }
+
     /// A representative `GET /connections` envelope: one connection, expiring
     /// soon, never synced.
     private static let connectionsEnvelope = """

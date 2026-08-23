@@ -44,4 +44,32 @@ struct JSONCodingTests {
 
         #expect((object?["participants"] as? [Any])?.isEmpty == true)
     }
+
+    @Test func encodesCreateReimbursementRequestWithExplicitSnakeCaseKeys() throws {
+        let transactionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let request = CreateReimbursementRequest(
+            amount: 1800, transactionID: transactionID, note: "Marco via bonifico"
+        )
+
+        let data = try TraccioCore.jsonEncoder().encode(request)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        #expect(object?["amount"] as? Int == 1800)
+        #expect(object?["transaction_id"] as? String == transactionID.uuidString)
+        #expect(object?["note"] as? String == "Marco via bonifico")
+    }
+
+    @Test func encodesCreateReimbursementRequestOmittingNilTransactionAndNote() throws {
+        // The synthesized `Encodable` conformance calls `encodeIfPresent` for
+        // an `Optional` property, which omits the key entirely when `nil` —
+        // not a JSON `null`.
+        let request = CreateReimbursementRequest(amount: 500)
+
+        let data = try TraccioCore.jsonEncoder().encode(request)
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        #expect(object?["amount"] as? Int == 500)
+        #expect(object?["transaction_id"] == nil)
+        #expect(object?["note"] == nil)
+    }
 }

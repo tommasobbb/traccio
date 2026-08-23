@@ -348,4 +348,176 @@ struct TransactionDetailViewModelTests {
         #expect(model.actionFailure == nil)
         #expect(await client.deletedAdvanceIDs.isEmpty)
     }
+
+    @Test func writeOffAdvanceSucceedsAndNotifiesOnAdvanceChange() async throws {
+        let client = FakeAPIClient()
+        let writtenOff = Self.makeAdvance()  // status doesn't need to differ; the fake just echoes it
+        await client.setWriteOffAdvanceResult(writtenOff)
+
+        var advanceChangeCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onAdvanceChange: { _ in advanceChangeCallCount += 1 }
+        )
+
+        await model.writeOffAdvance()
+
+        #expect(model.advance?.id == writtenOff.id)
+        #expect(model.actionFailure == nil)
+        #expect(advanceChangeCallCount == 1)
+        #expect(await client.writeOffAdvanceCallCount == 1)
+    }
+
+    @Test func writeOffAdvanceFailureSetsActionFailureAndLeavesAdvanceInPlace() async throws {
+        let client = FakeAPIClient()
+        await client.setWriteOffAdvanceError(FakeAPIError())
+        let original = Self.makeAdvance()
+
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: original, client: client
+        )
+
+        await model.writeOffAdvance()
+
+        #expect(model.advance?.id == original.id)
+        #expect(model.actionFailure == .generic)
+    }
+
+    @Test func writeOffAdvanceIsANoOpWithoutAnAdvance() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.writeOffAdvance()
+
+        #expect(model.actionFailure == nil)
+        #expect(await client.writeOffAdvanceCallCount == 0)
+    }
+
+    @Test func reopenAdvanceSucceedsAndNotifiesOnAdvanceChange() async throws {
+        let client = FakeAPIClient()
+        let reopened = Self.makeAdvance()
+        await client.setReopenAdvanceResult(reopened)
+
+        var advanceChangeCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onAdvanceChange: { _ in advanceChangeCallCount += 1 }
+        )
+
+        await model.reopenAdvance()
+
+        #expect(model.advance?.id == reopened.id)
+        #expect(model.actionFailure == nil)
+        #expect(advanceChangeCallCount == 1)
+        #expect(await client.reopenAdvanceCallCount == 1)
+    }
+
+    @Test func loadReimbursementCandidatesIfNeededFiltersToPersonalIncomingSameCurrency() async throws {
+        let client = FakeAPIClient()
+        let matching = Self.makeTransaction(id: UUID(), amount: 1000, role: .personal)
+        let outgoing = Self.makeTransaction(id: UUID(), amount: -1000, role: .personal)
+        let alreadyLinked = Self.makeTransaction(id: UUID(), amount: 1000, role: .reimbursement)
+        await client.setTransactions([matching, outgoing, alreadyLinked])
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(), client: client
+        )
+
+        await model.loadReimbursementCandidatesIfNeeded()
+
+        #expect(model.reimbursementCandidates.map(\.id) == [matching.id])
+    }
+
+    @Test func loadReimbursementCandidatesIfNeededLeavesEmptyOnFailure() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(), client: client
+        )
+
+        // No transactions configured on the fake, so `transactions(...)`
+        // returns the default empty array — the candidates list stays empty
+        // rather than the screen failing.
+        await model.loadReimbursementCandidatesIfNeeded()
+
+        #expect(model.reimbursementCandidates.isEmpty)
+    }
+
+    @Test func createReimbursementCashSucceedsRefetchesAdvanceAndDoesNotCallOnUpdate() async throws {
+        let client = FakeAPIClient()
+        let createdReimbursement = ReimbursementResponse(
+            id: UUID(), advanceID: Self.advanceID, amount: 1000, currency: "EUR",
+            transactionID: nil, note: nil, createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        await client.setCreateReimbursementResult(createdReimbursement)
+        let refreshedAdvance = Self.makeAdvance()
+        await client.setAdvance(refreshedAdvance)
+
+        var updateCallCount = 0
+        var advanceChangeCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { _ in updateCallCount += 1 },
+            onAdvanceChange: { _ in advanceChangeCallCount += 1 }
+        )
+
+        await model.createReimbursement(amount: 1000, transactionID: nil, note: "Contanti")
+
+        #expect(model.advance?.id == refreshedAdvance.id)
+        #expect(model.actionFailure == nil)
+        #expect(advanceChangeCallCount == 1)
+        #expect(updateCallCount == 0)
+        let recorded = await client.createdReimbursementRequests
+        #expect(recorded.count == 1)
+    }
+
+    @Test func createReimbursementLinkedRefetchesTheLinkedTransactionAndCallsOnUpdate() async throws {
+        let client = FakeAPIClient()
+        let linkedID = Self.counterpartID
+        let createdReimbursement = ReimbursementResponse(
+            id: UUID(), advanceID: Self.advanceID, amount: 1000, currency: "EUR",
+            transactionID: linkedID, note: nil, createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        await client.setCreateReimbursementResult(createdReimbursement)
+        await client.setAdvance(Self.makeAdvance())
+        let refreshedLinked = Self.makeTransaction(id: linkedID, amount: 1000, role: .reimbursement)
+        await client.setTransaction(refreshedLinked, forID: linkedID)
+
+        var updatedTransaction: TransactionResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { updatedTransaction = $0 }
+        )
+
+        await model.createReimbursement(amount: 1000, transactionID: linkedID, note: nil)
+
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.id == linkedID)
+        #expect(updatedTransaction?.role == .reimbursement)
+    }
+
+    @Test func createReimbursementFailureSetsActionFailureAndNeverCallsOnUpdate() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateReimbursementError(FakeAPIError())
+
+        var updateCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { _ in updateCallCount += 1 }
+        )
+
+        await model.createReimbursement(amount: 1000, transactionID: nil, note: nil)
+
+        #expect(model.actionFailure == .generic)
+        #expect(updateCallCount == 0)
+    }
+
+    @Test func createReimbursementIsANoOpWithoutAnAdvance() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.createReimbursement(amount: 1000, transactionID: nil, note: nil)
+
+        #expect(model.actionFailure == nil)
+        let recorded = await client.createdReimbursementRequests
+        #expect(recorded.isEmpty)
+    }
 }

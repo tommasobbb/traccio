@@ -29,6 +29,7 @@ import TraccioCore
 struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
     @State private var isPresentingCreateAdvanceSheet = false
+    @State private var isPresentingAddReimbursementSheet = false
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -93,7 +94,13 @@ struct TransactionDetailView: View {
                         transaction: model.transaction,
                         advance: advance,
                         isUpdating: model.isUpdating,
-                        onUnlink: { Task { await model.deleteAdvance() } }
+                        onUnlink: { Task { await model.deleteAdvance() } },
+                        onWriteOff: { Task { await model.writeOffAdvance() } },
+                        onReopen: { Task { await model.reopenAdvance() } },
+                        onAddReimbursement: {
+                            Task { await model.loadReimbursementCandidatesIfNeeded() }
+                            isPresentingAddReimbursementSheet = true
+                        }
                     )
                 } else if TraccioCore.canBecomeAdvance(model.transaction) {
                     markAsAdvanceCard
@@ -129,6 +136,25 @@ struct TransactionDetailView: View {
                     }
                 },
                 onCancel: { isPresentingCreateAdvanceSheet = false }
+            )
+        }
+        .sheet(isPresented: $isPresentingAddReimbursementSheet) {
+            AddReimbursementSheet(
+                candidates: model.reimbursementCandidates,
+                isCreating: model.isUpdating,
+                failureMessage: model.actionFailure != nil
+                    ? "Non è stato possibile registrare il rimborso. Riprova." : nil,
+                onCreate: { amount, transactionID, note in
+                    Task {
+                        await model.createReimbursement(
+                            amount: amount, transactionID: transactionID, note: note
+                        )
+                        if model.actionFailure == nil {
+                            isPresentingAddReimbursementSheet = false
+                        }
+                    }
+                },
+                onCancel: { isPresentingAddReimbursementSheet = false }
             )
         }
     }
