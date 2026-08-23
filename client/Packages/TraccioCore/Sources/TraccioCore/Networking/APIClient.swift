@@ -206,6 +206,59 @@ public struct APIClient: Sendable {
         return envelope.advances
     }
 
+    /// Fetch one advance by id.
+    ///
+    /// Mirrors `GET /advances/{id}`. Used to re-fetch an advance's derived
+    /// `reimbursed`/`outstanding`/`status` after recording a reimbursement,
+    /// without re-fetching the whole list.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The advance to fetch.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded advance.
+    public func advance(id: UUID) async throws -> AdvanceResponse {
+        try await get("advances/\(id.uuidString)")
+    }
+
+    /// Create an advance on a transaction — the explicit user action that
+    /// marks money laid out on someone else's behalf.
+    ///
+    /// Mirrors `POST /advances`, `201 Created` with the created advance. Sets
+    /// the transaction's `role` to `advance` server-side; the caller
+    /// re-fetches it via `transaction(id:)` to observe the new
+    /// `effectiveAmount`, same discipline as
+    /// `confirmTransfer(outgoingID:incomingID:)`.
+    ///
+    /// Parameters
+    /// ----------
+    /// request:
+    ///     The transaction, the user's own share, and optional participants.
+    ///
+    /// Returns
+    /// -------
+    /// The created advance.
+    public func createAdvance(_ request: CreateAdvanceRequest) async throws -> AdvanceResponse {
+        try await post("advances", body: request)
+    }
+
+    /// Delete an advance and revert its transaction to `personal`.
+    ///
+    /// Mirrors `DELETE /advances/{id}`, `204 No Content` on success. The
+    /// caller re-fetches the transaction via `transaction(id:)` to observe
+    /// its restored `effectiveAmount`.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The advance to delete.
+    public func deleteAdvance(id: UUID) async throws {
+        try await delete("advances/\(id.uuidString)")
+    }
+
     /// Fetch the caller's bank connections, oldest first.
     ///
     /// Returns

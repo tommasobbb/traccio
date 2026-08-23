@@ -56,4 +56,30 @@ extension TraccioCore {
         guard explicitSign, amount > 0 else { return formatted }
         return "+\(formatted)"
     }
+
+    /// Parse a user-typed decimal amount into minor units (cents).
+    ///
+    /// The inverse counterpart to `formatMoney`, for a plain currency input
+    /// field with no currency symbol or thousands separator — just digits and
+    /// one decimal separator. Accepts both `.` and `,` since Traccio's UI is
+    /// Italian-first but the device's decimal separator may be either. This
+    /// is UI-input parsing, not a financial derivation: the backend still
+    /// validates and is the final authority on whether the resulting amount
+    /// is acceptable (e.g. `own_share` in range), answering `422` if not.
+    ///
+    /// Parameters
+    /// ----------
+    /// text:
+    ///     The raw field contents.
+    ///
+    /// Returns
+    /// -------
+    /// The amount in cents, or `nil` for empty, malformed, or negative input.
+    public static func parseMoneyInput(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), value >= 0 else { return nil }
+        return Int((value * 100).rounded())
+    }
 }

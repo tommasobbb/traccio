@@ -13,21 +13,22 @@ import TraccioCore
 ///
 /// The header and advance cards previously lived in a dedicated
 /// `AdvanceDetailView`; that view is now `AdvanceSections`, embedded here only
-/// for a transaction whose advance resolved — every other transaction gets
-/// the header and category card alone. A transaction whose `role ==
+/// for a transaction whose advance resolved (`model.advance`, kept in the
+/// view model rather than a fixed `let` — creating or deleting the advance
+/// right here changes it, unlike the category-confirmation flow's other
+/// side effects). An eligible transaction with no advance
+/// (`TraccioCore.canBecomeAdvance(_:)`) instead gets a "Segna come anticipo"
+/// card presenting `CreateAdvanceSheet`. A transaction whose `role ==
 /// .transfer` and whose transfer resolved additionally gets `TransferSection`
 /// — the counterpart leg and an "Annulla collegamento" action. No mockup
-/// covers the category picker or the transfer card
-/// (`docs/design/canvas/TransactionDetail.dc.html` only covers the advance
-/// case), so both are built from existing tokens/components
-/// (`Card`, `Badge`, `EyebrowLabel`, `PillButton`, `Banner`) rather than a new
-/// design pass.
+/// covers the category picker, the advance-creation flow, or the transfer
+/// card (`docs/design/canvas/TransactionDetail.dc.html` only covers the
+/// already-created advance case), so all three are built from existing
+/// tokens/components (`Card`, `Badge`, `EyebrowLabel`, `PillButton`,
+/// `Banner`) rather than a new design pass.
 struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
-    /// This transaction's advance, if it has one and the lookup resolved.
-    /// Fixed at `init` — an advance's split/participants/reimbursements don't
-    /// change as a side effect of a category action.
-    private let advance: AdvanceResponse?
+    @State private var isPresentingCreateAdvanceSheet = false
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -56,6 +57,10 @@ struct TransactionDetailView: View {
     /// onUpdate:
     ///     Called with the refreshed transaction after a successful
     ///     confirm/clear, so the caller can update its own list in place.
+    /// onAdvanceChange:
+    ///     Called with this transaction's current advance after a successful
+    ///     create/delete, so the caller can keep its own advance lookup in
+    ///     place. Defaults to a no-op.
     init(
         transaction: TransactionResponse,
         categories: [CategoryResponse],
@@ -63,15 +68,15 @@ struct TransactionDetailView: View {
         transfer: TransferResponse? = nil,
         account: AccountResponse?,
         client: any APIClientProtocol = APIClient.devDefault,
-        onUpdate: @escaping (TransactionResponse) -> Void
+        onUpdate: @escaping (TransactionResponse) -> Void,
+        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in }
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
-                transaction: transaction, categories: categories, transfer: transfer,
-                client: client, onUpdate: onUpdate
+                transaction: transaction, advance: advance, categories: categories, transfer: transfer,
+                client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange
             )
         )
-        self.advance = advance
         self.account = account
     }
 
@@ -80,11 +85,18 @@ struct TransactionDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 if model.actionFailure != nil {
-                    Banner(message: "Non è stato possibile aggiornare la categoria. Riprova.")
+                    Banner(message: "Non è stato possibile completare l'operazione. Riprova.")
                 }
                 categoryCard
-                if let advance {
-                    AdvanceSections(transaction: model.transaction, advance: advance)
+                if let advance = model.advance {
+                    AdvanceSections(
+                        transaction: model.transaction,
+                        advance: advance,
+                        isUpdating: model.isUpdating,
+                        onUnlink: { Task { await model.deleteAdvance() } }
+                    )
+                } else if TraccioCore.canBecomeAdvance(model.transaction) {
+                    markAsAdvanceCard
                 }
                 if model.transfer != nil {
                     TransferSection(
@@ -101,6 +113,38 @@ struct TransactionDetailView: View {
         .task {
             await model.loadCategoriesIfNeeded()
             await model.loadTransferIfNeeded()
+        }
+        .sheet(isPresented: $isPresentingCreateAdvanceSheet) {
+            CreateAdvanceSheet(
+                transaction: model.transaction,
+                isCreating: model.isUpdating,
+                failureMessage: model.actionFailure != nil
+                    ? "Non è stato possibile creare l'anticipo. Riprova." : nil,
+                onCreate: { ownShare, participants in
+                    Task {
+                        await model.createAdvance(ownShare: ownShare, participants: participants)
+                        if model.actionFailure == nil {
+                            isPresentingCreateAdvanceSheet = false
+                        }
+                    }
+                },
+                onCancel: { isPresentingCreateAdvanceSheet = false }
+            )
+        }
+    }
+
+    // MARK: Advance
+
+    private var markAsAdvanceCard: some View {
+        Card {
+            EyebrowLabel(text: "Anticipo")
+            Text("Hai pagato per qualcun altro su questo movimento?")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+            PillButton(
+                title: "Segna come anticipo",
+                action: { isPresentingCreateAdvanceSheet = true }
+            )
         }
     }
 

@@ -47,6 +47,16 @@ struct TransactionDetailViewModelTests {
         )
     }
 
+    private static let advanceID = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+
+    private static func makeAdvance(ownShare: Int = 1800) -> AdvanceResponse {
+        AdvanceResponse(
+            id: advanceID, transactionID: transactionID, ownShare: ownShare, receivable: 3600,
+            reimbursed: 0, outstanding: 3600, excess: 0, currency: "EUR", status: .open,
+            participants: [], createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
     @Test func confirmSucceedsRefetchesAndNotifiesOnUpdate() async throws {
         let client = FakeAPIClient()
         let original = Self.makeTransaction()
@@ -228,5 +238,114 @@ struct TransactionDetailViewModelTests {
 
         #expect(model.actionFailure == nil)
         #expect(await client.deletedTransferIDs.isEmpty)
+    }
+
+    @Test func createAdvanceSucceedsRefetchesAndNotifiesBothCallbacks() async throws {
+        let client = FakeAPIClient()
+        let created = Self.makeAdvance()
+        await client.setCreateAdvanceResult(created)
+        let refreshedTransaction = Self.makeTransaction(role: .advance)
+        await client.setTransaction(refreshedTransaction)
+
+        var updatedTransaction: TransactionResponse?
+        var advanceChangeCallCount = 0
+        var lastAdvanceChange: AdvanceResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onUpdate: { updatedTransaction = $0 },
+            onAdvanceChange: {
+                advanceChangeCallCount += 1
+                lastAdvanceChange = $0
+            }
+        )
+
+        await model.createAdvance(
+            ownShare: 1800, participants: [ParticipantRequest(name: "Marco", expectedAmount: 1800)]
+        )
+
+        #expect(model.advance?.id == created.id)
+        #expect(model.transaction.role == .advance)
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.role == .advance)
+        #expect(advanceChangeCallCount == 1)
+        #expect(lastAdvanceChange?.id == created.id)
+        let recorded = await client.createdAdvanceRequests
+        #expect(recorded.count == 1)
+    }
+
+    @Test func createAdvanceFailureLeavesTransactionUnchangedAndNeverNotifies() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateAdvanceError(FakeAPIError())
+        let original = Self.makeTransaction()
+
+        var updateCallCount = 0
+        var advanceChangeCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: original, client: client,
+            onUpdate: { _ in updateCallCount += 1 }, onAdvanceChange: { _ in advanceChangeCallCount += 1 }
+        )
+
+        await model.createAdvance(ownShare: 1800, participants: [])
+
+        #expect(model.transaction == original)
+        #expect(model.advance == nil)
+        #expect(model.actionFailure == .generic)
+        #expect(updateCallCount == 0)
+        #expect(advanceChangeCallCount == 0)
+    }
+
+    @Test func deleteAdvanceSucceedsRefetchesAndNotifiesBothCallbacks() async throws {
+        let client = FakeAPIClient()
+        let refreshedTransaction = Self.makeTransaction(role: .personal)
+        await client.setTransaction(refreshedTransaction)
+
+        var updatedTransaction: TransactionResponse?
+        var advanceChangeCallCount = 0
+        var lastAdvanceChangeWasNil = false
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { updatedTransaction = $0 },
+            onAdvanceChange: {
+                advanceChangeCallCount += 1
+                lastAdvanceChangeWasNil = $0 == nil
+            }
+        )
+
+        await model.deleteAdvance()
+
+        #expect(model.advance == nil)
+        #expect(model.transaction.role == .personal)
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.role == .personal)
+        #expect(advanceChangeCallCount == 1)
+        #expect(lastAdvanceChangeWasNil)
+        #expect(await client.deletedAdvanceIDs == [Self.advanceID])
+    }
+
+    @Test func deleteAdvanceFailureLeavesTheAdvanceInPlaceAndNeverNotifies() async throws {
+        let client = FakeAPIClient()
+        await client.setDeleteAdvanceError(FakeAPIError())
+
+        var updateCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { _ in updateCallCount += 1 }
+        )
+
+        await model.deleteAdvance()
+
+        #expect(model.advance != nil)
+        #expect(model.actionFailure == .generic)
+        #expect(updateCallCount == 0)
+    }
+
+    @Test func deleteAdvanceIsANoOpWithoutAnAdvance() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.deleteAdvance()
+
+        #expect(model.actionFailure == nil)
+        #expect(await client.deletedAdvanceIDs.isEmpty)
     }
 }

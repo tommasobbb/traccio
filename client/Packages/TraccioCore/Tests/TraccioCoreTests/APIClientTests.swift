@@ -373,6 +373,125 @@ struct APIClientTests {
         #expect(advances[0].status == .open)
     }
 
+    @Test func advanceFetchesOneRowByID() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        // `GET /advances/{id}` answers with the bare object, not the
+        // `{ "advances": [...] }` envelope `GET /advances` uses.
+        let envelope = """
+            {
+              "id": "\(advanceID.uuidString)",
+              "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "own_share": 1800,
+              "receivable": 3600,
+              "reimbursed": 1800,
+              "outstanding": 1800,
+              "excess": 0,
+              "currency": "EUR",
+              "status": "open",
+              "participants": [],
+              "created_at": "2026-08-18T21:40:00+00:00"
+            }
+            """
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let advance = try await client.advance(id: advanceID)
+        #expect(advance.id == advanceID)
+        #expect(advance.ownShare == 1800)
+        #expect(advance.reimbursed == 1800)
+    }
+
+    @Test func createAdvancePostsTheRequestAndDecodesTheCreatedAdvance() async throws {
+        let transactionID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/advances")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["transaction_id"] as? String == transactionID.uuidString)
+            #expect(body?["own_share"] as? Int == 1800)
+            // 201 Created, with the created advance in the body.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "transaction_id": "\(transactionID.uuidString)",
+                  "own_share": 1800,
+                  "receivable": 3600,
+                  "reimbursed": 0,
+                  "outstanding": 3600,
+                  "excess": 0,
+                  "currency": "EUR",
+                  "status": "open",
+                  "participants": [],
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let advance = try await client.createAdvance(
+            CreateAdvanceRequest(transactionID: transactionID, ownShare: 1800)
+        )
+        #expect(advance.transactionID == transactionID)
+        #expect(advance.ownShare == 1800)
+    }
+
+    @Test func createAdvanceThrowsBadStatusOnInvalidShare() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "share_out_of_range"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.createAdvance(CreateAdvanceRequest(transactionID: UUID(), ownShare: 999_999))
+        } throws: { error in
+            guard case APIError.badStatus(422) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func deleteAdvanceIssuesADeleteToTheAdvanceEndpoint() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/advances/\(advanceID.uuidString)")
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteAdvance(id: advanceID)
+    }
+
+    @Test func deleteAdvanceThrowsBadStatusOnUnknownAdvance() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown advance"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteAdvance(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
     /// A representative `GET /connections` envelope: one connection, expiring
     /// soon, never synced.
     private static let connectionsEnvelope = """

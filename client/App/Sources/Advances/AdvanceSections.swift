@@ -15,16 +15,24 @@ import TraccioCore
 /// the real data can't honestly support today (`tasks/backlog.md`): the
 /// event chip (no endpoint resolves "which event is this transaction in")
 /// and per-participant reimbursement status (a `Reimbursement` links only to
-/// the advance as a whole, never to a specific `Participant`). Also
-/// read-only here: no write-off / add-reimbursement actions.
+/// the advance as a whole, never to a specific `Participant`).
 struct AdvanceSections: View {
     let transaction: TransactionResponse
     let advance: AdvanceResponse
+    /// Set while a delete (or, from the next slice, a write-off/reopen/
+    /// reimbursement) is in flight, to disable the actions here.
+    var isUpdating: Bool = false
+    /// Called after the destructive confirmation, to delete this advance and
+    /// revert the transaction to `personal`.
+    let onUnlink: () -> Void
+
+    @State private var isConfirmingUnlink = false
 
     var body: some View {
         splitCard
         participantsCard
         reimbursementsCard
+        unlinkRow
     }
 
     // MARK: Split
@@ -198,5 +206,39 @@ struct AdvanceSections: View {
     private var progressFraction: CGFloat {
         guard advance.receivable > 0 else { return 0 }
         return min(1, CGFloat(advance.reimbursed) / CGFloat(advance.receivable))
+    }
+
+    // MARK: Unlink
+
+    /// "Annulla anticipo" — destructive, so it asks first
+    /// (`.confirmationDialog`) rather than acting on a single tap. The
+    /// inverse of creating one: the transaction reverts to `personal` and its
+    /// `effectiveAmount` becomes the full amount again.
+    private var unlinkRow: some View {
+        Button {
+            isConfirmingUnlink = true
+        } label: {
+            HStack(spacing: 6) {
+                if isUpdating {
+                    ProgressView().controlSize(.mini)
+                }
+                Text("Annulla anticipo")
+                    .font(Typography.body.weight(.semibold))
+                    .foregroundStyle(Palette.inkSecondary)
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isUpdating)
+        .confirmationDialog(
+            "Annullare l'anticipo?", isPresented: $isConfirmingUnlink, titleVisibility: .visible
+        ) {
+            Button("Annulla anticipo", role: .destructive, action: onUnlink)
+            Button("Chiudi", role: .cancel) {}
+        } message: {
+            Text("Il movimento tornerà a essere una spesa personale.")
+        }
     }
 }

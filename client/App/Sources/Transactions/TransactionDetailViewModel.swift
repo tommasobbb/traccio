@@ -26,6 +26,13 @@ final class TransactionDetailViewModel {
     /// The transaction shown, refreshed in place after a successful
     /// confirm/clear.
     private(set) var transaction: TransactionResponse
+    /// This transaction's advance, if it has one. Seeded at `init` from
+    /// `TransactionsViewModel.advancesByTransactionID`; refreshed in place
+    /// after `createAdvance(ownShare:participants:)` or
+    /// `deleteAdvance()` succeeds — unlike `AdvanceSections`'s previous
+    /// `let`, this can now change as a side effect of a user action on this
+    /// screen, not just from what the caller passed in.
+    private(set) var advance: AdvanceResponse?
     /// The caller's categories, for the picker. Seeded from
     /// `TransactionsViewModel.categories` (already fetched for the list) to
     /// avoid a flash of empty; `loadCategoriesIfNeeded()` fetches on its own
@@ -52,6 +59,12 @@ final class TransactionDetailViewModel {
     /// clear, so the caller (`TransactionsViewModel.replace(_:)`) can update
     /// the Movimenti row in place without a full reload.
     private let onUpdate: (TransactionResponse) -> Void
+    /// Invoked with this transaction's current advance (`nil` once it has
+    /// none) after a successful create/delete, so the caller
+    /// (`TransactionsViewModel.updateAdvance(_:for:)`) can keep
+    /// `advancesByTransactionID` in sync — an advance is not part of
+    /// `TransactionResponse`, so `onUpdate` alone cannot carry this.
+    private let onAdvanceChange: (AdvanceResponse?) -> Void
 
     /// Create the view model.
     ///
@@ -59,6 +72,9 @@ final class TransactionDetailViewModel {
     /// ----------
     /// transaction:
     ///     The transaction to show and act on.
+    /// advance:
+    ///     This transaction's advance, if it has one and the caller's lookup
+    ///     resolved it. `nil` for every other role, or if the lookup failed.
     /// categories:
     ///     Categories already fetched by the caller, or empty to fetch fresh
     ///     via `loadCategoriesIfNeeded()`.
@@ -71,18 +87,26 @@ final class TransactionDetailViewModel {
     /// onUpdate:
     ///     Called with the refreshed transaction after a successful write.
     ///     Defaults to a no-op for previews and callers that don't need it.
+    /// onAdvanceChange:
+    ///     Called with the transaction's current advance after a successful
+    ///     create/delete. Defaults to a no-op for previews and callers that
+    ///     don't need it.
     init(
         transaction: TransactionResponse,
+        advance: AdvanceResponse? = nil,
         categories: [CategoryResponse] = [],
         transfer: TransferResponse? = nil,
         client: any APIClientProtocol = APIClient.devDefault,
-        onUpdate: @escaping (TransactionResponse) -> Void = { _ in }
+        onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
+        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in }
     ) {
         self.transaction = transaction
+        self.advance = advance
         self.categories = categories
         self.transfer = transfer
         self.client = client
         self.onUpdate = onUpdate
+        self.onAdvanceChange = onAdvanceChange
     }
 
     /// Fetch categories if none were seeded at `init`.
@@ -174,6 +198,70 @@ final class TransactionDetailViewModel {
             self.counterpartTransaction = nil
             onUpdate(refreshedOwn)
             onUpdate(refreshedCounterpart)
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Create an advance on this transaction — the explicit user action from
+    /// `CreateAdvanceSheet`.
+    ///
+    /// On success, both the created advance and the refreshed transaction
+    /// (its `role` is now `advance`, `effectiveAmount` now `ownShare`) are
+    /// published, and both `onUpdate`/`onAdvanceChange` fire so the caller
+    /// can update the Movimenti row and `advancesByTransactionID` alike.
+    /// Unlike `performUpdate`, this also needs the created advance itself
+    /// (not part of `TransactionResponse`), so it does not reuse that
+    /// helper.
+    ///
+    /// Parameters
+    /// ----------
+    /// ownShare:
+    ///     The user's declared share, a positive magnitude in the
+    ///     transaction's currency. The backend validates the range; an
+    ///     out-of-range value surfaces as `actionFailure`.
+    /// participants:
+    ///     People who owe the user back; may be empty.
+    func createAdvance(ownShare: Int, participants: [ParticipantRequest]) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            let created = try await client.createAdvance(
+                CreateAdvanceRequest(
+                    transactionID: transaction.id, ownShare: ownShare, participants: participants
+                )
+            )
+            let refreshed = try await client.transaction(id: transaction.id)
+            transaction = refreshed
+            advance = created
+            onUpdate(refreshed)
+            onAdvanceChange(created)
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Delete this transaction's advance, reverting it to `personal`.
+    ///
+    /// A no-op without an advance. On success, both the refreshed transaction
+    /// (`effectiveAmount` is the full amount again) and the now-`nil`
+    /// advance are published and handed to `onUpdate`/`onAdvanceChange`.
+    func deleteAdvance() async {
+        guard let advance, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            try await client.deleteAdvance(id: advance.id)
+            let refreshed = try await client.transaction(id: transaction.id)
+            transaction = refreshed
+            self.advance = nil
+            onUpdate(refreshed)
+            onAdvanceChange(nil)
         } catch {
             actionFailure = .generic
         }

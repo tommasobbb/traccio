@@ -37,6 +37,11 @@ actor FakeAPIClient: APIClientProtocol {
     var seedDefaultCategoriesToReturn: [CategoryResponse] = []
     var seedDefaultCategoriesError: Error?
     var advancesToReturn: [AdvanceResponse] = []
+    var advanceToReturn: AdvanceResponse?
+    var advanceError: Error?
+    var createAdvanceToReturn: AdvanceResponse?
+    var createAdvanceError: Error?
+    var deleteAdvanceError: Error?
     var connectionsToReturn: [ConnectionResponse] = []
     var syncConnectionToReturn = SyncResponse(accountsSynced: 0, transactionsSynced: 0)
     var reauthorizeConnectionToReturn = StartConnectionResponse(
@@ -58,6 +63,8 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var confirmedTransferPairs: [RecordedTransferPair] = []
     private(set) var rejectedTransferPairs: [RecordedTransferPair] = []
     private(set) var deletedTransferIDs: [UUID] = []
+    private(set) var createdAdvanceRequests: [CreateAdvanceRequest] = []
+    private(set) var deletedAdvanceIDs: [UUID] = []
 
     /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
     /// legs a confirm/reject call named.
@@ -139,6 +146,26 @@ actor FakeAPIClient: APIClientProtocol {
         deleteTransferError = error
     }
 
+    func setAdvance(_ advance: AdvanceResponse) {
+        advanceToReturn = advance
+    }
+
+    func setAdvanceError(_ error: Error) {
+        advanceError = error
+    }
+
+    func setCreateAdvanceResult(_ advance: AdvanceResponse) {
+        createAdvanceToReturn = advance
+    }
+
+    func setCreateAdvanceError(_ error: Error) {
+        createAdvanceError = error
+    }
+
+    func setDeleteAdvanceError(_ error: Error) {
+        deleteAdvanceError = error
+    }
+
     // MARK: APIClientProtocol
 
     func accounts() async throws -> [AccountResponse] {
@@ -187,6 +214,24 @@ actor FakeAPIClient: APIClientProtocol {
 
     func advances() async throws -> [AdvanceResponse] {
         advancesToReturn
+    }
+
+    func advance(id: UUID) async throws -> AdvanceResponse {
+        if let advanceError { throw advanceError }
+        guard let advanceToReturn else { throw NotConfigured() }
+        return advanceToReturn
+    }
+
+    func createAdvance(_ request: CreateAdvanceRequest) async throws -> AdvanceResponse {
+        if let createAdvanceError { throw createAdvanceError }
+        createdAdvanceRequests.append(request)
+        guard let createAdvanceToReturn else { throw NotConfigured() }
+        return createAdvanceToReturn
+    }
+
+    func deleteAdvance(id: UUID) async throws {
+        if let deleteAdvanceError { throw deleteAdvanceError }
+        deletedAdvanceIDs.append(id)
     }
 
     func connections() async throws -> [ConnectionResponse] {

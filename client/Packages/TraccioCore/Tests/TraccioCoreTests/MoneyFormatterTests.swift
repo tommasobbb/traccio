@@ -44,4 +44,35 @@ struct MoneyFormatterTests {
         #expect(formatted.contains("5.00") || formatted.contains("5,00"))
         #expect(formatted.contains("XXX"))
     }
+
+    @Test func parseMoneyInputAcceptsADotDecimalSeparator() {
+        #expect(TraccioCore.parseMoneyInput("18.50") == 1850)
+    }
+
+    @Test func parseMoneyInputAcceptsACommaDecimalSeparator() {
+        #expect(TraccioCore.parseMoneyInput("18,50") == 1850)
+    }
+
+    @Test func parseMoneyInputAcceptsAWholeNumberWithNoDecimalPart() {
+        #expect(TraccioCore.parseMoneyInput("20") == 2000)
+    }
+
+    @Test func parseMoneyInputReturnsNilForEmptyInput() {
+        #expect(TraccioCore.parseMoneyInput("") == nil)
+        #expect(TraccioCore.parseMoneyInput("   ") == nil)
+    }
+
+    @Test func parseMoneyInputReturnsNilForMalformedInput() {
+        #expect(TraccioCore.parseMoneyInput("not a number") == nil)
+    }
+
+    @Test func parseMoneyInputReturnsNilForNegativeInput() {
+        // Every field this feeds (own_share, expected_amount, a
+        // reimbursement amount) is a positive magnitude on the wire.
+        #expect(TraccioCore.parseMoneyInput("-5") == nil)
+    }
+
+    @Test func parseMoneyInputAcceptsZero() {
+        #expect(TraccioCore.parseMoneyInput("0") == 0)
+    }
 }

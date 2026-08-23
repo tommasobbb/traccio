@@ -31,6 +31,11 @@ struct TransactionRow: View {
     /// action, so `TransactionsViewModel.replace(_:)` can update this row's
     /// data without a full reload.
     let onUpdate: (TransactionResponse) -> Void
+    /// Called with this transaction's current advance after a successful
+    /// create/delete, so `TransactionsViewModel.updateAdvance(_:for:)` can
+    /// keep `advancesByTransactionID` in sync — an advance is not part of
+    /// `TransactionResponse`, so `onUpdate` alone cannot carry this.
+    let onAdvanceUpdate: (AdvanceResponse?) -> Void
 
     var body: some View {
         NavigationLink {
@@ -41,7 +46,8 @@ struct TransactionRow: View {
                 transfer: transfersByTransactionID[transaction.id],
                 account: accountsByID[transaction.accountID],
                 client: client,
-                onUpdate: onUpdate
+                onUpdate: onUpdate,
+                onAdvanceChange: onAdvanceUpdate
             )
         } label: {
             rowContent

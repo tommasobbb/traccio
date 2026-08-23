@@ -82,7 +82,8 @@ struct TransactionsView: View {
                         transfersByTransactionID: model.transfersByTransactionID,
                         accountsByID: model.accountsByID,
                         client: model.client,
-                        onUpdate: { model.replace($0) }
+                        onUpdate: { model.replace($0) },
+                        onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) }
                     )
                     .onAppear {
                         if isLastGroup, transaction.id == group.transactions.last?.id {
