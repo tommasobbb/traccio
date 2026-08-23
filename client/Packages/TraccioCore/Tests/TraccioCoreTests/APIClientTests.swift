@@ -145,6 +145,83 @@ struct APIClientTests {
 
         _ = try await client.dashboardSummary()
     }
+
+    /// A representative `GET /transactions` envelope: one transaction.
+    private static let transactionsEnvelope = """
+        { "transactions": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "account_id": "22222222-2222-2222-2222-222222222222",
+            "amount": -1230,
+            "effective_amount": -1230,
+            "currency": "EUR",
+            "booked_at": "2026-08-20T09:30:00+00:00",
+            "value_date": null,
+            "description": "TEST MERCHANT 01",
+            "display_description": null,
+            "status": "booked",
+            "role": "personal",
+            "suggested_category_id": null,
+            "confirmed_category_id": null,
+            "effective_category_id": null
+          }
+        ] }
+        """
+
+    @Test func transactionsEncodesLimitOffsetAndAccountID() async throws {
+        let accountID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(request.url?.path == "/transactions")
+            #expect(query.contains("limit=25"))
+            #expect(query.contains("offset=50"))
+            #expect(query.contains("account_id=\(accountID.uuidString)"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transactionsEnvelope.utf8))
+        }
+
+        let transactions = try await client.transactions(accountID: accountID, limit: 25, offset: 50)
+        #expect(transactions.count == 1)
+        #expect(transactions[0].amount == -1230)
+    }
+
+    @Test func transactionsOmitsAccountIDWhenNil() async throws {
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(!query.contains("account_id"))
+            #expect(query.contains("limit=50"))
+            #expect(query.contains("offset=0"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transactionsEnvelope.utf8))
+        }
+
+        _ = try await client.transactions()
+    }
+
+    /// A representative `GET /categories` envelope: one category.
+    private static let categoriesEnvelope = """
+        { "categories": [
+          { "id": "11111111-1111-1111-1111-111111111111", "name": "Alimentari", "created_at": "2026-08-10T09:30:00+00:00" }
+        ] }
+        """
+
+    @Test func categoriesDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/categories")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.categoriesEnvelope.utf8))
+        }
+
+        let categories = try await client.categories()
+        #expect(categories.count == 1)
+        #expect(categories[0].name == "Alimentari")
+    }
 }
 
 /// A `URLProtocol` that returns a canned response supplied by a handler.
