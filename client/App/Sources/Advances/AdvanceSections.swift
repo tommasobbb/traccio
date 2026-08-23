@@ -2,29 +2,49 @@ import SwiftUI
 import TraccioCore
 
 /// The advance-specific cards on `TransactionDetailView`: the split, the
-/// participants, and the reimbursements — rendered only for a transaction
-/// whose advance resolved.
+/// participants, the reimbursements, and (unlink/write-off/reopen/add) the
+/// actions on them — rendered only for a transaction whose advance resolved.
 ///
-/// Presentational only, same reasoning as the screen it used to be: every
-/// value it needs was already fetched by `TransactionsViewModel` before the
-/// row was tapped, so it all arrives via `init` (`client/CLAUDE.md`: the
-/// backend owns every derived value; `receivable`/`reimbursed`/`outstanding`/
-/// `excess` are `AdvanceResponse` fields, not recomputed here).
+/// Every displayed value still arrives via `init`, never recomputed here
+/// (`client/CLAUDE.md`: the backend owns every derived value;
+/// `receivable`/`reimbursed`/`outstanding`/`excess` are `AdvanceResponse`
+/// fields). The actions, though, are no longer presentational-only: this view
+/// owns the confirmation-dialog state for the two destructive ones (unlink,
+/// write-off) and calls back up to `TransactionDetailViewModel` through
+/// plain closures, same shape as `TransferSection.onUnlink`.
 ///
 /// Follows `docs/design/canvas/TransactionDetail.dc.html`, minus two elements
 /// the real data can't honestly support today (`tasks/backlog.md`): the
 /// event chip (no endpoint resolves "which event is this transaction in")
 /// and per-participant reimbursement status (a `Reimbursement` links only to
-/// the advance as a whole, never to a specific `Participant`). Also
-/// read-only here: no write-off / add-reimbursement actions.
+/// the advance as a whole, never to a specific `Participant`).
 struct AdvanceSections: View {
     let transaction: TransactionResponse
     let advance: AdvanceResponse
+    /// Set while a delete/write-off/reopen/reimbursement is in flight, to
+    /// disable the actions here.
+    var isUpdating: Bool = false
+    /// Called after the destructive confirmation, to delete this advance and
+    /// revert the transaction to `personal`.
+    let onUnlink: () -> Void
+    /// Called after the destructive confirmation, to write off this advance.
+    let onWriteOff: () -> Void
+    /// Called to reopen a previously written-off advance. No confirmation —
+    /// reopening only restores visibility into an amount still outstanding,
+    /// nothing is lost.
+    let onReopen: () -> Void
+    /// Called to present `AddReimbursementSheet`.
+    let onAddReimbursement: () -> Void
+
+    @State private var isConfirmingUnlink = false
+    @State private var isConfirmingWriteOff = false
 
     var body: some View {
         splitCard
         participantsCard
         reimbursementsCard
+        reimbursementActionsRow
+        unlinkRow
     }
 
     // MARK: Split
@@ -152,6 +172,43 @@ struct AdvanceSections: View {
         }
     }
 
+    /// "Segna come stralciato" / "Riapri anticipo" and "Aggiungi rimborso" —
+    /// `docs/design/canvas/TransactionDetail.dc.html`'s bottom action row.
+    /// Reimbursing a written-off advance is refused server-side (`422
+    /// advance_written_off`), so "Aggiungi rimborso" hides rather than
+    /// surfacing that as a failure banner.
+    private var reimbursementActionsRow: some View {
+        HStack(spacing: 16) {
+            Button {
+                if advance.status == .writtenOff {
+                    onReopen()
+                } else {
+                    isConfirmingWriteOff = true
+                }
+            } label: {
+                Text(advance.status == .writtenOff ? "Riapri anticipo" : "Segna come stralciato")
+                    .font(Typography.body.weight(.semibold))
+                    .foregroundStyle(Palette.inkSecondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+            .confirmationDialog(
+                "Stralciare l'anticipo?", isPresented: $isConfirmingWriteOff, titleVisibility: .visible
+            ) {
+                Button("Segna come stralciato", role: .destructive, action: onWriteOff)
+                Button("Chiudi", role: .cancel) {}
+            } message: {
+                Text("L'importo ancora da ricevere non verrà più conteggiato come tale.")
+            }
+
+            Spacer()
+
+            if advance.status != .writtenOff {
+                PillButton(title: "Aggiungi rimborso", isLoading: isUpdating, action: onAddReimbursement)
+            }
+        }
+    }
+
     /// Which `Palette` color a `summaryRow` figure carries.
     private enum SummaryTint {
         case income
@@ -198,5 +255,39 @@ struct AdvanceSections: View {
     private var progressFraction: CGFloat {
         guard advance.receivable > 0 else { return 0 }
         return min(1, CGFloat(advance.reimbursed) / CGFloat(advance.receivable))
+    }
+
+    // MARK: Unlink
+
+    /// "Annulla anticipo" — destructive, so it asks first
+    /// (`.confirmationDialog`) rather than acting on a single tap. The
+    /// inverse of creating one: the transaction reverts to `personal` and its
+    /// `effectiveAmount` becomes the full amount again.
+    private var unlinkRow: some View {
+        Button {
+            isConfirmingUnlink = true
+        } label: {
+            HStack(spacing: 6) {
+                if isUpdating {
+                    ProgressView().controlSize(.mini)
+                }
+                Text("Annulla anticipo")
+                    .font(Typography.body.weight(.semibold))
+                    .foregroundStyle(Palette.inkSecondary)
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isUpdating)
+        .confirmationDialog(
+            "Annullare l'anticipo?", isPresented: $isConfirmingUnlink, titleVisibility: .visible
+        ) {
+            Button("Annulla anticipo", role: .destructive, action: onUnlink)
+            Button("Chiudi", role: .cancel) {}
+        } message: {
+            Text("Il movimento tornerà a essere una spesa personale.")
+        }
     }
 }

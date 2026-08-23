@@ -26,6 +26,13 @@ final class TransactionDetailViewModel {
     /// The transaction shown, refreshed in place after a successful
     /// confirm/clear.
     private(set) var transaction: TransactionResponse
+    /// This transaction's advance, if it has one. Seeded at `init` from
+    /// `TransactionsViewModel.advancesByTransactionID`; refreshed in place
+    /// after `createAdvance(ownShare:participants:)` or
+    /// `deleteAdvance()` succeeds — unlike `AdvanceSections`'s previous
+    /// `let`, this can now change as a side effect of a user action on this
+    /// screen, not just from what the caller passed in.
+    private(set) var advance: AdvanceResponse?
     /// The caller's categories, for the picker. Seeded from
     /// `TransactionsViewModel.categories` (already fetched for the list) to
     /// avoid a flash of empty; `loadCategoriesIfNeeded()` fetches on its own
@@ -40,6 +47,13 @@ final class TransactionDetailViewModel {
     /// only carries the `TransferResponse`, not the other leg's
     /// `TransactionResponse`, so `loadTransferIfNeeded()` fetches it here.
     private(set) var counterpartTransaction: TransactionResponse?
+    /// Transactions eligible to be linked as a reimbursement for this
+    /// transaction's advance: `personal`, incoming, same currency.
+    /// Best-effort, loaded on demand via
+    /// `loadReimbursementCandidatesIfNeeded()` when
+    /// `AddReimbursementSheet` opens — a failure leaves it empty, which the
+    /// sheet degrades to offering a cash-only entry.
+    private(set) var reimbursementCandidates: [TransactionResponse] = []
     /// Set while a confirm/clear/seed-defaults call is in flight, to disable
     /// the picker and show a spinner rather than let a second tap race it.
     private(set) var isUpdating = false
@@ -52,6 +66,12 @@ final class TransactionDetailViewModel {
     /// clear, so the caller (`TransactionsViewModel.replace(_:)`) can update
     /// the Movimenti row in place without a full reload.
     private let onUpdate: (TransactionResponse) -> Void
+    /// Invoked with this transaction's current advance (`nil` once it has
+    /// none) after a successful create/delete, so the caller
+    /// (`TransactionsViewModel.updateAdvance(_:for:)`) can keep
+    /// `advancesByTransactionID` in sync — an advance is not part of
+    /// `TransactionResponse`, so `onUpdate` alone cannot carry this.
+    private let onAdvanceChange: (AdvanceResponse?) -> Void
 
     /// Create the view model.
     ///
@@ -59,6 +79,9 @@ final class TransactionDetailViewModel {
     /// ----------
     /// transaction:
     ///     The transaction to show and act on.
+    /// advance:
+    ///     This transaction's advance, if it has one and the caller's lookup
+    ///     resolved it. `nil` for every other role, or if the lookup failed.
     /// categories:
     ///     Categories already fetched by the caller, or empty to fetch fresh
     ///     via `loadCategoriesIfNeeded()`.
@@ -71,18 +94,26 @@ final class TransactionDetailViewModel {
     /// onUpdate:
     ///     Called with the refreshed transaction after a successful write.
     ///     Defaults to a no-op for previews and callers that don't need it.
+    /// onAdvanceChange:
+    ///     Called with the transaction's current advance after a successful
+    ///     create/delete. Defaults to a no-op for previews and callers that
+    ///     don't need it.
     init(
         transaction: TransactionResponse,
+        advance: AdvanceResponse? = nil,
         categories: [CategoryResponse] = [],
         transfer: TransferResponse? = nil,
         client: any APIClientProtocol = APIClient.devDefault,
-        onUpdate: @escaping (TransactionResponse) -> Void = { _ in }
+        onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
+        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in }
     ) {
         self.transaction = transaction
+        self.advance = advance
         self.categories = categories
         self.transfer = transfer
         self.client = client
         self.onUpdate = onUpdate
+        self.onAdvanceChange = onAdvanceChange
     }
 
     /// Fetch categories if none were seeded at `init`.
@@ -174,6 +205,173 @@ final class TransactionDetailViewModel {
             self.counterpartTransaction = nil
             onUpdate(refreshedOwn)
             onUpdate(refreshedCounterpart)
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Create an advance on this transaction — the explicit user action from
+    /// `CreateAdvanceSheet`.
+    ///
+    /// On success, both the created advance and the refreshed transaction
+    /// (its `role` is now `advance`, `effectiveAmount` now `ownShare`) are
+    /// published, and both `onUpdate`/`onAdvanceChange` fire so the caller
+    /// can update the Movimenti row and `advancesByTransactionID` alike.
+    /// Unlike `performUpdate`, this also needs the created advance itself
+    /// (not part of `TransactionResponse`), so it does not reuse that
+    /// helper.
+    ///
+    /// Parameters
+    /// ----------
+    /// ownShare:
+    ///     The user's declared share, a positive magnitude in the
+    ///     transaction's currency. The backend validates the range; an
+    ///     out-of-range value surfaces as `actionFailure`.
+    /// participants:
+    ///     People who owe the user back; may be empty.
+    func createAdvance(ownShare: Int, participants: [ParticipantRequest]) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            let created = try await client.createAdvance(
+                CreateAdvanceRequest(
+                    transactionID: transaction.id, ownShare: ownShare, participants: participants
+                )
+            )
+            let refreshed = try await client.transaction(id: transaction.id)
+            transaction = refreshed
+            advance = created
+            onUpdate(refreshed)
+            onAdvanceChange(created)
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Delete this transaction's advance, reverting it to `personal`.
+    ///
+    /// A no-op without an advance. On success, both the refreshed transaction
+    /// (`effectiveAmount` is the full amount again) and the now-`nil`
+    /// advance are published and handed to `onUpdate`/`onAdvanceChange`.
+    func deleteAdvance() async {
+        guard let advance, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            try await client.deleteAdvance(id: advance.id)
+            let refreshed = try await client.transaction(id: transaction.id)
+            transaction = refreshed
+            self.advance = nil
+            onUpdate(refreshed)
+            onAdvanceChange(nil)
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Write off this transaction's advance — given up on, folded into
+    /// spending instead of staying "to receive".
+    ///
+    /// A no-op without an advance. On success, the updated advance (`status
+    /// == .writtenOff`) is published and handed to `onAdvanceChange`; the
+    /// transaction itself is untouched (write-off does not change `role`).
+    func writeOffAdvance() async {
+        await performAdvanceUpdate { try await $0.writeOffAdvance(id: $1) }
+    }
+
+    /// Reopen a previously written-off advance — the inverse of
+    /// `writeOffAdvance()`.
+    func reopenAdvance() async {
+        await performAdvanceUpdate { try await $0.reopenAdvance(id: $1) }
+    }
+
+    /// Fetch this transaction's reimbursement candidates, if not already
+    /// loaded.
+    ///
+    /// A no-op when `reimbursementCandidates` is already non-empty. Failure
+    /// leaves it empty; `AddReimbursementSheet` still works for a cash-only
+    /// entry.
+    func loadReimbursementCandidatesIfNeeded() async {
+        guard reimbursementCandidates.isEmpty else { return }
+        guard let fetched = try? await client.transactions(accountID: nil, limit: 100, offset: 0)
+        else { return }
+        reimbursementCandidates = fetched.filter {
+            $0.role == .personal && $0.amount > 0 && $0.currency == transaction.currency
+        }
+    }
+
+    /// Record a reimbursement against this transaction's advance — a manual
+    /// cash entry, or a link to an incoming transaction.
+    ///
+    /// A no-op without an advance. On success, the advance is re-fetched
+    /// (`reimbursed`/`outstanding`/`status` all follow from the sum of
+    /// reimbursements, computed server-side — this response alone does not
+    /// carry them) and published via `onAdvanceChange`. When a transaction
+    /// was linked, its `role` becomes `reimbursement` server-side; that row
+    /// is re-fetched too and handed to `onUpdate`, the same two-row
+    /// discipline as `unlinkTransfer()`.
+    ///
+    /// Parameters
+    /// ----------
+    /// amount:
+    ///     The amount paid back, a positive magnitude in the advance's
+    ///     currency.
+    /// transactionID:
+    ///     The incoming transaction to link, or `nil` for cash.
+    /// note:
+    ///     Optional free-text note.
+    func createReimbursement(amount: Int, transactionID: UUID?, note: String?) async {
+        guard let advance, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            _ = try await client.createReimbursement(
+                advanceID: advance.id,
+                CreateReimbursementRequest(amount: amount, transactionID: transactionID, note: note)
+            )
+            let refreshedAdvance = try await client.advance(id: advance.id)
+            self.advance = refreshedAdvance
+            onAdvanceChange(refreshedAdvance)
+            if let transactionID {
+                let refreshedLinked = try await client.transaction(id: transactionID)
+                onUpdate(refreshedLinked)
+            }
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Shared shape for `writeOffAdvance()` and `reopenAdvance()`: guard
+    /// against overlap and a missing advance, run the write, publish the
+    /// updated advance, and notify `onAdvanceChange` — or record
+    /// `actionFailure` and leave `advance` untouched on failure. Neither
+    /// action changes the transaction's `role`, so `onUpdate` is not called
+    /// here (unlike `performUpdate`).
+    ///
+    /// Parameters
+    /// ----------
+    /// write:
+    ///     The advance write to perform, given the client and this advance's
+    ///     id.
+    private func performAdvanceUpdate(
+        _ write: (any APIClientProtocol, UUID) async throws -> AdvanceResponse
+    ) async {
+        guard let advance, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            let updated = try await write(client, advance.id)
+            self.advance = updated
+            onAdvanceChange(updated)
         } catch {
             actionFailure = .generic
         }

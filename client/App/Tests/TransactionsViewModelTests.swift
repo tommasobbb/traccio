@@ -107,4 +107,36 @@ struct TransactionsViewModelTests {
         #expect(model.transferSuggestionCount == 0)
         #expect(model.transfersByTransactionID.isEmpty)
     }
+
+    private static func makeAdvance(transactionID: UUID) -> AdvanceResponse {
+        AdvanceResponse(
+            id: UUID(), transactionID: transactionID, ownShare: 1800, receivable: 3600,
+            reimbursed: 0, outstanding: 3600, excess: 0, currency: "EUR", status: .open,
+            participants: [], createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
+    @Test func updateAdvanceSetsTheEntryForATransactionID() async throws {
+        let transaction = Self.makeTransaction()
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        #expect(model.advancesByTransactionID[transaction.id] == nil)
+
+        let advance = Self.makeAdvance(transactionID: transaction.id)
+        model.updateAdvance(advance, for: transaction.id)
+
+        #expect(model.advancesByTransactionID[transaction.id]?.id == advance.id)
+    }
+
+    @Test func updateAdvanceWithNilClearsAnExistingEntry() async throws {
+        let transaction = Self.makeTransaction()
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        model.updateAdvance(Self.makeAdvance(transactionID: transaction.id), for: transaction.id)
+
+        model.updateAdvance(nil, for: transaction.id)
+
+        #expect(model.advancesByTransactionID[transaction.id] == nil)
+    }
 }

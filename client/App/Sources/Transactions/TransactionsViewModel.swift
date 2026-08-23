@@ -178,4 +178,24 @@ final class TransactionsViewModel {
         next[index] = updated
         state = .loaded(next)
     }
+
+    /// Set or clear `advancesByTransactionID`'s entry for one transaction.
+    ///
+    /// The `advancesByTransactionID` counterpart to `replace(_:)`: an
+    /// advance is not part of `TransactionResponse`, so creating, deleting,
+    /// writing off, reopening, or reimbursing one from
+    /// `TransactionDetailView` cannot be reflected by `replace(_:)` alone —
+    /// without this, a row's "quota" caption and advance cards would go
+    /// stale the moment the user returns to the list.
+    ///
+    /// Parameters
+    /// ----------
+    /// advance:
+    ///     The transaction's current advance, or `nil` once it has none
+    ///     (deleted, or never had one).
+    /// transactionID:
+    ///     The transaction the advance belongs (or belonged) to.
+    func updateAdvance(_ advance: AdvanceResponse?, for transactionID: UUID) {
+        advancesByTransactionID[transactionID] = advance
+    }
 }

@@ -22,6 +22,15 @@ public protocol APIClientProtocol: Sendable {
     func categories() async throws -> [CategoryResponse]
     func seedDefaultCategories() async throws -> [CategoryResponse]
     func advances() async throws -> [AdvanceResponse]
+    func advance(id: UUID) async throws -> AdvanceResponse
+    func createAdvance(_ request: CreateAdvanceRequest) async throws -> AdvanceResponse
+    func deleteAdvance(id: UUID) async throws
+    func writeOffAdvance(id: UUID) async throws -> AdvanceResponse
+    func reopenAdvance(id: UUID) async throws -> AdvanceResponse
+    func createReimbursement(
+        advanceID: UUID, _ request: CreateReimbursementRequest
+    ) async throws -> ReimbursementResponse
+    func reimbursements(advanceID: UUID) async throws -> [ReimbursementResponse]
     func connections() async throws -> [ConnectionResponse]
     func syncConnection(connectionID: UUID) async throws -> SyncResponse
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
