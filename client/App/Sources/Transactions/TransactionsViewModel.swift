@@ -40,6 +40,15 @@ final class TransactionsViewModel {
     /// Account id → the account, for `TransactionDetailView`'s header line.
     /// Best-effort, same reasoning as `categoryNames`.
     private(set) var accountsByID: [UUID: AccountResponse] = [:]
+    /// How many transfer pairs are waiting to be confirmed or rejected, for
+    /// the toolbar badge that links to `TransfersView`. Best-effort: a
+    /// failure to fetch leaves this at zero, which hides the badge rather
+    /// than failing the whole screen.
+    private(set) var transferSuggestionCount = 0
+    /// Transaction id → its confirmed transfer (keyed by *both* legs), for
+    /// `TransactionDetailView`'s "Trasferimento" card, via `TransactionRow`.
+    /// Best-effort, same reasoning as `categoryNames`.
+    private(set) var transfersByTransactionID: [UUID: TransferResponse] = [:]
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -87,6 +96,8 @@ final class TransactionsViewModel {
         async let categoriesResult = client.categories()
         async let advancesResult = client.advances()
         async let accountsResult = client.accounts()
+        async let transferSuggestionsResult = client.transferSuggestions()
+        async let transfersResult = client.transfers()
 
         do {
             let page = try await client.transactions(accountID: nil, limit: pageSize, offset: 0)
@@ -109,6 +120,16 @@ final class TransactionsViewModel {
         }
         if let accounts = try? await accountsResult {
             accountsByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        }
+        if let suggestions = try? await transferSuggestionsResult {
+            transferSuggestionCount = suggestions.count
+        }
+        if let transfers = try? await transfersResult {
+            transfersByTransactionID = Dictionary(
+                uniqueKeysWithValues: transfers.flatMap {
+                    [($0.outgoingTransactionID, $0), ($0.incomingTransactionID, $0)]
+                }
+            )
         }
     }
 

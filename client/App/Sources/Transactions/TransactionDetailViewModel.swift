@@ -31,6 +31,15 @@ final class TransactionDetailViewModel {
     /// avoid a flash of empty; `loadCategoriesIfNeeded()` fetches on its own
     /// when that seed is empty, so the screen is usable on its own too.
     private(set) var categories: [CategoryResponse]
+    /// This transaction's confirmed transfer, if `role == .transfer` and the
+    /// lookup resolved. Cleared to `nil` after a successful
+    /// `unlinkTransfer()`, since the row is `personal` again at that point.
+    private(set) var transfer: TransferResponse?
+    /// The counterpart leg's full transaction, for `TransferSection`'s
+    /// display line. `TransfersByTransactionID` (`TransactionsViewModel`)
+    /// only carries the `TransferResponse`, not the other leg's
+    /// `TransactionResponse`, so `loadTransferIfNeeded()` fetches it here.
+    private(set) var counterpartTransaction: TransactionResponse?
     /// Set while a confirm/clear/seed-defaults call is in flight, to disable
     /// the picker and show a spinner rather than let a second tap race it.
     private(set) var isUpdating = false
@@ -53,6 +62,9 @@ final class TransactionDetailViewModel {
     /// categories:
     ///     Categories already fetched by the caller, or empty to fetch fresh
     ///     via `loadCategoriesIfNeeded()`.
+    /// transfer:
+    ///     This transaction's confirmed transfer, if `role == .transfer` and
+    ///     the caller's lookup resolved it. `nil` for every other role.
     /// client:
     ///     The API client to reach the backend through. Defaults to a client
     ///     pointed at the local dev backend.
@@ -62,11 +74,13 @@ final class TransactionDetailViewModel {
     init(
         transaction: TransactionResponse,
         categories: [CategoryResponse] = [],
+        transfer: TransferResponse? = nil,
         client: any APIClientProtocol = APIClient.devDefault,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in }
     ) {
         self.transaction = transaction
         self.categories = categories
+        self.transfer = transfer
         self.client = client
         self.onUpdate = onUpdate
     }
@@ -112,6 +126,57 @@ final class TransactionDetailViewModel {
     /// Clear the transaction's confirmed category, then re-fetch it.
     func clearCategory() async {
         await performUpdate { try await $0.clearCategory(transactionID: $1) }
+    }
+
+    /// Fetch the counterpart leg's transaction, if this row has a `transfer`
+    /// and it has not resolved yet.
+    ///
+    /// A no-op when there is no transfer or `counterpartTransaction` is
+    /// already set. Failure leaves `counterpartTransaction` `nil`;
+    /// `TransferSection` degrades to showing the unlink action without the
+    /// counterpart line.
+    func loadTransferIfNeeded() async {
+        guard let transfer, counterpartTransaction == nil else { return }
+        let counterpartID =
+            transfer.outgoingTransactionID == transaction.id
+            ? transfer.incomingTransactionID : transfer.outgoingTransactionID
+        counterpartTransaction = try? await client.transaction(id: counterpartID)
+    }
+
+    /// Unlink this transaction's transfer, reverting both legs to
+    /// `personal`.
+    ///
+    /// Unlike `confirm(categoryID:)`/`clearCategory()`, this touches *two*
+    /// rows: after `DELETE /transfers/{id}` succeeds, both legs are
+    /// re-fetched and each handed to `onUpdate` in turn (already matching by
+    /// id, so no signature change needed) so `TransactionsViewModel.replace`
+    /// updates both. `transfer`/`counterpartTransaction` are cleared to `nil`
+    /// so `TransferSection` disappears from this screen without a full
+    /// reload. Does not reuse `performUpdate` — that helper re-fetches only
+    /// `transaction.id`, one row short of what an unlink needs.
+    func unlinkTransfer() async {
+        guard let transfer, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        let counterpartID =
+            transfer.outgoingTransactionID == transaction.id
+            ? transfer.incomingTransactionID : transfer.outgoingTransactionID
+
+        do {
+            try await client.deleteTransfer(id: transfer.id)
+            async let own = client.transaction(id: transaction.id)
+            async let counterpart = client.transaction(id: counterpartID)
+            let (refreshedOwn, refreshedCounterpart) = try await (own, counterpart)
+            transaction = refreshedOwn
+            self.transfer = nil
+            self.counterpartTransaction = nil
+            onUpdate(refreshedOwn)
+            onUpdate(refreshedCounterpart)
+        } catch {
+            actionFailure = .generic
+        }
     }
 
     /// Shared shape for `confirm(categoryID:)` and `clearCategory()`: guard

@@ -14,9 +14,12 @@ import TraccioCore
 /// The header and advance cards previously lived in a dedicated
 /// `AdvanceDetailView`; that view is now `AdvanceSections`, embedded here only
 /// for a transaction whose advance resolved — every other transaction gets
-/// the header and category card alone. No mockup covers the category picker
+/// the header and category card alone. A transaction whose `role ==
+/// .transfer` and whose transfer resolved additionally gets `TransferSection`
+/// — the counterpart leg and an "Annulla collegamento" action. No mockup
+/// covers the category picker or the transfer card
 /// (`docs/design/canvas/TransactionDetail.dc.html` only covers the advance
-/// case), so this section is built from existing tokens/components
+/// case), so both are built from existing tokens/components
 /// (`Card`, `Badge`, `EyebrowLabel`, `PillButton`, `Banner`) rather than a new
 /// design pass.
 struct TransactionDetailView: View {
@@ -42,6 +45,9 @@ struct TransactionDetailView: View {
     /// advance:
     ///     This transaction's advance, if role is `.advance` and the lookup
     ///     resolved.
+    /// transfer:
+    ///     This transaction's confirmed transfer, if role is `.transfer` and
+    ///     the lookup resolved.
     /// account:
     ///     This transaction's account, for the header.
     /// client:
@@ -54,13 +60,15 @@ struct TransactionDetailView: View {
         transaction: TransactionResponse,
         categories: [CategoryResponse],
         advance: AdvanceResponse?,
+        transfer: TransferResponse? = nil,
         account: AccountResponse?,
         client: any APIClientProtocol = APIClient.devDefault,
         onUpdate: @escaping (TransactionResponse) -> Void
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
-                transaction: transaction, categories: categories, client: client, onUpdate: onUpdate
+                transaction: transaction, categories: categories, transfer: transfer,
+                client: client, onUpdate: onUpdate
             )
         )
         self.advance = advance
@@ -78,12 +86,22 @@ struct TransactionDetailView: View {
                 if let advance {
                     AdvanceSections(transaction: model.transaction, advance: advance)
                 }
+                if model.transfer != nil {
+                    TransferSection(
+                        counterpart: model.counterpartTransaction,
+                        isUnlinking: model.isUpdating,
+                        onUnlink: { Task { await model.unlinkTransfer() } }
+                    )
+                }
             }
             .padding(20)
         }
         .background(Palette.background)
         .navigationTitle("Dettaglio movimento")
-        .task { await model.loadCategoriesIfNeeded() }
+        .task {
+            await model.loadCategoriesIfNeeded()
+            await model.loadTransferIfNeeded()
+        }
     }
 
     // MARK: Header

@@ -1,0 +1,89 @@
+import SwiftUI
+import TraccioCore
+
+/// One suggested transfer pair on `TransfersView`: which accounts, both
+/// legs' date and amount, and `Conferma`/`Ignora` actions.
+///
+/// No mockup covers this (`docs/design/canvas/Transactions.dc.html` only
+/// shows the confirmed `Trasferimento` role badge), so it is built from
+/// existing tokens/components — `Card`, `EyebrowLabel`, `AmountText`,
+/// `PillButton` — the same posture `TransactionDetailView`'s category card
+/// took.
+struct TransferSuggestionCard: View {
+    let pair: TransferSuggestionPair
+    /// Account id → account, for the accounts line. Best-effort: a missing
+    /// lookup falls back to a generic label rather than hiding the card.
+    let accountsByID: [UUID: AccountResponse]
+    let isUpdating: Bool
+    let onConfirm: () -> Void
+    let onReject: () -> Void
+
+    var body: some View {
+        Card {
+            EyebrowLabel(text: "Possibile trasferimento")
+            Text(accountsLine)
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+            legRow(pair.outgoing)
+            legRow(pair.incoming)
+            if pair.suggestion.amountDelta != 0 {
+                Text(
+                    "Differenza di \(TraccioCore.formatMoney(amount: pair.suggestion.amountDelta, currencyCode: pair.suggestion.currency))"
+                )
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+            }
+            actions
+        }
+    }
+
+    private var accountsLine: String {
+        let outgoingName = accountsByID[pair.outgoing.accountID]?.name ?? "Conto"
+        let incomingName = accountsByID[pair.incoming.accountID]?.name ?? "Conto"
+        return "\(outgoingName) → \(incomingName)"
+    }
+
+    private func legRow(_ leg: TransactionResponse) -> some View {
+        HStack {
+            if let date = leg.effectiveDate {
+                Text(Self.dateFormatter.string(from: date))
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+            }
+            Spacer()
+            AmountText(
+                amount: leg.amount, currencyCode: leg.currency,
+                kind: leg.amount < 0 ? .spending : .income, font: Typography.compactFigure
+            )
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 10) {
+            PillButton(title: "Conferma", isLoading: isUpdating, action: onConfirm)
+            Button(action: onReject) {
+                Text("Ignora")
+                    .font(Typography.eyebrow)
+                    .foregroundStyle(Palette.inkSecondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Palette.neutralFill)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+        }
+    }
+
+    /// Built once per card rather than per row: the class of formatter
+    /// `iso8601Date(from:)`'s doc comment warns against sharing (a mutable
+    /// global under strict concurrency) is `ISO8601DateFormatter`/date
+    /// *parsing*; a `View`'s own `static let` is not a shared mutable
+    /// global across concurrency domains the way a package-level one would
+    /// be — each `TransferSuggestionCard` value gets its own.
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("d MMMM")
+        return formatter
+    }()
+}

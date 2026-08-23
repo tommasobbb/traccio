@@ -25,6 +25,11 @@ public protocol APIClientProtocol: Sendable {
     func connections() async throws -> [ConnectionResponse]
     func syncConnection(connectionID: UUID) async throws -> SyncResponse
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
+    func transferSuggestions() async throws -> [TransferSuggestionResponse]
+    func transfers() async throws -> [TransferResponse]
+    func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse
+    func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws
+    func deleteTransfer(id: UUID) async throws
 }
 
 extension APIClient: APIClientProtocol {}

@@ -4,10 +4,11 @@ import TraccioCore
 
 @testable import Traccio
 
-/// Tests for `TransactionsViewModel.replace(_:)` — the refresh path
-/// `TransactionDetailView` uses after a category action, which must update
-/// one row without disturbing pagination or the rest of the list. Fixtures
-/// are synthetic (`.claude/rules/data-safety.md`).
+/// Tests for `TransactionsViewModel`: `replace(_:)` — the refresh path
+/// `TransactionDetailView` uses after a write, which must update one row
+/// without disturbing pagination or the rest of the list — and `load()`'s
+/// transfer-suggestion count and per-leg transfer lookup. Fixtures are
+/// synthetic (`.claude/rules/data-safety.md`).
 @MainActor
 struct TransactionsViewModelTests {
     private static func makeTransaction(
@@ -70,5 +71,40 @@ struct TransactionsViewModelTests {
             return
         }
         #expect(rows.map(\.id) == [known.id])
+    }
+
+    @Test func loadPublishesTransferSuggestionCountAndTransfersKeyedByBothLegs() async throws {
+        let outgoingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let incomingID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = FakeAPIClient()
+        await client.setTransferSuggestions([
+            TransferSuggestionResponse(
+                outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
+                currency: "EUR", outgoingAmount: -1000, incomingAmount: 1000, amountDelta: 0, dayGap: 0
+            )
+        ])
+        let transfer = TransferResponse(
+            id: UUID(), outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
+            createdAt: Date()
+        )
+        await client.setTransfers([transfer])
+
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        #expect(model.transferSuggestionCount == 1)
+        #expect(model.transfersByTransactionID[outgoingID]?.id == transfer.id)
+        #expect(model.transfersByTransactionID[incomingID]?.id == transfer.id)
+    }
+
+    @Test func loadLeavesTransferFieldsAtDefaultsOnFailure() async throws {
+        let client = FakeAPIClient()
+        await client.setTransferSuggestionsError(FakeAPIError())
+
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        #expect(model.transferSuggestionCount == 0)
+        #expect(model.transfersByTransactionID.isEmpty)
     }
 }

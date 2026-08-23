@@ -13,22 +13,37 @@ struct TransactionDetailViewModelTests {
     private static let transactionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
     private static let categoryID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
 
-    private static func makeTransaction(confirmedCategoryID: UUID? = nil) -> TransactionResponse {
+    private static let counterpartID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+    private static let transferID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+
+    private static func makeTransaction(
+        id: UUID = transactionID,
+        amount: Int = -1000,
+        role: TransactionRole = .personal,
+        confirmedCategoryID: UUID? = nil
+    ) -> TransactionResponse {
         TransactionResponse(
-            id: transactionID,
+            id: id,
             accountID: UUID(),
-            amount: -1000,
-            effectiveAmount: -1000,
+            amount: amount,
+            effectiveAmount: role == .transfer ? 0 : amount,
             currency: "EUR",
             bookedAt: Date(timeIntervalSince1970: 1_755_000_000),
             valueDate: nil,
             description: "TEST MERCHANT 01",
             displayDescription: nil,
             status: .booked,
-            role: .personal,
+            role: role,
             suggestedCategoryID: nil,
             confirmedCategoryID: confirmedCategoryID,
             effectiveCategoryID: confirmedCategoryID
+        )
+    }
+
+    private static func makeTransfer() -> TransferResponse {
+        TransferResponse(
+            id: transferID, outgoingTransactionID: transactionID, incomingTransactionID: counterpartID,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
     }
 
@@ -140,5 +155,78 @@ struct TransactionDetailViewModelTests {
 
         #expect(model.categories.map(\.id) == defaults.map(\.id))
         #expect(model.actionFailure == nil)
+    }
+
+    @Test func loadTransferIfNeededResolvesTheCounterpartLeg() async throws {
+        let client = FakeAPIClient()
+        let counterpart = Self.makeTransaction(id: Self.counterpartID, amount: 1000, role: .transfer)
+        await client.setTransaction(counterpart, forID: Self.counterpartID)
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .transfer), transfer: Self.makeTransfer(), client: client
+        )
+
+        await model.loadTransferIfNeeded()
+
+        #expect(model.counterpartTransaction?.id == Self.counterpartID)
+    }
+
+    @Test func loadTransferIfNeededIsANoOpWithoutATransfer() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.loadTransferIfNeeded()
+
+        #expect(model.counterpartTransaction == nil)
+        #expect(await client.transactionFetchCount == 0)
+    }
+
+    @Test func unlinkSuccessNotifiesOnUpdateForBothLegsAndClearsTheTransferLocally() async throws {
+        let client = FakeAPIClient()
+        let refreshedOwn = Self.makeTransaction(role: .personal, confirmedCategoryID: nil)
+        let refreshedCounterpart = Self.makeTransaction(id: Self.counterpartID, amount: 1000, role: .personal)
+        await client.setTransaction(refreshedOwn, forID: Self.transactionID)
+        await client.setTransaction(refreshedCounterpart, forID: Self.counterpartID)
+
+        var updatedIDs: [UUID] = []
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .transfer), transfer: Self.makeTransfer(),
+            client: client, onUpdate: { updatedIDs.append($0.id) }
+        )
+
+        await model.unlinkTransfer()
+
+        #expect(model.transfer == nil)
+        #expect(model.counterpartTransaction == nil)
+        #expect(model.transaction.role == .personal)
+        #expect(model.actionFailure == nil)
+        #expect(Set(updatedIDs) == [Self.transactionID, Self.counterpartID])
+        #expect(await client.deletedTransferIDs == [Self.transferID])
+    }
+
+    @Test func unlinkFailureLeavesTheTransferInPlaceAndNeverCallsOnUpdate() async throws {
+        let client = FakeAPIClient()
+        await client.setDeleteTransferError(FakeAPIError())
+
+        var updateCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .transfer), transfer: Self.makeTransfer(),
+            client: client, onUpdate: { _ in updateCallCount += 1 }
+        )
+
+        await model.unlinkTransfer()
+
+        #expect(model.transfer != nil)
+        #expect(model.actionFailure == .generic)
+        #expect(updateCallCount == 0)
+    }
+
+    @Test func unlinkIsANoOpWithoutATransfer() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.unlinkTransfer()
+
+        #expect(model.actionFailure == nil)
+        #expect(await client.deletedTransferIDs.isEmpty)
     }
 }

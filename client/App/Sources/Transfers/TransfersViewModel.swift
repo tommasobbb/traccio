@@ -1,0 +1,176 @@
+import Foundation
+import Observation
+import TraccioCore
+
+/// Drives `TransfersView`: loads suggested transfer pairs (resolving both
+/// legs' full `TransactionResponse`), and confirms or rejects them.
+///
+/// All it does is call `APIClient` and hold the result — no derivation
+/// (`client/CLAUDE.md`). Nothing here logs or prints a transaction: legs
+/// carry amounts and raw bank descriptions, both sensitive
+/// (`.claude/rules/data-safety.md`).
+///
+/// `TransferSuggestionResponse` carries only ids, currency, and the two
+/// amounts — no description, date, or account. Resolving those needs each
+/// leg's full `TransactionResponse`, fetched here by id
+/// (`APIClientProtocol.transaction(id:)`) rather than resolved against
+/// `TransactionsViewModel`'s loaded page, which only holds the first page —
+/// a real suggestion outside it would otherwise silently vanish.
+@MainActor
+@Observable
+final class TransfersViewModel {
+    /// What the view should show right now.
+    enum State {
+        case idle
+        case loading
+        case loaded([TransferSuggestionPair])
+        case failed
+    }
+
+    /// Why a confirm/reject action failed, for the view to surface. Carries
+    /// only a status-derived reason, never the response body — same shape as
+    /// `TransactionDetailViewModel.ActionFailure`.
+    enum ActionFailure: Equatable {
+        case generic
+    }
+
+    /// Current load state, observed by the view.
+    private(set) var state: State = .idle
+    /// Account id → the account, for a card's "Revolut → Isybank" line.
+    /// Best-effort: a failed fetch leaves this empty rather than failing the
+    /// whole screen, since the suggestions are the primary content.
+    private(set) var accountsByID: [UUID: AccountResponse] = [:]
+    /// Set while a confirm/reject call is in flight, to disable every card's
+    /// buttons and show a spinner rather than let two actions race.
+    private(set) var isUpdating = false
+    /// The most recent action failure, if any, for the view to surface.
+    private(set) var actionFailure: ActionFailure?
+
+    /// Client used to reach the backend. `any APIClientProtocol` rather than
+    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// inject a fake.
+    private let client: any APIClientProtocol
+    /// Called once per refreshed leg after a successful confirm, so the
+    /// caller can hand each row straight to
+    /// `TransactionsViewModel.replace(_:)` and update Movimenti in place.
+    private let onUpdate: (TransactionResponse) -> Void
+
+    /// Create the view model.
+    ///
+    /// Parameters
+    /// ----------
+    /// client:
+    ///     The API client to fetch through. Defaults to a client pointed at
+    ///     the local dev backend.
+    /// onUpdate:
+    ///     Called with the refreshed legs after a successful confirm.
+    ///     Defaults to a no-op for previews and callers that don't need it.
+    init(
+        client: any APIClientProtocol = APIClient.devDefault,
+        onUpdate: @escaping (TransactionResponse) -> Void = { _ in }
+    ) {
+        self.client = client
+        self.onUpdate = onUpdate
+    }
+
+    /// Fetch suggestions, resolve both legs of each, and publish the result.
+    ///
+    /// A failure to list suggestions is surfaced as `.failed`. A failure to
+    /// fetch `accounts()` is best-effort and does not fail the screen — see
+    /// `accountsByID`.
+    func load() async {
+        state = .loading
+        let client = self.client
+
+        let suggestions: [TransferSuggestionResponse]
+        do {
+            suggestions = try await client.transferSuggestions()
+        } catch {
+            state = .failed
+            return
+        }
+
+        let legIDs = Set(suggestions.flatMap { [$0.outgoingTransactionID, $0.incomingTransactionID] })
+        var legsByID: [UUID: TransactionResponse] = [:]
+        await withTaskGroup(of: (UUID, TransactionResponse?).self) { group in
+            for id in legIDs {
+                group.addTask {
+                    (id, try? await client.transaction(id: id))
+                }
+            }
+            for await (id, transaction) in group {
+                if let transaction { legsByID[id] = transaction }
+            }
+        }
+        state = .loaded(TraccioCore.pairSuggestions(suggestions, transactions: Array(legsByID.values)))
+
+        if let accounts = try? await client.accounts() {
+            accountsByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })
+        }
+    }
+
+    /// Confirm `pair` as a transfer, then drop it from the list.
+    ///
+    /// On success both legs are re-fetched (their `effectiveAmount` is now
+    /// zero) and handed to `onUpdate`, one call per leg — `onUpdate` already
+    /// matches by id, so two calls need no signature change. On failure the
+    /// pair stays in the list and `actionFailure` is set.
+    func confirm(_ pair: TransferSuggestionPair) async {
+        await performUpdate(on: pair) { client in
+            _ = try await client.confirmTransfer(
+                outgoingID: pair.suggestion.outgoingTransactionID,
+                incomingID: pair.suggestion.incomingTransactionID
+            )
+            async let outgoing = client.transaction(id: pair.suggestion.outgoingTransactionID)
+            async let incoming = client.transaction(id: pair.suggestion.incomingTransactionID)
+            return try await [outgoing, incoming]
+        }
+    }
+
+    /// Reject `pair` so it is not suggested again, then drop it from the
+    /// list.
+    ///
+    /// The dismissal is persisted server-side (`POST /transfers/reject`), so
+    /// a subsequent `load()` will not bring it back. No leg changes role, so
+    /// there is nothing to hand to `onUpdate`.
+    func reject(_ pair: TransferSuggestionPair) async {
+        await performUpdate(on: pair) { client in
+            try await client.rejectTransfer(
+                outgoingID: pair.suggestion.outgoingTransactionID,
+                incomingID: pair.suggestion.incomingTransactionID
+            )
+            return []
+        }
+    }
+
+    /// Shared shape for `confirm(_:)` and `reject(_:)`: guard against
+    /// overlap, run the write, remove `pair` from the list on success, and
+    /// notify `onUpdate` with whatever refreshed rows `write` produced — or
+    /// record `actionFailure` and leave the list untouched on failure.
+    ///
+    /// Parameters
+    /// ----------
+    /// pair:
+    ///     The suggestion being acted on.
+    /// write:
+    ///     The transfer write to perform, returning the rows to hand to
+    ///     `onUpdate` (empty for a reject, both legs for a confirm).
+    private func performUpdate(
+        on pair: TransferSuggestionPair,
+        _ write: (any APIClientProtocol) async throws -> [TransactionResponse]
+    ) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            let refreshed = try await write(client)
+            for transaction in refreshed { onUpdate(transaction) }
+            guard case .loaded(let current) = state else { return }
+            state = .loaded(current.filter { $0.id != pair.id })
+        } catch {
+            actionFailure = .generic
+        }
+    }
+}
