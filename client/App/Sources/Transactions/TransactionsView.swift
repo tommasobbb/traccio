@@ -13,6 +13,11 @@ import TraccioCore
 /// category filter chips.
 struct TransactionsView: View {
     @State private var model = TransactionsViewModel()
+    /// Bumped by a write on another tab that can change a row's category
+    /// (applying rules, deleting a category — `CategorizationViewModel`).
+    /// Keying `.task(id:)` to it triggers a full reload, never a local
+    /// recomputation.
+    @Environment(DataFreshness.self) private var freshness
 
     var body: some View {
         NavigationStack {
@@ -35,7 +40,7 @@ struct TransactionsView: View {
                     }
                 }
         }
-        .task { await model.load() }
+        .task(id: freshness.token) { await model.load() }
     }
 
     @ViewBuilder

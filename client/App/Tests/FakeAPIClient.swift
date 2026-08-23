@@ -36,6 +36,18 @@ actor FakeAPIClient: APIClientProtocol {
     var categoriesError: Error?
     var seedDefaultCategoriesToReturn: [CategoryResponse] = []
     var seedDefaultCategoriesError: Error?
+    var createCategoryToReturn: CategoryResponse?
+    var createCategoryError: Error?
+    var renameCategoryToReturn: CategoryResponse?
+    var renameCategoryError: Error?
+    var deleteCategoryError: Error?
+    var rulesToReturn: [RuleResponse] = []
+    var rulesError: Error?
+    var createRuleToReturn: RuleResponse?
+    var createRuleError: Error?
+    var deleteRuleError: Error?
+    var applyRulesToReturn = ApplyRulesResponse(rulesApplied: 0, matched: 0, cleared: 0)
+    var applyRulesError: Error?
     var advancesToReturn: [AdvanceResponse] = []
     var advanceToReturn: AdvanceResponse?
     var advanceError: Error?
@@ -75,6 +87,20 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var writeOffAdvanceCallCount = 0
     private(set) var reopenAdvanceCallCount = 0
     private(set) var createdReimbursementRequests: [CreateReimbursementRequest] = []
+    private(set) var createdCategoryNames: [String] = []
+    private(set) var renamedCategories: [RecordedRename] = []
+    private(set) var deletedCategoryIDs: [UUID] = []
+    private(set) var rulesFetchCount = 0
+    private(set) var createdRuleRequests: [CreateRuleRequest] = []
+    private(set) var deletedRuleIDs: [UUID] = []
+    private(set) var applyRulesCallCount = 0
+
+    /// A recorded `renameCategory(id:name:)` call, for asserting exactly
+    /// which category was renamed to what.
+    struct RecordedRename: Equatable {
+        let id: UUID
+        let name: String
+    }
 
     /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
     /// legs a confirm/reject call named.
@@ -115,6 +141,54 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setSeedDefaultCategoriesError(_ error: Error) {
         seedDefaultCategoriesError = error
+    }
+
+    func setCreateCategoryResult(_ category: CategoryResponse) {
+        createCategoryToReturn = category
+    }
+
+    func setCreateCategoryError(_ error: Error) {
+        createCategoryError = error
+    }
+
+    func setRenameCategoryResult(_ category: CategoryResponse) {
+        renameCategoryToReturn = category
+    }
+
+    func setRenameCategoryError(_ error: Error) {
+        renameCategoryError = error
+    }
+
+    func setDeleteCategoryError(_ error: Error) {
+        deleteCategoryError = error
+    }
+
+    func setRules(_ rules: [RuleResponse]) {
+        rulesToReturn = rules
+    }
+
+    func setRulesError(_ error: Error) {
+        rulesError = error
+    }
+
+    func setCreateRuleResult(_ rule: RuleResponse) {
+        createRuleToReturn = rule
+    }
+
+    func setCreateRuleError(_ error: Error) {
+        createRuleError = error
+    }
+
+    func setDeleteRuleError(_ error: Error) {
+        deleteRuleError = error
+    }
+
+    func setApplyRulesResult(_ result: ApplyRulesResponse) {
+        applyRulesToReturn = result
+    }
+
+    func setApplyRulesError(_ error: Error) {
+        applyRulesError = error
     }
 
     func setTransactions(_ transactions: [TransactionResponse]) {
@@ -244,6 +318,49 @@ actor FakeAPIClient: APIClientProtocol {
     func seedDefaultCategories() async throws -> [CategoryResponse] {
         if let seedDefaultCategoriesError { throw seedDefaultCategoriesError }
         return seedDefaultCategoriesToReturn
+    }
+
+    func createCategory(name: String) async throws -> CategoryResponse {
+        if let createCategoryError { throw createCategoryError }
+        createdCategoryNames.append(name)
+        guard let createCategoryToReturn else { throw NotConfigured() }
+        return createCategoryToReturn
+    }
+
+    func renameCategory(id: UUID, name: String) async throws -> CategoryResponse {
+        if let renameCategoryError { throw renameCategoryError }
+        renamedCategories.append(RecordedRename(id: id, name: name))
+        guard let renameCategoryToReturn else { throw NotConfigured() }
+        return renameCategoryToReturn
+    }
+
+    func deleteCategory(id: UUID) async throws {
+        if let deleteCategoryError { throw deleteCategoryError }
+        deletedCategoryIDs.append(id)
+    }
+
+    func rules() async throws -> [RuleResponse] {
+        rulesFetchCount += 1
+        if let rulesError { throw rulesError }
+        return rulesToReturn
+    }
+
+    func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse {
+        if let createRuleError { throw createRuleError }
+        createdRuleRequests.append(request)
+        guard let createRuleToReturn else { throw NotConfigured() }
+        return createRuleToReturn
+    }
+
+    func deleteRule(id: UUID) async throws {
+        if let deleteRuleError { throw deleteRuleError }
+        deletedRuleIDs.append(id)
+    }
+
+    func applyRules() async throws -> ApplyRulesResponse {
+        applyRulesCallCount += 1
+        if let applyRulesError { throw applyRulesError }
+        return applyRulesToReturn
     }
 
     func advances() async throws -> [AdvanceResponse] {

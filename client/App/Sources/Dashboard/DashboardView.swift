@@ -12,6 +12,11 @@ import TraccioCore
 /// `GET /transactions` — a later slice (ADR 0008's consequences section).
 struct DashboardView: View {
     @State private var model = DashboardViewModel()
+    /// Bumped by a write on another tab that can change this screen's
+    /// numbers (e.g. applying categorization rules once a category
+    /// breakdown exists — `tasks/backlog.md`). Keying `.task(id:)` to it
+    /// triggers a full re-fetch, never a local recomputation.
+    @Environment(DataFreshness.self) private var freshness
 
     var body: some View {
         NavigationStack {
@@ -22,7 +27,7 @@ struct DashboardView: View {
             .background(Palette.background)
             .navigationTitle("Panoramica")
         }
-        .task { await model.load() }
+        .task(id: freshness.token) { await model.load() }
     }
 
     @ViewBuilder
