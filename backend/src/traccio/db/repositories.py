@@ -228,6 +228,33 @@ def get_connection(session: Session, *, user_id: UUID, connection_id: UUID) -> C
     return None if row is None else row_to_connection(row)
 
 
+def mark_connection_synced(
+    session: Session, *, user_id: UUID, connection_id: UUID, now: datetime
+) -> None:
+    """Stamp ``last_synced_at`` on a connection after a sync completes.
+
+    A display-only bookkeeping write: nothing derives from this field, it only
+    lets the client render "synced N minutes ago" (``docs/design/canvas/Accounts.dc.html``).
+    Scoped by ``user_id``; the caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the connection; the update is scoped to it.
+    connection_id : UUID
+        The connection that was just synced.
+    now : datetime
+        The current time, timezone-aware, stamped onto ``last_synced_at``.
+    """
+    session.execute(
+        update(ConnectionRow)
+        .where(ConnectionRow.id == connection_id, ConnectionRow.user_id == user_id)
+        .values(last_synced_at=now)
+    )
+
+
 def get_connection_credentials(
     session: Session, *, user_id: UUID, connection_id: UUID
 ) -> str | None:

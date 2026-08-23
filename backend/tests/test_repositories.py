@@ -17,6 +17,7 @@ from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     get_connection_credentials,
     list_transactions_in_period,
+    mark_connection_synced,
     prune_stale_pending_transactions,
     upsert_account,
     upsert_transaction,
@@ -501,6 +502,58 @@ def test_get_connection_credentials_is_user_scoped() -> None:
 
     # Another user's active connection is invisible to the scoped lookup.
     assert creds is None
+
+
+# --- mark_connection_synced --------------------------------------------------
+
+
+def test_mark_connection_synced_stamps_last_synced_at() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+    _add_connection(
+        engine,
+        user_id=user_id,
+        connection_id=connection_id,
+        status=ConnectionStatus.ACTIVE,
+        credentials="CIPHERTEXT-01",
+    )
+
+    with Session(engine) as session:
+        row = session.get(ConnectionRow, connection_id)
+        assert row is not None
+        assert row.last_synced_at is None
+
+    with Session(engine) as session:
+        mark_connection_synced(session, user_id=user_id, connection_id=connection_id, now=_NOW)
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.get(ConnectionRow, connection_id)
+        assert row is not None
+        assert row.last_synced_at == _NOW.replace(tzinfo=None)
+
+
+def test_mark_connection_synced_is_user_scoped() -> None:
+    engine = _engine()
+    stranger_id, connection_id = uuid4(), uuid4()
+    _add_connection(
+        engine,
+        user_id=stranger_id,
+        connection_id=connection_id,
+        status=ConnectionStatus.ACTIVE,
+        credentials="CIPHERTEXT-01",
+    )
+
+    with Session(engine) as session:
+        # A different user names the stranger's connection id; the update
+        # touches nothing.
+        mark_connection_synced(session, user_id=uuid4(), connection_id=connection_id, now=_NOW)
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.get(ConnectionRow, connection_id)
+        assert row is not None
+        assert row.last_synced_at is None
 
 
 # --- prune_stale_pending_transactions ---------------------------------------

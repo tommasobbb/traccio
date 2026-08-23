@@ -45,7 +45,8 @@ an amount.
 | ------------- | --------- | ------------------------ | ---------------------------------------- |
 | Income        | `#248A3D` | `Palette.income`         | Positive amounts (salary, reimbursement) |
 | Income tint   | `#E2F7E6` | `Palette.incomeTint`     | Income icon tile background              |
-| Warning       | `#C2660A` | `Palette.warning`        | Consent-expiry banner text/icon          |
+| Warning       | `#C2660A` | `Palette.warning`        | Consent-expiry banner icon               |
+| Warning ink   | `#8A4B08` | `Palette.warningInk`     | Consent-expiry banner title text (`warning` itself is too low-contrast for small bold text on `warningTint`) |
 | Warning tint  | `#FFF1DE` | `Palette.warningTint`    | Consent-expiry banner background         |
 | Warning border| `#FFD8A8` | `Palette.warningBorder`  | Consent-expiry banner border             |
 | Status dot    | `#FF9500` | `Palette.statusWarn`     | Connection status dot (expiring soon)    |

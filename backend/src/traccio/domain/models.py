@@ -88,6 +88,10 @@ class Connection(BaseModel):
         Consent expiry, as reported by the provider. ``None`` while pending.
     created_at : datetime
         When the connection was created (timezone-aware, UTC).
+    last_synced_at : datetime or None
+        When a sync last ran against this connection (``POST
+        /connections/{id}/sync``). ``None`` until the first sync. A display
+        figure only — nothing derives from it.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -100,6 +104,7 @@ class Connection(BaseModel):
     status: ConnectionStatus
     expires_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now)
+    last_synced_at: datetime | None = None
 
 
 class Account(BaseModel):

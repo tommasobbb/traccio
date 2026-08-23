@@ -97,6 +97,9 @@ class ConnectionResponse(BaseModel):
         Consent expiry, as reported by the provider; ``None`` while pending.
     created_at : datetime
         When the connection was created.
+    last_synced_at : datetime or None
+        When a sync last ran against this connection; ``None`` until the first
+        sync. A display figure only.
     """
 
     id: UUID
@@ -107,6 +110,7 @@ class ConnectionResponse(BaseModel):
     days_until_expiry: int | None
     expires_at: datetime | None
     created_at: datetime
+    last_synced_at: datetime | None
 
     @classmethod
     def from_domain(
@@ -141,6 +145,7 @@ class ConnectionResponse(BaseModel):
             days_until_expiry=days_until_expiry(connection, now=now),
             expires_at=connection.expires_at,
             created_at=connection.created_at,
+            last_synced_at=connection.last_synced_at,
         )
 
 

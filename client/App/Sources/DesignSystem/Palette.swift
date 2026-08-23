@@ -39,6 +39,9 @@ enum Palette {
     static let incomeTint = Color(hex: 0xE2_F7E6)
 
     static let warning = Color(hex: 0xC2_660A)
+    /// Consent-expiry banner title text — `warning` itself is too
+    /// low-contrast for small bold text on `warningTint`.
+    static let warningInk = Color(hex: 0x8A_4B08)
     static let warningTint = Color(hex: 0xFF_F1DE)
     static let warningBorder = Color(hex: 0xFF_D8A8)
     static let statusWarn = Color(hex: 0xFF_9500)

@@ -60,6 +60,7 @@ def connection_to_row(connection: Connection) -> ConnectionRow:
         status=connection.status,
         expires_at=connection.expires_at,
         created_at=connection.created_at,
+        last_synced_at=connection.last_synced_at,
     )
 
 
@@ -74,6 +75,7 @@ def row_to_connection(row: ConnectionRow) -> Connection:
         status=row.status,
         expires_at=row.expires_at,
         created_at=row.created_at,
+        last_synced_at=row.last_synced_at,
     )
 
 
