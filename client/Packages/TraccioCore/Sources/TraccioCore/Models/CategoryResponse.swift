@@ -5,7 +5,7 @@ import Foundation
 /// Mirrors the `CategoryResponse` schema in `docs/api/openapi.json`. Used to
 /// resolve a transaction's `effective_category_id` to a display name — the
 /// client never invents category names of its own.
-public struct CategoryResponse: Codable, Sendable, Identifiable {
+public struct CategoryResponse: Codable, Sendable, Identifiable, Equatable {
     /// Stable category identifier.
     public let id: UUID
     /// User-facing name, unique per user on the backend.

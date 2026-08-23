@@ -339,6 +339,136 @@ struct APIClientTests {
         #expect(categories[0].name == "Alimentari")
     }
 
+    @Test func createCategoryPostsTheNameAndDecodesTheCreatedCategory() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/categories")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["name"] == "Alimentari")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "11111111-1111-1111-1111-111111111111", "name": "Alimentari",
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.createCategory(name: "Alimentari")
+        #expect(category.name == "Alimentari")
+    }
+
+    @Test func createCategoryThrowsBadStatusOnADuplicateName() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "category_name_taken"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.createCategory(name: "Alimentari")
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func renameCategoryPostsToTheRenameEndpoint() async throws {
+        let categoryID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/categories/\(categoryID.uuidString)/rename")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["name"] == "Spesa")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(categoryID.uuidString)", "name": "Spesa",
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.renameCategory(id: categoryID, name: "Spesa")
+        #expect(category.name == "Spesa")
+    }
+
+    @Test func deleteCategoryIssuesADeleteToTheCategoryEndpoint() async throws {
+        let categoryID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/categories/\(categoryID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteCategory(id: categoryID)
+    }
+
+    @Test func deleteCategoryThrowsBadStatusWhenTheCategoryIsInUse() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "category_in_use"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteCategory(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    /// A representative `GET /rules` envelope: one rule, in evaluation order.
+    private static let rulesEnvelope = """
+        { "rules": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "category_id": "22222222-2222-2222-2222-222222222222",
+            "match_kind": "contains",
+            "pattern": "TEST MERCHANT 01",
+            "created_at": "2026-08-24T09:30:00+00:00"
+          }
+        ] }
+        """
+
+    @Test func rulesDecodesEnvelopeInEvaluationOrder() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/rules")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.rulesEnvelope.utf8))
+        }
+
+        let rules = try await client.rules()
+        #expect(rules.count == 1)
+        #expect(rules[0].pattern == "TEST MERCHANT 01")
+        #expect(rules[0].matchKind == .contains)
+    }
+
+    @Test func rulesDecodesAnEmptyEnvelope() async throws {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{ "rules": [] }"#.utf8))
+        }
+
+        let rules = try await client.rules()
+        #expect(rules.isEmpty)
+    }
+
     /// A representative `GET /advances` envelope: one advance, no participants.
     private static let advancesEnvelope = """
         { "advances": [

@@ -194,6 +194,76 @@ public struct APIClient: Sendable {
         return envelope.categories
     }
 
+    /// Create a category.
+    ///
+    /// Mirrors `POST /categories`, `201 Created` with the created category.
+    /// The backend validates the name (blank/too-long → `422`) and uniqueness
+    /// (a collision → `409 category_name_taken`); the client does not
+    /// pre-check either.
+    ///
+    /// Parameters
+    /// ----------
+    /// name:
+    ///     The category's name.
+    ///
+    /// Returns
+    /// -------
+    /// The created category.
+    public func createCategory(name: String) async throws -> CategoryResponse {
+        try await post("categories", body: CreateCategoryRequest(name: name))
+    }
+
+    /// Rename a category — its only mutation.
+    ///
+    /// Mirrors `POST /categories/{id}/rename`, `200` with the category under
+    /// its new name. A `404` if the category is unknown or not the caller's;
+    /// a `409 category_name_taken` if the new name collides with a different
+    /// one of the caller's categories.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The category to rename.
+    /// name:
+    ///     The new name.
+    ///
+    /// Returns
+    /// -------
+    /// The category under its new name.
+    public func renameCategory(id: UUID, name: String) async throws -> CategoryResponse {
+        try await post("categories/\(id.uuidString)/rename", body: RenameCategoryRequest(name: name))
+    }
+
+    /// Delete a category.
+    ///
+    /// Mirrors `DELETE /categories/{id}`, `204 No Content` on success. A
+    /// `404` if the category is unknown or not the caller's; a
+    /// `409 category_in_use` if it is confirmed on any of the caller's
+    /// transactions — that refusal is not something the client pre-checks,
+    /// since only the backend knows every confirmation.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The category to delete.
+    public func deleteCategory(id: UUID) async throws {
+        try await delete("categories/\(id.uuidString)")
+    }
+
+    /// Fetch the caller's categorization rules, in evaluation order.
+    ///
+    /// Mirrors `GET /rules` (ADR 0005). The order is the order rules actually
+    /// fire in (longest pattern wins) — not creation order, and never
+    /// re-sorted client-side.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded rules, in evaluation order (empty if none).
+    public func rules() async throws -> [RuleResponse] {
+        let envelope: RulesResponse = try await get("rules")
+        return envelope.rules
+    }
+
     /// Fetch the caller's advances.
     ///
     /// Returns
