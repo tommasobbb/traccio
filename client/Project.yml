@@ -45,3 +45,46 @@ targets:
         MARKETING_VERSION: "0.0.1"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
+        # No Apple Developer team configured yet (paid membership is a
+        # deferred M3 item, `tasks/backlog.md`) and a free personal team is
+        # extra setup for a purely local run. macOS doesn't need a signing
+        # identity to run a Debug build launched from Xcode, so skip signing
+        # for the macOS destination only — iOS device builds still require
+        # (and will still request) a real team.
+        CODE_SIGNING_ALLOWED[sdk=macosx*]: "NO"
+        CODE_SIGNING_REQUIRED[sdk=macosx*]: "NO"
+    # Wires TraccioTests into the Traccio scheme's test action, so
+    # `xcodebuild test -scheme Traccio` (make test-app) runs it.
+    scheme:
+      testTargets:
+        - TraccioTests
+
+  # View-model tests for App/ — the seam `.claude/rules/swift.md` asks for
+  # (`APIClientProtocol` + a fake) needed a target to run in; this is it.
+  # Deliberately separate from `make test`/`make test-core`, which stay
+  # Xcode-free (`client/CLAUDE.md`) — see `make test-app`.
+  TraccioTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: App/Tests
+    dependencies:
+      - target: Traccio
+      - package: TraccioCore
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        # See the same keys on the Traccio target above: no Apple Developer
+        # team configured yet, and macOS doesn't need one to run tests
+        # launched from Xcode.
+        CODE_SIGNING_ALLOWED[sdk=macosx*]: "NO"
+        CODE_SIGNING_REQUIRED[sdk=macosx*]: "NO"
+        # XcodeGen's default TEST_HOST/BUNDLE_LOADER assume an iOS-style
+        # bundle layout (`Traccio.app/Traccio`); a macOS app's executable
+        # lives at `Traccio.app/Contents/MacOS/Traccio` instead. This
+        # multiplatform target needs both: the plain keys (iOS default) stay,
+        # and the `[sdk=macosx*]`-suffixed keys below override them only when
+        # building for macOS, so `make test-app` (macOS) and an iOS
+        # simulator run both find the right host.
+        TEST_HOST[sdk=macosx*]: "$(BUILT_PRODUCTS_DIR)/Traccio.app/Contents/MacOS/Traccio"
+        BUNDLE_LOADER[sdk=macosx*]: "$(TEST_HOST)"

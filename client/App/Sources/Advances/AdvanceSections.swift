@@ -1,65 +1,30 @@
 import SwiftUI
 import TraccioCore
 
-/// Read-only "Dettaglio anticipo" screen for one advance, reached by tapping
-/// an advance row in `TransactionsView`.
+/// The advance-specific cards on `TransactionDetailView`: the split, the
+/// participants, and the reimbursements — rendered only for a transaction
+/// whose advance resolved.
 ///
-/// Presentational only — every value it needs was already fetched by
-/// `TransactionsViewModel` before the row was tapped, so it all arrives via
-/// `init` rather than this view loading anything itself (`client/CLAUDE.md`:
-/// the backend owns every derived value; `receivable`/`reimbursed`/
-/// `outstanding`/`excess` are `AdvanceResponse` fields, not recomputed here).
+/// Presentational only, same reasoning as the screen it used to be: every
+/// value it needs was already fetched by `TransactionsViewModel` before the
+/// row was tapped, so it all arrives via `init` (`client/CLAUDE.md`: the
+/// backend owns every derived value; `receivable`/`reimbursed`/`outstanding`/
+/// `excess` are `AdvanceResponse` fields, not recomputed here).
 ///
 /// Follows `docs/design/canvas/TransactionDetail.dc.html`, minus two elements
 /// the real data can't honestly support today (`tasks/backlog.md`): the
 /// event chip (no endpoint resolves "which event is this transaction in")
 /// and per-participant reimbursement status (a `Reimbursement` links only to
 /// the advance as a whole, never to a specific `Participant`). Also
-/// read-only: no write-off / add-reimbursement actions.
-struct AdvanceDetailView: View {
+/// read-only here: no write-off / add-reimbursement actions.
+struct AdvanceSections: View {
     let transaction: TransactionResponse
     let advance: AdvanceResponse
-    let categoryName: String?
-    let account: AccountResponse?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                splitCard
-                participantsCard
-                reimbursementsCard
-            }
-            .padding(20)
-        }
-        .background(Palette.background)
-        .navigationTitle("Dettaglio movimento")
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let categoryName {
-                Badge(text: categoryName, style: .neutral)
-            }
-            Text(transaction.displayDescription ?? transaction.description)
-                .font(Typography.statFigure)
-                .foregroundStyle(Palette.ink)
-            Text(headerSubtitle)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-        }
-    }
-
-    private var headerSubtitle: String {
-        let dateTime = transaction.effectiveDate.map { date -> String in
-            let formatter = DateFormatter()
-            formatter.setLocalizedDateFormatFromTemplate("d MMMM yyyy, HH:mm")
-            return formatter.string(from: date)
-        }
-        let accountLabel = "\(account?.name ?? "Conto") \(transaction.currency)"
-        return [dateTime, accountLabel].compactMap { $0 }.joined(separator: " · ")
+        splitCard
+        participantsCard
+        reimbursementsCard
     }
 
     // MARK: Split

@@ -14,6 +14,8 @@ public enum APIError: Error, Sendable {
     case badStatus(Int)
     /// The response was received but could not be decoded into the model.
     case decoding(underlying: any Error)
+    /// A request body could not be encoded to JSON before sending.
+    case encoding(underlying: any Error)
     /// The response was not an `HTTPURLResponse` (should not happen over HTTP).
     case notHTTP
     /// The request path and query could not be assembled into a valid URL.

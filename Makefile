@@ -36,6 +36,10 @@ test-backend: ## Test del backend Python
 test-core: ## Test del package Swift
 	cd $(CORE) && swift test
 
+test-app: xcode ## Test del target App/ (richiede Xcode; non incluso in `make test`)
+	cd client && xcodebuild -project Traccio.xcodeproj -scheme Traccio \
+		-destination 'platform=macOS' test CODE_SIGNING_ALLOWED=NO
+
 lint: ## Lint e type check del backend
 	cd $(BACKEND) && uv run ruff check . && uv run mypy src
 
@@ -57,4 +61,4 @@ xcode: ## Rigenera il progetto Xcode da Project.yml
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run run-tls eb-aspsps test test-backend test-core lint fmt db-revision db-upgrade seed-dev xcode openapi
+.PHONY: help setup reset-venv run run-tls eb-aspsps test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode openapi

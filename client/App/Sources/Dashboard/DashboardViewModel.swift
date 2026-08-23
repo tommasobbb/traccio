@@ -26,8 +26,11 @@ final class DashboardViewModel {
     /// how the period picker in `DashboardView` works.
     private(set) var period: MonthPeriod
 
-    /// Client used to reach the backend.
-    private let client: APIClient
+    /// Client used to reach the backend. `any APIClientProtocol` rather than
+    /// the concrete `APIClient` (`.claude/rules/swift.md`: "a view model
+    /// depends on a protocol and tests inject a fake") — a test can supply a
+    /// fake without a network stub.
+    private let client: any APIClientProtocol
 
     /// Create the view model.
     ///
@@ -38,7 +41,7 @@ final class DashboardViewModel {
     ///     pointed at the local dev backend.
     /// period:
     ///     The month to load initially. Defaults to the current month.
-    init(client: APIClient = .devDefault, period: MonthPeriod = .current()) {
+    init(client: any APIClientProtocol = APIClient.devDefault, period: MonthPeriod = .current()) {
         self.client = client
         self.period = period
     }

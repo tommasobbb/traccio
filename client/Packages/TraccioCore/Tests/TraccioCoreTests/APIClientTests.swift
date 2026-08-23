@@ -202,6 +202,107 @@ struct APIClientTests {
         _ = try await client.transactions()
     }
 
+    @Test func transactionFetchesOneRowByID() async throws {
+        let txID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let envelope = """
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "account_id": "22222222-2222-2222-2222-222222222222",
+              "amount": -1230,
+              "effective_amount": -1230,
+              "currency": "EUR",
+              "booked_at": "2026-08-20T09:30:00+00:00",
+              "value_date": null,
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "status": "booked",
+              "role": "personal",
+              "suggested_category_id": null,
+              "confirmed_category_id": null,
+              "effective_category_id": null
+            }
+            """
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/transactions/\(txID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let transaction = try await client.transaction(id: txID)
+        #expect(transaction.id == txID)
+        #expect(transaction.amount == -1230)
+    }
+
+    @Test func transactionThrowsBadStatusOnUnknownID() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown transaction"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.transaction(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func confirmCategoryPostsTheCategoryIDAsSnakeCaseJSON() async throws {
+        let transactionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let categoryID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/transactions/\(transactionID.uuidString)/category")
+            #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["category_id"] == categoryID.uuidString)
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.confirmCategory(transactionID: transactionID, categoryID: categoryID)
+    }
+
+    @Test func confirmCategoryThrowsBadStatusOnUnknownCategory() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown category"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.confirmCategory(transactionID: UUID(), categoryID: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func clearCategoryIssuesADeleteToTheCategoryEndpoint() async throws {
+        let transactionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/transactions/\(transactionID.uuidString)/category")
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.clearCategory(transactionID: transactionID)
+    }
+
     /// A representative `GET /categories` envelope: one category.
     private static let categoriesEnvelope = """
         { "categories": [
@@ -219,6 +320,21 @@ struct APIClientTests {
         }
 
         let categories = try await client.categories()
+        #expect(categories.count == 1)
+        #expect(categories[0].name == "Alimentari")
+    }
+
+    @Test func seedDefaultCategoriesPostsAndDecodesTheResultingSet() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/categories/defaults")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.categoriesEnvelope.utf8))
+        }
+
+        let categories = try await client.seedDefaultCategories()
         #expect(categories.count == 1)
         #expect(categories[0].name == "Alimentari")
     }
@@ -395,6 +511,30 @@ struct APIClientTests {
         #expect(result.connectionID == connectionID)
         #expect(result.authorizationURL == "https://sca.example/go")
     }
+}
+
+/// Read every byte of `stream` into `Data`, or empty `Data` if `stream` is `nil`.
+///
+/// `URLSession` moves a request's `httpBody` into an `httpBodyStream` before
+/// handing it to a custom `URLProtocol` in some configurations, so a body
+/// assertion needs to fall back to draining the stream when `httpBody` itself
+/// is `nil`.
+private func readAll(_ stream: InputStream?) -> Data {
+    guard let stream else { return Data() }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    let bufferSize = 4096
+    var buffer = [UInt8](repeating: 0, count: bufferSize)
+    while stream.hasBytesAvailable {
+        let read = stream.read(&buffer, maxLength: bufferSize)
+        if read > 0 {
+            data.append(buffer, count: read)
+        } else {
+            break
+        }
+    }
+    return data
 }
 
 /// A `URLProtocol` that returns a canned response supplied by a handler.

@@ -286,6 +286,99 @@ def test_transactions_expose_null_category_ids_when_uncategorized() -> None:
     assert row["effective_category_id"] is None
 
 
+# --- GET /transactions/{transaction_id} --------------------------------------
+
+
+def test_get_transaction_returns_the_callers_transaction() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        tx = _tx(
+            user_id=dev_user_id,
+            account_id=uuid4(),
+            stable_key="TX-A",
+            description="TEST MERCHANT 01",
+            booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+            value_date=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        session.add(tx)
+        session.commit()
+        tx_id = tx.id
+
+    response = _client(engine).get(f"/transactions/{tx_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(tx_id)
+    assert body["amount"] == -1234
+    assert body["effective_amount"] == -1234
+
+
+def test_get_transaction_404_for_unknown_id() -> None:
+    response = _client(_sqlite_engine()).get(f"/transactions/{uuid4()}")
+
+    assert response.status_code == 404
+
+
+def test_get_transaction_404_for_another_users_transaction() -> None:
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        tx = _tx(
+            user_id=stranger_id,
+            account_id=uuid4(),
+            stable_key="TX-STRANGER",
+            description="STRANGER MERCHANT",
+            booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+            value_date=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        session.add(tx)
+        session.commit()
+        tx_id = tx.id
+
+    response = _client(engine).get(f"/transactions/{tx_id}")
+
+    assert response.status_code == 404
+
+
+def test_get_transaction_matches_list_endpoints_effective_amount_for_an_advance() -> None:
+    """The single-row endpoint duplicates the list endpoint's advance-share
+    resolution (`spending_shares`) — this pins both call sites to agree."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        tx = _tx(
+            user_id=dev_user_id,
+            account_id=uuid4(),
+            stable_key="TX-ADVANCE",
+            description="TEST MERCHANT ADVANCE",
+            booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+            value_date=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        tx.amount = -5000
+        session.add(tx)
+        session.commit()
+        tx_id = tx.id
+
+    client = _client(engine)
+    advance_response = client.post(
+        "/advances",
+        json={
+            "transaction_id": str(tx_id),
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    )
+    assert advance_response.status_code == 201
+
+    list_row = next(
+        t for t in client.get("/transactions").json()["transactions"] if t["id"] == str(tx_id)
+    )
+    single_row = client.get(f"/transactions/{tx_id}").json()
+
+    assert single_row["effective_amount"] == list_row["effective_amount"] == -1000
+
+
 # --- POST /transactions/prune-pending ----------------------------------------
 
 _STALE = datetime(2020, 1, 1, tzinfo=UTC)  # far past pending_transaction_ttl_days

@@ -79,4 +79,22 @@ extension TraccioCore {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.string(from: date)
     }
+
+    /// A `JSONEncoder` configured to encode request bodies sent to the backend.
+    ///
+    /// The counterpart to `jsonDecoder()`. Every request model spells its wire
+    /// names explicitly via `CodingKeys` (see `ConfirmCategoryRequest`), so no
+    /// key-conversion strategy is needed here — only a date strategy, kept
+    /// symmetric with `iso8601Date(from:)` so a future request body carrying a
+    /// date round-trips through the same shape the decoder accepts.
+    ///
+    /// - Returns: An encoder ready to encode the TraccioCore request models.
+    public static func jsonEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(iso8601String(from: date))
+        }
+        return encoder
+    }
 }
