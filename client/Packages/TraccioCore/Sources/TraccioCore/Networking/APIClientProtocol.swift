@@ -1,0 +1,30 @@
+import Foundation
+
+/// The seam a view model depends on instead of the concrete `APIClient`.
+///
+/// Per `.claude/rules/swift.md` ("Protocols at real seams, not everywhere"):
+/// the API client is the one place a caller must not know the concrete type,
+/// so a view model can be tested against a fake without a network stub.
+/// `Sendable`-constrained so an `@MainActor` view model can hold `any
+/// APIClientProtocol` across `await` boundaries under strict concurrency.
+///
+/// Mirrors `APIClient`'s public surface exactly; `APIClient` conforms via the
+/// extension below rather than duplicating documentation — see the concrete
+/// methods for behavior.
+public protocol APIClientProtocol: Sendable {
+    func accounts() async throws -> [AccountResponse]
+    func health() async throws -> HealthResponse
+    func dashboardSummary(start: Date?, end: Date?) async throws -> DashboardSummaryResponse
+    func transaction(id: UUID) async throws -> TransactionResponse
+    func confirmCategory(transactionID: UUID, categoryID: UUID) async throws
+    func clearCategory(transactionID: UUID) async throws
+    func transactions(accountID: UUID?, limit: Int, offset: Int) async throws -> [TransactionResponse]
+    func categories() async throws -> [CategoryResponse]
+    func seedDefaultCategories() async throws -> [CategoryResponse]
+    func advances() async throws -> [AdvanceResponse]
+    func connections() async throws -> [ConnectionResponse]
+    func syncConnection(connectionID: UUID) async throws -> SyncResponse
+    func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
+}
+
+extension APIClient: APIClientProtocol {}

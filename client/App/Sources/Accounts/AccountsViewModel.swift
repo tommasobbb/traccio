@@ -50,8 +50,10 @@ final class AccountsViewModel {
     /// The most recent action failure, if any, for the view to surface.
     private(set) var actionFailure: ActionFailure?
 
-    /// Client used to reach the backend.
-    private let client: APIClient
+    /// Client used to reach the backend. `any APIClientProtocol` rather than
+    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// inject a fake.
+    private let client: any APIClientProtocol
 
     /// Create the view model.
     ///
@@ -60,7 +62,7 @@ final class AccountsViewModel {
     /// client:
     ///     The API client to fetch through. Defaults to a client pointed at
     ///     the local dev backend.
-    init(client: APIClient = .devDefault) {
+    init(client: any APIClientProtocol = APIClient.devDefault) {
         self.client = client
     }
 

@@ -32,6 +32,7 @@ from traccio.db.repositories import (
     sum_reimbursements_by_advance,
 )
 from traccio.db.session import get_session
+from traccio.domain.enums import TransactionRole
 from traccio.domain.models import Advance
 from traccio.services.advances import spending_shares
 
@@ -95,6 +96,57 @@ def transactions(
     # Log a count, never transaction contents (see data-safety rules).
     logger.info("transactions.list", count=len(responses))
     return TransactionsResponse(transactions=responses)
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
+def transaction(
+    transaction_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> TransactionResponse:
+    """Return one of the current user's transactions.
+
+    Scoped to the current user; a ``404`` if the transaction is unknown or not
+    the caller's — the same cross-user gate the category endpoints below use.
+    Exists so a client can re-fetch a single row's server-derived
+    ``effective_amount``/``effective_category_id`` after a write (e.g.
+    confirming a category) without re-paginating the whole list.
+
+    Parameters
+    ----------
+    transaction_id : UUID
+        The transaction to fetch.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the transaction belongs to.
+
+    Returns
+    -------
+    TransactionResponse
+        The transaction, with the same derived fields ``GET /transactions``
+        returns for the same row.
+    """
+    found = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="unknown transaction")
+
+    # Mirrors the list endpoint's advance-share resolution above, scoped to one
+    # row: an advance transaction's effective_amount depends on its own_share,
+    # reimbursements received, and write-off state, all resolved the same way.
+    advance_own_share = None
+    if found.role == TransactionRole.ADVANCE:
+        advance_by_tx: dict[UUID, Advance] = {
+            advance.transaction_id: advance for advance in list_advances(session, user_id)
+        }
+        reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
+        shares = spending_shares(
+            [found], advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance
+        )
+        advance_own_share = shares.get(found.id)
+
+    logger.info("transactions.get", transaction_id=str(transaction_id))
+    return TransactionResponse.from_domain(found, advance_own_share=advance_own_share)
 
 
 @router.post("/transactions/{transaction_id}/category", status_code=status.HTTP_204_NO_CONTENT)

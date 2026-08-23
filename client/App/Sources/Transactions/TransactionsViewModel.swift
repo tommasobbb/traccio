@@ -24,21 +24,29 @@ final class TransactionsViewModel {
 
     /// Current load state, observed by the view.
     private(set) var state: State = .idle
+    /// The caller's categories, for `TransactionDetailView`'s picker — seeded
+    /// there to avoid a flash of empty. Best-effort, same reasoning as
+    /// `categoryNames` below.
+    private(set) var categories: [CategoryResponse] = []
     /// Category id → name, used to label a row's `effectiveCategoryID`.
     /// Best-effort: a failure to fetch categories leaves this empty rather
     /// than failing the whole screen, since the transaction list is the
     /// primary content.
     private(set) var categoryNames: [UUID: String] = [:]
     /// Transaction id → its advance, for an advance-role row's "quota"
-    /// caption and navigation to `AdvanceDetailView`. Best-effort, same
-    /// reasoning as `categoryNames`.
+    /// caption and the advance cards on `TransactionDetailView`. Best-effort,
+    /// same reasoning as `categoryNames`.
     private(set) var advancesByTransactionID: [UUID: AdvanceResponse] = [:]
-    /// Account id → the account, for `AdvanceDetailView`'s header line.
+    /// Account id → the account, for `TransactionDetailView`'s header line.
     /// Best-effort, same reasoning as `categoryNames`.
     private(set) var accountsByID: [UUID: AccountResponse] = [:]
 
-    /// Client used to reach the backend.
-    private let client: APIClient
+    /// Client used to reach the backend. `any APIClientProtocol` rather than
+    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// inject a fake. Not `private`: `TransactionsView` reads it to hand the
+    /// same client down to `TransactionDetailView`, so both share one
+    /// backend connection rather than each defaulting independently.
+    let client: any APIClientProtocol
     /// Page size for both the initial load and `loadMore()`.
     private let pageSize: Int
     /// Number of transactions already fetched, i.e. the next page's offset.
@@ -59,7 +67,7 @@ final class TransactionsViewModel {
     ///     the local dev backend.
     /// pageSize:
     ///     Transactions requested per page.
-    init(client: APIClient = .devDefault, pageSize: Int = 50) {
+    init(client: any APIClientProtocol = APIClient.devDefault, pageSize: Int = 50) {
         self.client = client
         self.pageSize = pageSize
     }
@@ -81,7 +89,7 @@ final class TransactionsViewModel {
         async let accountsResult = client.accounts()
 
         do {
-            let page = try await client.transactions(limit: pageSize, offset: 0)
+            let page = try await client.transactions(accountID: nil, limit: pageSize, offset: 0)
             state = .loaded(page)
             offset = page.count
             reachedEnd = page.count < pageSize
@@ -90,8 +98,9 @@ final class TransactionsViewModel {
             return
         }
 
-        if let categories = try? await categoriesResult {
-            categoryNames = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.name) })
+        if let fetchedCategories = try? await categoriesResult {
+            categories = fetchedCategories
+            categoryNames = Dictionary(uniqueKeysWithValues: fetchedCategories.map { ($0.id, $0.name) })
         }
         if let advances = try? await advancesResult {
             advancesByTransactionID = Dictionary(
@@ -115,12 +124,37 @@ final class TransactionsViewModel {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await client.transactions(limit: pageSize, offset: offset)
+            let page = try await client.transactions(accountID: nil, limit: pageSize, offset: offset)
             state = .loaded(current + page)
             offset += page.count
             reachedEnd = page.count < pageSize
         } catch {
             // Keep what's already on screen; the next scroll trigger retries.
         }
+    }
+
+    /// Swap one row in place by id, leaving every other row and all
+    /// pagination state (`offset`, `reachedEnd`) untouched.
+    ///
+    /// The refresh path for `TransactionDetailView`'s category actions: after
+    /// a confirm/clear, the detail screen re-fetches the single row (its
+    /// server-derived `effectiveCategoryID` — see `client/CLAUDE.md`) and
+    /// hands it here, rather than the whole list reloading and losing scroll
+    /// position and loaded pages.
+    ///
+    /// A no-op if `updated.id` is not in the currently loaded list (e.g. the
+    /// list reloaded in between) or if the state is not `.loaded`.
+    ///
+    /// Parameters
+    /// ----------
+    /// updated:
+    ///     The transaction to replace, matched by `id`.
+    func replace(_ updated: TransactionResponse) {
+        guard case .loaded(let current) = state,
+            let index = current.firstIndex(where: { $0.id == updated.id })
+        else { return }
+        var next = current
+        next[index] = updated
+        state = .loaded(next)
     }
 }

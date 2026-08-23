@@ -5,12 +5,15 @@ import TraccioCore
 /// relevant, and the amount — following
 /// `docs/design/canvas/Transactions.dc.html`.
 ///
-/// An advance-role row with a resolved `AdvanceResponse` also gets a "quota"
-/// caption and becomes a `NavigationLink` to `AdvanceDetailView`
-/// (`docs/design/canvas/TransactionDetail.dc.html`); every other row,
-/// including an advance row whose advance failed to load, stays plain.
+/// Every row is a `NavigationLink` to `TransactionDetailView`
+/// (`docs/design/canvas/TransactionDetail.dc.html`) — where a category can be
+/// confirmed or cleared, and an advance-role row also gets its "quota"
+/// caption and the split/participants/reimbursements cards once the advance
+/// lookup resolves.
 struct TransactionRow: View {
     let transaction: TransactionResponse
+    /// The caller's categories, threaded to `TransactionDetailView`'s picker.
+    let categories: [CategoryResponse]
     /// Category id → name, from `TransactionsViewModel.categoryNames`.
     let categoryNames: [UUID: String]
     /// Transaction id → its advance, from
@@ -18,23 +21,28 @@ struct TransactionRow: View {
     let advancesByTransactionID: [UUID: AdvanceResponse]
     /// Account id → the account, from `TransactionsViewModel.accountsByID`.
     let accountsByID: [UUID: AccountResponse]
+    /// The client `TransactionDetailView` reaches the backend through — the
+    /// same one `TransactionsViewModel` uses, not a second default instance.
+    let client: any APIClientProtocol
+    /// Called with the refreshed transaction after a successful category
+    /// action, so `TransactionsViewModel.replace(_:)` can update this row's
+    /// data without a full reload.
+    let onUpdate: (TransactionResponse) -> Void
 
     var body: some View {
-        if let advance {
-            NavigationLink {
-                AdvanceDetailView(
-                    transaction: transaction,
-                    advance: advance,
-                    categoryName: categoryName,
-                    account: accountsByID[transaction.accountID]
-                )
-            } label: {
-                rowContent
-            }
-            .buttonStyle(.plain)
-        } else {
+        NavigationLink {
+            TransactionDetailView(
+                transaction: transaction,
+                categories: categories,
+                advance: advance,
+                account: accountsByID[transaction.accountID],
+                client: client,
+                onUpdate: onUpdate
+            )
+        } label: {
             rowContent
         }
+        .buttonStyle(.plain)
     }
 
     private var rowContent: some View {

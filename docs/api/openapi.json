@@ -2670,6 +2670,47 @@
         "summary": "Prune Pending Transactions"
       }
     },
+    "/transactions/{transaction_id}": {
+      "get": {
+        "description": "Return one of the current user's transactions.\n\nScoped to the current user; a ``404`` if the transaction is unknown or not\nthe caller's \u2014 the same cross-user gate the category endpoints below use.\nExists so a client can re-fetch a single row's server-derived\n``effective_amount``/``effective_category_id`` after a write (e.g.\nconfirming a category) without re-paginating the whole list.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to fetch.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.\n\nReturns\n-------\nTransactionResponse\n    The transaction, with the same derived fields ``GET /transactions``\n    returns for the same row.",
+        "operationId": "transaction_transactions__transaction_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transaction"
+      }
+    },
     "/transactions/{transaction_id}/category": {
       "delete": {
         "description": "Clear a transaction's confirmed category, falling back to any suggestion.\n\nIdempotent: clearing when nothing is confirmed still succeeds (a ``409`` is\nnever raised for \"already clear\"). A ``404`` if the transaction is unknown\nor not the caller's.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to clear.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.",

@@ -81,6 +81,61 @@ public struct APIClient: Sendable {
         return try await get("dashboard/summary", query: query)
     }
 
+    /// Fetch one transaction by id.
+    ///
+    /// Mirrors `GET /transactions/{id}`. Exists so a caller can re-fetch a
+    /// single row's server-derived `effectiveAmount`/`effectiveCategoryID`
+    /// after a write (e.g. confirming a category) without re-paginating the
+    /// whole list — the backend still owns every derived value
+    /// (`client/CLAUDE.md`).
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transaction to fetch.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded transaction.
+    public func transaction(id: UUID) async throws -> TransactionResponse {
+        try await get("transactions/\(id.uuidString)")
+    }
+
+    /// Confirm a category on a transaction — the explicit user action.
+    ///
+    /// Mirrors `POST /transactions/{id}/category`, which returns `204 No
+    /// Content` on success: the caller re-fetches via `transaction(id:)` to
+    /// observe the new `effectiveCategoryID` rather than this method
+    /// returning or inferring one.
+    ///
+    /// Parameters
+    /// ----------
+    /// transactionID:
+    ///     The transaction to categorize.
+    /// categoryID:
+    ///     The category to confirm; must belong to the caller.
+    public func confirmCategory(transactionID: UUID, categoryID: UUID) async throws {
+        try await post(
+            "transactions/\(transactionID.uuidString)/category",
+            body: ConfirmCategoryRequest(categoryID: categoryID)
+        )
+    }
+
+    /// Clear a transaction's confirmed category, falling back to any
+    /// suggestion.
+    ///
+    /// Mirrors `POST`'s sibling `DELETE /transactions/{id}/category`, also
+    /// `204 No Content`. Idempotent on the backend: clearing an already-clear
+    /// transaction still succeeds.
+    ///
+    /// Parameters
+    /// ----------
+    /// transactionID:
+    ///     The transaction to clear.
+    public func clearCategory(transactionID: UUID) async throws {
+        try await delete("transactions/\(transactionID.uuidString)/category")
+    }
+
     /// Fetch a page of the caller's transactions, most recent first.
     ///
     /// Mirrors `GET /transactions` (`docs/api/openapi.json`). Ordering,
@@ -122,6 +177,20 @@ public struct APIClient: Sendable {
     /// The decoded categories from `GET /categories`.
     public func categories() async throws -> [CategoryResponse] {
         let envelope: CategoriesResponse = try await get("categories")
+        return envelope.categories
+    }
+
+    /// Seed the caller's default category set.
+    ///
+    /// Mirrors `POST /categories/defaults` — the unblock for a category
+    /// picker on a fresh database with no categories yet. Idempotent on the
+    /// backend for categories already present.
+    ///
+    /// Returns
+    /// -------
+    /// The full set of categories after seeding.
+    public func seedDefaultCategories() async throws -> [CategoryResponse] {
+        let envelope: CategoriesResponse = try await post("categories/defaults")
         return envelope.categories
     }
 
@@ -186,19 +255,36 @@ public struct APIClient: Sendable {
         try await post("connections/\(connectionID.uuidString)/reauthorize")
     }
 
-    /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
+    /// Perform a request against `path` relative to `baseURL` and return the
+    /// raw response body.
     ///
-    /// Wraps every failure in an `APIError` so no framework error — which may
-    /// carry a response body — propagates unchanged.
+    /// The shared transport underneath every other private helper: URL
+    /// assembly, the `URLSession` call, and the `HTTPURLResponse`/status
+    /// check all happen exactly once here. Wraps every failure in an
+    /// `APIError` so no framework error — which may carry a response body —
+    /// propagates unchanged.
     ///
     /// Parameters
     /// ----------
     /// path:
     ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    /// method:
+    ///     HTTP method to use.
     /// query:
     ///     Query items to append; an empty array (the default) produces a URL
-    ///     with no `?` at all, matching the two-argument call sites exactly.
-    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+    ///     with no `?` at all.
+    /// body:
+    ///     Raw request body, already encoded, or `nil` for none.
+    ///
+    /// Returns
+    /// -------
+    /// The raw, undecoded response body (empty for a `204 No Content`).
+    private func send(
+        _ path: String,
+        method: String,
+        query: [URLQueryItem] = [],
+        body: Data? = nil
+    ) async throws -> Data {
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true
         ) else {
@@ -211,42 +297,12 @@ public struct APIClient: Sendable {
             throw APIError.invalidURL
         }
 
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(from: url)
-        } catch {
-            throw APIError.transport(underlying: error)
-        }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw APIError.notHTTP
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw APIError.badStatus(http.statusCode)
-        }
-
-        do {
-            return try TraccioCore.jsonDecoder().decode(T.self, from: data)
-        } catch {
-            throw APIError.decoding(underlying: error)
-        }
-    }
-
-    /// Perform a `POST` for `path` relative to `baseURL` and decode the body.
-    ///
-    /// No request body: every write in this client so far (`syncConnection`,
-    /// `reauthorizeConnection`) takes none. A method taking an `Encodable`
-    /// body is a separate addition for the first write that needs one.
-    ///
-    /// Parameters
-    /// ----------
-    /// path:
-    ///     Endpoint path, relative to `baseURL`, with no leading slash.
-    private func post<T: Decodable>(_ path: String) async throws -> T {
-        let url = baseURL.appendingPathComponent(path)
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = method
+        if let body {
+            request.httpBody = body
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
 
         let data: Data
         let response: URLResponse
@@ -262,11 +318,76 @@ public struct APIClient: Sendable {
         guard (200..<300).contains(http.statusCode) else {
             throw APIError.badStatus(http.statusCode)
         }
+        return data
+    }
 
+    /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    /// query:
+    ///     Query items to append; an empty array (the default) produces a URL
+    ///     with no `?` at all, matching the two-argument call sites exactly.
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await send(path, method: "GET", query: query)
         do {
             return try TraccioCore.jsonDecoder().decode(T.self, from: data)
         } catch {
             throw APIError.decoding(underlying: error)
         }
+    }
+
+    /// Perform a `POST` for `path` relative to `baseURL` and decode the body.
+    ///
+    /// No request body: for a write that takes one, see the `Encodable`
+    /// overload below.
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    private func post<T: Decodable>(_ path: String) async throws -> T {
+        let data = try await send(path, method: "POST")
+        do {
+            return try TraccioCore.jsonDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(underlying: error)
+        }
+    }
+
+    /// Perform a `POST` for `path` with an encoded body, expecting no
+    /// response body (`204 No Content`).
+    ///
+    /// Both category-confirmation endpoints answer this way; a variant that
+    /// also decodes a `200` body is a separate addition for whenever a future
+    /// write needs one.
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    /// body:
+    ///     The request body to encode as JSON.
+    private func post<Body: Encodable>(_ path: String, body: Body) async throws {
+        let encoded: Data
+        do {
+            encoded = try TraccioCore.jsonEncoder().encode(body)
+        } catch {
+            throw APIError.encoding(underlying: error)
+        }
+        _ = try await send(path, method: "POST", body: encoded)
+    }
+
+    /// Perform a `DELETE` for `path`, expecting no response body (`204 No
+    /// Content`).
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    private func delete(_ path: String) async throws {
+        _ = try await send(path, method: "DELETE")
     }
 }
