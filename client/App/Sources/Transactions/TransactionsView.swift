@@ -5,8 +5,9 @@ import TraccioCore
 /// (transfers, advances, reimbursements, categories) that has no other entry
 /// point in the client yet. Every row links to `TransactionDetailView`, where
 /// a category can be confirmed or cleared (see `TransactionRow`) — the
-/// client's first write-with-a-body flow. Transfer confirm/reject still has
-/// no UI here — see `tasks/backlog.md`.
+/// client's first write-with-a-body flow. A toolbar badge links to
+/// `TransfersView` whenever there is at least one transfer suggestion to
+/// confirm or reject.
 ///
 /// Follows `docs/design/canvas/Transactions.dc.html`, minus the account/
 /// category filter chips.
@@ -19,6 +20,20 @@ struct TransactionsView: View {
                 .background(Palette.background)
                 .navigationTitle("Movimenti")
                 .refreshable { await model.load() }
+                .toolbar {
+                    if model.transferSuggestionCount > 0 {
+                        ToolbarItem(placement: .primaryAction) {
+                            NavigationLink {
+                                TransfersView(client: model.client, onUpdate: { model.replace($0) })
+                            } label: {
+                                Label(
+                                    "\(model.transferSuggestionCount) trasferimenti",
+                                    systemImage: "arrow.left.arrow.right"
+                                )
+                            }
+                        }
+                    }
+                }
         }
         .task { await model.load() }
     }
@@ -64,6 +79,7 @@ struct TransactionsView: View {
                         categories: model.categories,
                         categoryNames: model.categoryNames,
                         advancesByTransactionID: model.advancesByTransactionID,
+                        transfersByTransactionID: model.transfersByTransactionID,
                         accountsByID: model.accountsByID,
                         client: model.client,
                         onUpdate: { model.replace($0) }

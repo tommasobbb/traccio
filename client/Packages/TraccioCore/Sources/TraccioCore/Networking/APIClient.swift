@@ -255,6 +255,95 @@ public struct APIClient: Sendable {
         try await post("connections/\(connectionID.uuidString)/reauthorize")
     }
 
+    /// Suggest transfers among the caller's transactions.
+    ///
+    /// Mirrors `GET /transfers/suggestions`. Detection only *suggests* — see
+    /// `confirmTransfer(outgoingID:incomingID:)` for the write that acts on
+    /// one.
+    ///
+    /// Returns
+    /// -------
+    /// The suggested transfers, most confident first (empty if none).
+    public func transferSuggestions() async throws -> [TransferSuggestionResponse] {
+        let envelope: TransferSuggestionsResponse = try await get("transfers/suggestions")
+        return envelope.suggestions
+    }
+
+    /// Fetch the caller's confirmed transfers, oldest first.
+    ///
+    /// Mirrors `GET /transfers`.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded transfers.
+    public func transfers() async throws -> [TransferResponse] {
+        let envelope: TransfersResponse = try await get("transfers")
+        return envelope.transfers
+    }
+
+    /// Confirm two transactions as a transfer — the explicit user action that
+    /// turns a suggestion into a persisted link.
+    ///
+    /// Mirrors `POST /transfers/confirm`, which sets both legs' `role` to
+    /// `transfer` and returns the created transfer. Both legs'
+    /// `effectiveAmount` becomes zero as a result; the caller re-fetches them
+    /// via `transaction(id:)` to observe that, same discipline as
+    /// `confirmCategory(transactionID:categoryID:)`.
+    ///
+    /// Parameters
+    /// ----------
+    /// outgoingID:
+    ///     The negative leg (money left an account).
+    /// incomingID:
+    ///     The positive leg (money arrived in another account).
+    ///
+    /// Returns
+    /// -------
+    /// The created transfer.
+    public func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse {
+        try await post(
+            "transfers/confirm",
+            body: ConfirmTransferRequest(
+                outgoingTransactionID: outgoingID, incomingTransactionID: incomingID
+            )
+        )
+    }
+
+    /// Reject a suggested pair so it is not suggested again.
+    ///
+    /// Mirrors `POST /transfers/reject`, `204 No Content` on success.
+    /// Idempotent on the backend: rejecting the same pair twice changes
+    /// nothing.
+    ///
+    /// Parameters
+    /// ----------
+    /// outgoingID:
+    ///     One leg of the rejected pair (the suggestion's outgoing leg).
+    /// incomingID:
+    ///     The other leg of the rejected pair (the suggestion's incoming leg).
+    public func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws {
+        try await post(
+            "transfers/reject",
+            body: RejectTransferRequest(
+                outgoingTransactionID: outgoingID, incomingTransactionID: incomingID
+            )
+        )
+    }
+
+    /// Delete a confirmed transfer and revert both legs to `personal`.
+    ///
+    /// Mirrors `DELETE /transfers/{id}`, `204 No Content` on success. The
+    /// caller re-fetches both legs via `transaction(id:)` to observe their
+    /// restored `effectiveAmount`.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transfer to delete.
+    public func deleteTransfer(id: UUID) async throws {
+        try await delete("transfers/\(id.uuidString)")
+    }
+
     /// Perform a request against `path` relative to `baseURL` and return the
     /// raw response body.
     ///
@@ -378,6 +467,35 @@ public struct APIClient: Sendable {
             throw APIError.encoding(underlying: error)
         }
         _ = try await send(path, method: "POST", body: encoded)
+    }
+
+    /// Perform a `POST` for `path` with an encoded body, decoding the
+    /// response.
+    ///
+    /// The counterpart to the two overloads above, for a write that both
+    /// sends and receives a body — `confirmTransfer(outgoingID:incomingID:)`
+    /// is the first caller (`POST /transfers/confirm` answers `201` with the
+    /// created transfer).
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    /// body:
+    ///     The request body to encode as JSON.
+    private func post<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+        let encoded: Data
+        do {
+            encoded = try TraccioCore.jsonEncoder().encode(body)
+        } catch {
+            throw APIError.encoding(underlying: error)
+        }
+        let data = try await send(path, method: "POST", body: encoded)
+        do {
+            return try TraccioCore.jsonDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(underlying: error)
+        }
     }
 
     /// Perform a `DELETE` for `path`, expecting no response body (`204 No

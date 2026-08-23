@@ -511,6 +511,160 @@ struct APIClientTests {
         #expect(result.connectionID == connectionID)
         #expect(result.authorizationURL == "https://sca.example/go")
     }
+
+    /// A representative `GET /transfers/suggestions` envelope: one suggestion.
+    private static let transferSuggestionsEnvelope = """
+        { "suggestions": [
+          {
+            "outgoing_transaction_id": "11111111-1111-1111-1111-111111111111",
+            "incoming_transaction_id": "22222222-2222-2222-2222-222222222222",
+            "currency": "EUR",
+            "outgoing_amount": -25000,
+            "incoming_amount": 25000,
+            "amount_delta": 0,
+            "day_gap": 0
+          }
+        ] }
+        """
+
+    @Test func transferSuggestionsDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/transfers/suggestions")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transferSuggestionsEnvelope.utf8))
+        }
+
+        let suggestions = try await client.transferSuggestions()
+        #expect(suggestions.count == 1)
+        #expect(suggestions[0].outgoingAmount == -25000)
+        #expect(suggestions[0].incomingAmount == 25000)
+    }
+
+    /// A representative `GET /transfers` envelope: one confirmed transfer.
+    private static let transfersEnvelope = """
+        { "transfers": [
+          {
+            "id": "33333333-3333-3333-3333-333333333333",
+            "outgoing_transaction_id": "11111111-1111-1111-1111-111111111111",
+            "incoming_transaction_id": "22222222-2222-2222-2222-222222222222",
+            "created_at": "2026-08-20T09:30:00+00:00"
+          }
+        ] }
+        """
+
+    @Test func transfersDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/transfers")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transfersEnvelope.utf8))
+        }
+
+        let transfers = try await client.transfers()
+        #expect(transfers.count == 1)
+        #expect(transfers[0].outgoingTransactionID == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+    }
+
+    @Test func confirmTransferPostsBothLegsAndDecodesTheCreatedTransfer() async throws {
+        let outgoingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let incomingID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/transfers/confirm")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["outgoing_transaction_id"] == outgoingID.uuidString)
+            #expect(body?["incoming_transaction_id"] == incomingID.uuidString)
+            // 201 Created, with the created transfer in the body.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "33333333-3333-3333-3333-333333333333",
+                  "outgoing_transaction_id": "\(outgoingID.uuidString)",
+                  "incoming_transaction_id": "\(incomingID.uuidString)",
+                  "created_at": "2026-08-20T09:30:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let transfer = try await client.confirmTransfer(outgoingID: outgoingID, incomingID: incomingID)
+        #expect(transfer.outgoingTransactionID == outgoingID)
+        #expect(transfer.incomingTransactionID == incomingID)
+    }
+
+    @Test func confirmTransferThrowsBadStatusWhenAlreadyLinked() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "transaction already in a transfer"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.confirmTransfer(outgoingID: UUID(), incomingID: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func rejectTransferPostsBothLegsWithNoResponseBody() async throws {
+        let outgoingID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let incomingID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/transfers/reject")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["outgoing_transaction_id"] == outgoingID.uuidString)
+            #expect(body?["incoming_transaction_id"] == incomingID.uuidString)
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.rejectTransfer(outgoingID: outgoingID, incomingID: incomingID)
+    }
+
+    @Test func deleteTransferIssuesADeleteToTheTransferEndpoint() async throws {
+        let transferID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/transfers/\(transferID.uuidString)")
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteTransfer(id: transferID)
+    }
+
+    @Test func deleteTransferThrowsBadStatusOnUnknownTransfer() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown transfer"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteTransfer(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
 }
 
 /// Read every byte of `stream` into `Data`, or empty `Data` if `stream` is `nil`.

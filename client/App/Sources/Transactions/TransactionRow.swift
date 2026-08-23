@@ -19,6 +19,9 @@ struct TransactionRow: View {
     /// Transaction id → its advance, from
     /// `TransactionsViewModel.advancesByTransactionID`.
     let advancesByTransactionID: [UUID: AdvanceResponse]
+    /// Transaction id → its confirmed transfer (either leg), from
+    /// `TransactionsViewModel.transfersByTransactionID`.
+    let transfersByTransactionID: [UUID: TransferResponse]
     /// Account id → the account, from `TransactionsViewModel.accountsByID`.
     let accountsByID: [UUID: AccountResponse]
     /// The client `TransactionDetailView` reaches the backend through — the
@@ -35,6 +38,7 @@ struct TransactionRow: View {
                 transaction: transaction,
                 categories: categories,
                 advance: advance,
+                transfer: transfersByTransactionID[transaction.id],
                 account: accountsByID[transaction.accountID],
                 client: client,
                 onUpdate: onUpdate

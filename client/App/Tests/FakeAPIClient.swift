@@ -24,6 +24,10 @@ actor FakeAPIClient: APIClientProtocol {
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
     var transactionToReturn: TransactionResponse?
+    /// Per-id overrides for `transaction(id:)`, checked before
+    /// `transactionToReturn` — needed wherever a test fetches two different
+    /// transactions by id in one call (e.g. both legs of a transfer).
+    var transactionsByID: [UUID: TransactionResponse] = [:]
     var transactionError: Error?
     var confirmCategoryError: Error?
     var clearCategoryError: Error?
@@ -38,12 +42,29 @@ actor FakeAPIClient: APIClientProtocol {
     var reauthorizeConnectionToReturn = StartConnectionResponse(
         connectionID: UUID(), authorizationURL: "https://sca.example.test/go"
     )
+    var transferSuggestionsToReturn: [TransferSuggestionResponse] = []
+    var transferSuggestionsError: Error?
+    var transfersToReturn: [TransferResponse] = []
+    var confirmTransferToReturn: TransferResponse?
+    var confirmTransferError: Error?
+    var rejectTransferError: Error?
+    var deleteTransferError: Error?
 
     // MARK: Call recording
 
     private(set) var confirmedCategoryIDs: [UUID] = []
     private(set) var clearCategoryCallCount = 0
     private(set) var transactionFetchCount = 0
+    private(set) var confirmedTransferPairs: [RecordedTransferPair] = []
+    private(set) var rejectedTransferPairs: [RecordedTransferPair] = []
+    private(set) var deletedTransferIDs: [UUID] = []
+
+    /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
+    /// legs a confirm/reject call named.
+    struct RecordedTransferPair: Equatable {
+        let outgoingID: UUID
+        let incomingID: UUID
+    }
 
     // MARK: Configuration (actor-isolated setters, `await`ed from a test)
 
@@ -83,6 +104,41 @@ actor FakeAPIClient: APIClientProtocol {
         transactionsToReturn = transactions
     }
 
+    /// Configure `transaction(id:)`'s answer for one specific id, distinct
+    /// from the catch-all `setTransaction(_:)`. Needed wherever a test fetches
+    /// two different rows by id (both legs of a transfer).
+    func setTransaction(_ transaction: TransactionResponse, forID id: UUID) {
+        transactionsByID[id] = transaction
+    }
+
+    func setTransferSuggestions(_ suggestions: [TransferSuggestionResponse]) {
+        transferSuggestionsToReturn = suggestions
+    }
+
+    func setTransferSuggestionsError(_ error: Error) {
+        transferSuggestionsError = error
+    }
+
+    func setTransfers(_ transfers: [TransferResponse]) {
+        transfersToReturn = transfers
+    }
+
+    func setConfirmTransferResult(_ transfer: TransferResponse) {
+        confirmTransferToReturn = transfer
+    }
+
+    func setConfirmTransferError(_ error: Error) {
+        confirmTransferError = error
+    }
+
+    func setRejectTransferError(_ error: Error) {
+        rejectTransferError = error
+    }
+
+    func setDeleteTransferError(_ error: Error) {
+        deleteTransferError = error
+    }
+
     // MARK: APIClientProtocol
 
     func accounts() async throws -> [AccountResponse] {
@@ -100,6 +156,7 @@ actor FakeAPIClient: APIClientProtocol {
     func transaction(id: UUID) async throws -> TransactionResponse {
         transactionFetchCount += 1
         if let transactionError { throw transactionError }
+        if let byID = transactionsByID[id] { return byID }
         guard let transactionToReturn else { throw NotConfigured() }
         return transactionToReturn
     }
@@ -142,6 +199,32 @@ actor FakeAPIClient: APIClientProtocol {
 
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse {
         reauthorizeConnectionToReturn
+    }
+
+    func transferSuggestions() async throws -> [TransferSuggestionResponse] {
+        if let transferSuggestionsError { throw transferSuggestionsError }
+        return transferSuggestionsToReturn
+    }
+
+    func transfers() async throws -> [TransferResponse] {
+        transfersToReturn
+    }
+
+    func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse {
+        if let confirmTransferError { throw confirmTransferError }
+        confirmedTransferPairs.append(RecordedTransferPair(outgoingID: outgoingID, incomingID: incomingID))
+        guard let confirmTransferToReturn else { throw NotConfigured() }
+        return confirmTransferToReturn
+    }
+
+    func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws {
+        if let rejectTransferError { throw rejectTransferError }
+        rejectedTransferPairs.append(RecordedTransferPair(outgoingID: outgoingID, incomingID: incomingID))
+    }
+
+    func deleteTransfer(id: UUID) async throws {
+        if let deleteTransferError { throw deleteTransferError }
+        deletedTransferIDs.append(id)
     }
 }
 
