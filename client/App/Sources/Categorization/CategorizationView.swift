@@ -1,10 +1,9 @@
 import SwiftUI
 import TraccioCore
 
-/// "Categorie e regole" — manages the caller's categories; categorization
-/// rules are listed read-only for now (creating rules and running
-/// `POST /rules/apply` land in a later slice). Reached from the
-/// Impostazioni tab (ADR 0009).
+/// "Categorie e regole" — manages the caller's categories and
+/// categorization rules. Running `POST /rules/apply` lands in a later
+/// slice. Reached from the Impostazioni tab (ADR 0009).
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Categorie/
 /// Regole artboard), so it is built from existing tokens/components — same
@@ -12,9 +11,11 @@ import TraccioCore
 /// own.
 struct CategorizationView: View {
     @State private var model: CategorizationViewModel
+    @State private var isPresentingCreateRuleSheet = false
     @State private var isPresentingCategorySheet = false
     /// `nil` means the category sheet is creating; set means it is renaming.
     @State private var editingCategory: CategoryResponse?
+    @State private var ruleToDelete: RuleResponse?
     @State private var categoryToDelete: CategoryResponse?
 
     /// Create the screen.
@@ -45,6 +46,24 @@ struct CategorizationView: View {
         .navigationTitle("Categorie e regole")
         .refreshable { await model.load() }
         .task { await model.load() }
+        .sheet(isPresented: $isPresentingCreateRuleSheet) {
+            if case .loaded(let data) = model.state {
+                CreateRuleSheet(
+                    categories: data.categories,
+                    isCreating: model.isUpdating,
+                    failureMessage: model.actionFailure != nil ? failureMessage : nil,
+                    onCreate: { categoryID, matchKind, pattern in
+                        Task {
+                            await model.createRule(categoryID: categoryID, matchKind: matchKind, pattern: pattern)
+                            if model.actionFailure == nil {
+                                isPresentingCreateRuleSheet = false
+                            }
+                        }
+                    },
+                    onCancel: { isPresentingCreateRuleSheet = false }
+                )
+            }
+        }
         .sheet(isPresented: $isPresentingCategorySheet) {
             CategoryEditorSheet(
                 mode: editingCategory.map { .rename($0) } ?? .create,
@@ -97,6 +116,10 @@ struct CategorizationView: View {
             "La categoria è confermata su almeno un movimento e non può essere eliminata. Rimuovi prima la conferma dai movimenti, oppure rinominala."
         case .nameTaken:
             "Esiste già una categoria con questo nome."
+        case .duplicateRule:
+            "Esiste già una regola con lo stesso predicato e lo stesso testo."
+        case .invalidPattern:
+            "Il testo della regola non è valido."
         case .generic, .none:
             "Non è stato possibile completare l'operazione. Riprova."
         }
@@ -104,8 +127,7 @@ struct CategorizationView: View {
 
     // MARK: Regole
 
-    /// Read-only for now — creating a rule and running `POST /rules/apply`
-    /// land in a later slice.
+    /// Running `POST /rules/apply` lands in a later slice.
     private func rulesCard(_ data: CategorizationViewModel.Content) -> some View {
         Card {
             EyebrowLabel(text: "Regole · in ordine di valutazione")
@@ -113,19 +135,44 @@ struct CategorizationView: View {
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkSecondary)
             if data.rules.isEmpty {
-                Text("Non hai ancora nessuna regola.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkSecondary)
+                Text(
+                    data.categories.isEmpty
+                        ? "Crea prima una categoria per poter creare una regola."
+                        : "Non hai ancora nessuna regola."
+                )
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
             } else {
                 VStack(spacing: 0) {
                     ForEach(data.rules) { rule in
-                        RuleRow(rule: rule, categoryName: categoryName(for: rule.categoryID, in: data))
+                        RuleRow(
+                            rule: rule,
+                            categoryName: categoryName(for: rule.categoryID, in: data),
+                            isDeleting: model.isUpdating,
+                            onDelete: { ruleToDelete = rule }
+                        )
                         if rule.id != data.rules.last?.id {
                             Divider().overlay(Palette.separator)
                         }
                     }
                 }
             }
+            Divider().overlay(Palette.separator)
+            PillButton(title: "Nuova regola", action: { isPresentingCreateRuleSheet = true })
+                .disabled(data.categories.isEmpty)
+        }
+        .confirmationDialog(
+            "Eliminare la regola?",
+            isPresented: Binding(get: { ruleToDelete != nil }, set: { if !$0 { ruleToDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: ruleToDelete
+        ) { rule in
+            Button("Elimina", role: .destructive) {
+                Task { await model.deleteRule(id: rule.id) }
+            }
+            Button("Chiudi", role: .cancel) {}
+        } message: { rule in
+            Text("La regola su \"\(rule.pattern)\" verrà eliminata.")
         }
     }
 

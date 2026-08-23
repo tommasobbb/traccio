@@ -264,6 +264,40 @@ public struct APIClient: Sendable {
         return envelope.rules
     }
 
+    /// Create a categorization rule.
+    ///
+    /// Mirrors `POST /rules`, `201 Created` with the created rule. A `404` if
+    /// the target category is unknown or not the caller's; a `422` if the
+    /// pattern is blank or too long; a `409 rule_already_exists` if the
+    /// (normalized) `(matchKind, pattern)` collides with one of the caller's
+    /// existing rules.
+    ///
+    /// Parameters
+    /// ----------
+    /// request:
+    ///     The target category, predicate, and pattern.
+    ///
+    /// Returns
+    /// -------
+    /// The created rule.
+    public func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse {
+        try await post("rules", body: request)
+    }
+
+    /// Delete a categorization rule.
+    ///
+    /// Mirrors `DELETE /rules/{id}`, `204 No Content` on success. A `404` if
+    /// the rule is unknown or not the caller's. Rules have no edit endpoint
+    /// by design (ADR 0005): there is no update counterpart to this method.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The rule to delete.
+    public func deleteRule(id: UUID) async throws {
+        try await delete("rules/\(id.uuidString)")
+    }
+
     /// Fetch the caller's advances.
     ///
     /// Returns

@@ -469,6 +469,104 @@ struct APIClientTests {
         #expect(rules.isEmpty)
     }
 
+    @Test func createRulePostsTheRequestAsSnakeCaseJSON() async throws {
+        let categoryID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/rules")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["category_id"] == categoryID.uuidString)
+            #expect(body?["match_kind"] == "starts_with")
+            #expect(body?["pattern"] == "TEST MERCHANT 01")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "category_id": "\(categoryID.uuidString)",
+                  "match_kind": "starts_with",
+                  "pattern": "TEST MERCHANT 01",
+                  "created_at": "2026-08-24T09:30:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let rule = try await client.createRule(
+            CreateRuleRequest(categoryID: categoryID, matchKind: .startsWith, pattern: "TEST MERCHANT 01")
+        )
+        #expect(rule.categoryID == categoryID)
+        #expect(rule.matchKind == .startsWith)
+    }
+
+    @Test func createRuleThrowsBadStatusOnADuplicate() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "rule_already_exists"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.createRule(
+                CreateRuleRequest(categoryID: UUID(), matchKind: .contains, pattern: "TEST MERCHANT 01")
+            )
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func createRuleThrowsBadStatusOnAnInvalidPattern() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 422, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "blank_pattern"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.createRule(
+                CreateRuleRequest(categoryID: UUID(), matchKind: .contains, pattern: "")
+            )
+        } throws: { error in
+            guard case APIError.badStatus(422) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func deleteRuleIssuesADeleteToTheRuleEndpoint() async throws {
+        let ruleID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/rules/\(ruleID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteRule(id: ruleID)
+    }
+
+    @Test func deleteRuleThrowsBadStatusOnUnknownRule() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown rule"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteRule(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
     /// A representative `GET /advances` envelope: one advance, no participants.
     private static let advancesEnvelope = """
         { "advances": [

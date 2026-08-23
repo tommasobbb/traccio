@@ -43,6 +43,9 @@ actor FakeAPIClient: APIClientProtocol {
     var deleteCategoryError: Error?
     var rulesToReturn: [RuleResponse] = []
     var rulesError: Error?
+    var createRuleToReturn: RuleResponse?
+    var createRuleError: Error?
+    var deleteRuleError: Error?
     var advancesToReturn: [AdvanceResponse] = []
     var advanceToReturn: AdvanceResponse?
     var advanceError: Error?
@@ -86,6 +89,8 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var renamedCategories: [RecordedRename] = []
     private(set) var deletedCategoryIDs: [UUID] = []
     private(set) var rulesFetchCount = 0
+    private(set) var createdRuleRequests: [CreateRuleRequest] = []
+    private(set) var deletedRuleIDs: [UUID] = []
 
     /// A recorded `renameCategory(id:name:)` call, for asserting exactly
     /// which category was renamed to what.
@@ -161,6 +166,18 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setRulesError(_ error: Error) {
         rulesError = error
+    }
+
+    func setCreateRuleResult(_ rule: RuleResponse) {
+        createRuleToReturn = rule
+    }
+
+    func setCreateRuleError(_ error: Error) {
+        createRuleError = error
+    }
+
+    func setDeleteRuleError(_ error: Error) {
+        deleteRuleError = error
     }
 
     func setTransactions(_ transactions: [TransactionResponse]) {
@@ -315,6 +332,18 @@ actor FakeAPIClient: APIClientProtocol {
         rulesFetchCount += 1
         if let rulesError { throw rulesError }
         return rulesToReturn
+    }
+
+    func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse {
+        if let createRuleError { throw createRuleError }
+        createdRuleRequests.append(request)
+        guard let createRuleToReturn else { throw NotConfigured() }
+        return createRuleToReturn
+    }
+
+    func deleteRule(id: UUID) async throws {
+        if let deleteRuleError { throw deleteRuleError }
+        deletedRuleIDs.append(id)
     }
 
     func advances() async throws -> [AdvanceResponse] {

@@ -70,6 +70,85 @@ struct CategorizationViewModelTests {
         }
     }
 
+    @Test func createRuleRefetchesRatherThanOrderingLocally() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule(pattern: "TEST MERCHANT 01")])
+        await client.setCategories([Self.makeCategory()])
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        // The rule the fake will return from `createRule`, plus what `load()`
+        // is reconfigured to answer the *second* time it is called — proof
+        // that the new order comes from a refetch, not a local insert.
+        let newRuleID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        await client.setCreateRuleResult(
+            Self.makeRule(id: newRuleID, pattern: "TEST MERCHANT 01 SUBSCRIPTION")
+        )
+        await client.setRules([
+            Self.makeRule(id: newRuleID, pattern: "TEST MERCHANT 01 SUBSCRIPTION"),
+            Self.makeRule(pattern: "TEST MERCHANT 01"),
+        ])
+
+        await model.createRule(categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01 SUBSCRIPTION")
+
+        #expect(await client.rulesFetchCount == 2)
+        guard case .loaded(let data) = model.state else {
+            Issue.record("expected .loaded after createRule()")
+            return
+        }
+        #expect(data.rules.map(\.id) == [newRuleID, Self.ruleID])
+        #expect(model.actionFailure == nil)
+    }
+
+    @Test func createRuleSurfacesDuplicateFailureAndLeavesTheListUntouched() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule()])
+        await client.setCategories([Self.makeCategory()])
+        await client.setCreateRuleError(APIError.badStatus(409))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.createRule(categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01")
+
+        #expect(model.actionFailure == .duplicateRule)
+        guard case .loaded(let data) = model.state else {
+            Issue.record("expected .loaded to survive a failed createRule()")
+            return
+        }
+        #expect(data.rules.count == 1)
+    }
+
+    @Test func createRuleSurfacesInvalidPatternFailure() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        await client.setCategories([Self.makeCategory()])
+        await client.setCreateRuleError(APIError.badStatus(422))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.createRule(categoryID: Self.categoryID, matchKind: .contains, pattern: "")
+
+        #expect(model.actionFailure == .invalidPattern)
+    }
+
+    @Test func deleteRuleRemovesItAfterRefetch() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([Self.makeRule()])
+        await client.setCategories([Self.makeCategory()])
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await client.setRules([])
+        await model.deleteRule(id: Self.ruleID)
+
+        #expect(await client.deletedRuleIDs == [Self.ruleID])
+        guard case .loaded(let data) = model.state else {
+            Issue.record("expected .loaded after deleteRule()")
+            return
+        }
+        #expect(data.rules.isEmpty)
+    }
+
     @Test func deleteCategorySurfacesInUseRefusalAndKeepsTheCategory() async throws {
         let client = FakeAPIClient()
         await client.setRules([])

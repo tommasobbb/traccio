@@ -2,9 +2,8 @@ import Foundation
 import Observation
 import TraccioCore
 
-/// Drives `CategorizationView`: loads categories and categorization rules
-/// together, and manages categories (create, rename, delete). Creating and
-/// deleting rules, and running `POST /rules/apply`, land in later slices.
+/// Drives `CategorizationView`: manages categories and categorization
+/// rules. Running `POST /rules/apply` lands in a later slice.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
 /// (`client/CLAUDE.md`). `load()` fails the whole screen if *either* fetch
@@ -40,6 +39,10 @@ final class CategorizationViewModel {
         case categoryInUse(categoryID: UUID)
         /// A category create/rename collided with an existing name.
         case nameTaken
+        /// A rule create collided with an existing `(matchKind, pattern)`.
+        case duplicateRule
+        /// A rule's pattern was blank or too long.
+        case invalidPattern
         case generic
     }
 
@@ -146,6 +149,46 @@ final class CategorizationViewModel {
             notifiesFreshness: true
         ) { client in
             try await client.deleteCategory(id: id)
+        }
+    }
+
+    /// Create a categorization rule.
+    ///
+    /// Parameters
+    /// ----------
+    /// categoryID:
+    ///     The category to assign when this rule matches.
+    /// matchKind:
+    ///     The predicate to apply to a transaction's description.
+    /// pattern:
+    ///     The text to match against.
+    func createRule(categoryID: UUID, matchKind: RuleMatchKind, pattern: String) async {
+        await performUpdate(onFailure: { code in
+            switch code {
+            case 409: return .duplicateRule
+            case 422: return .invalidPattern
+            default: return .generic
+            }
+        }) { client in
+            _ = try await client.createRule(
+                CreateRuleRequest(categoryID: categoryID, matchKind: matchKind, pattern: pattern)
+            )
+        }
+    }
+
+    /// Delete a categorization rule.
+    ///
+    /// Does not notify `onSuggestionsChanged`: deleting a rule's definition
+    /// leaves every transaction's `suggested_category_id` exactly as it was
+    /// until the next `applyRules()` recomputes it (ADR 0005).
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The rule to delete.
+    func deleteRule(id: UUID) async {
+        await performUpdate { client in
+            try await client.deleteRule(id: id)
         }
     }
 
