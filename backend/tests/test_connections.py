@@ -275,12 +275,20 @@ def test_sync_persists_accounts_and_is_idempotent() -> None:
     client = _client(engine, cipher)
     connection_id = _activate_a_connection(client)
 
+    # Before any sync, the connection carries no last_synced_at.
+    before = client.get("/connections").json()["connections"][0]
+    assert before["last_synced_at"] is None
+
     response = client.post(f"/connections/{connection_id}/sync")
 
     assert response.status_code == 200
     body = response.json()
     assert body["accounts_synced"] == 2
     assert body["transactions_synced"] == 2  # one per account, from the fake
+
+    # A completed sync stamps the connection, for the client's "synced N ago".
+    after = client.get("/connections").json()["connections"][0]
+    assert after["last_synced_at"] is not None
 
     accounts = _accounts(engine)
     assert len(accounts) == 2

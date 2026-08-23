@@ -40,6 +40,7 @@ from traccio.db.repositories import (
     get_connection,
     get_connection_credentials,
     list_connections,
+    mark_connection_synced,
     set_connection_auth_state,
     upsert_account,
     upsert_transaction,
@@ -272,6 +273,7 @@ def sync_connection(
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail="provider sync failed") from exc
 
+    mark_connection_synced(session, user_id=user_id, connection_id=connection_id, now=now)
     session.commit()
 
     logger.info(

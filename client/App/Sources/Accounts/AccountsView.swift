@@ -1,0 +1,219 @@
+import SwiftUI
+import TraccioCore
+
+/// The Conti screen — every bank connection grouped with its accounts, the
+/// consent-expiry warning the roadmap's M3 item calls for, and the client's
+/// first write actions: a manual per-connection sync and re-authorization.
+///
+/// Follows `docs/design/canvas/Accounts.dc.html`, minus "Collega un nuovo
+/// conto" — `POST /connections` needs an institution picker fed by an
+/// institution-listing endpoint that does not exist yet (`tasks/backlog.md`).
+struct AccountsView: View {
+    @State private var model = AccountsViewModel()
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        NavigationStack {
+            content
+                .background(Palette.background)
+                .navigationTitle("Conti")
+                .refreshable { await model.load() }
+        }
+        .task { await model.load() }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Re-authorization completes in the system browser, outside the
+            // app; returning to the foreground is the only signal the client
+            // gets that it might have finished.
+            if newPhase == .active {
+                Task { await model.load() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.state {
+        case .idle, .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .loaded(let connections) where connections.isEmpty:
+            ContentUnavailableView("Nessun conto collegato", systemImage: "creditcard")
+        case .loaded(let connections):
+            list(connections)
+        case .failed:
+            ContentUnavailableView {
+                Label("Impossibile caricare i conti", systemImage: "wifi.slash")
+            } description: {
+                Text("Verifica che il backend sia in esecuzione, poi riprova.")
+            }
+        }
+    }
+
+    private func list(_ connections: [ConnectionResponse]) -> some View {
+        let groups = TraccioCore.groupByConnection(connections: connections, accounts: model.accounts)
+        let attentionNeeded = connections.filter {
+            $0.consentState == .expiringSoon || $0.consentState == .expired
+        }
+        return ScrollView {
+            LazyVStack(spacing: 14) {
+                ForEach(attentionNeeded) { connection in
+                    Banner(
+                        message: warningMessage(for: connection),
+                        ctaTitle: "Rinnova ora",
+                        isCTALoading: model.reauthorizing.contains(connection.id),
+                        ctaAction: { Task { await reauthorize(connection.id) } }
+                    )
+                }
+                ForEach(groups, id: \.groupID) { group in
+                    connectionCard(group)
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private func warningMessage(for connection: ConnectionResponse) -> String {
+        switch connection.consentState {
+        case .expired:
+            return "Il consenso per \(connection.institutionName) è scaduto. Rinnova per continuare a sincronizzare."
+        case .expiringSoon:
+            let days = connection.daysUntilExpiry ?? 0
+            let dayWord = days == 1 ? "giorno" : "giorni"
+            return "Il consenso per \(connection.institutionName) scade tra \(days) \(dayWord). Rinnova per continuare a sincronizzare."
+        case .pending, .active, .revoked, .error:
+            return "Il consenso per \(connection.institutionName) richiede attenzione."
+        }
+    }
+
+    private func reauthorize(_ connectionID: UUID) async {
+        guard let url = await model.reauthorize(connectionID: connectionID) else { return }
+        openURL(url)
+    }
+
+    // MARK: Connection card
+
+    private func connectionCard(_ group: ConnectionGroup) -> some View {
+        Card {
+            if let connection = group.connection {
+                connectionHeader(connection)
+                if !group.accounts.isEmpty {
+                    Divider().overlay(Palette.separatorSubtle)
+                    accountList(group.accounts)
+                }
+            } else {
+                // Accounts matching no known connection — a real data
+                // inconsistency, surfaced rather than silently dropped.
+                EyebrowLabel(text: "Altri conti")
+                accountList(group.accounts)
+            }
+        }
+    }
+
+    private func connectionHeader(_ connection: ConnectionResponse) -> some View {
+        HStack(spacing: 12) {
+            bankMark(for: connection.institutionName)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(connection.institutionName)
+                    .font(Typography.cardTitle)
+                    .foregroundStyle(Palette.ink)
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(statusDotColor(for: connection.consentState))
+                        .frame(width: 7, height: 7)
+                    Text(statusLine(for: connection))
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.inkTertiary)
+                }
+            }
+            Spacer()
+            IconButton(
+                systemImage: "arrow.triangle.2.circlepath",
+                accessibilityLabel: "Sincronizza \(connection.institutionName)",
+                isLoading: model.syncing.contains(connection.id),
+                action: { Task { await model.sync(connectionID: connection.id) } }
+            )
+        }
+    }
+
+    private func bankMark(for institutionName: String) -> some View {
+        Text(institutionName.first.map(String.init)?.uppercased() ?? "?")
+            .font(Typography.cardTitle)
+            .foregroundStyle(Palette.inkSecondary)
+            .frame(width: 40, height: 40)
+            .background(Palette.neutralFill)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func statusDotColor(for state: ConsentState) -> Color {
+        switch state {
+        case .active: Palette.income
+        case .expiringSoon: Palette.statusWarn
+        case .expired, .revoked, .error: Palette.warning
+        case .pending: Palette.inkQuaternary
+        }
+    }
+
+    private func statusLine(for connection: ConnectionResponse) -> String {
+        let stateLabel: String
+        switch connection.consentState {
+        case .active: stateLabel = "Attivo"
+        case .expiringSoon: stateLabel = "In scadenza"
+        case .expired: stateLabel = "Scaduto"
+        case .revoked: stateLabel = "Revocato"
+        case .error: stateLabel = "Errore"
+        case .pending: stateLabel = "In attesa"
+        }
+        guard let lastSyncedAt = connection.lastSyncedAt else {
+            return "\(stateLabel) · mai sincronizzato"
+        }
+        let relative = TraccioCore.relativeTime(from: lastSyncedAt, to: Date())
+        return "\(stateLabel) · sincronizzato \(relative)"
+    }
+
+    // MARK: Accounts
+
+    private func accountList(_ accounts: [AccountResponse]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(accounts) { account in
+                if account.id != accounts.first?.id {
+                    Divider().overlay(Palette.separatorSubtle)
+                }
+                accountRow(account)
+            }
+        }
+    }
+
+    private func accountRow(_ account: AccountResponse) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: account.kind == .wallet ? "person.2" : "creditcard")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(Palette.inkSecondary)
+                .frame(width: 28, height: 28)
+                .background(Palette.neutralFill)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .accessibilityHidden(true)
+            Text(account.name ?? "Conto senza nome")
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+            Spacer()
+            Text(account.currency)
+                .font(Typography.caption.weight(.semibold))
+                .foregroundStyle(Palette.inkTertiary)
+        }
+        .padding(.vertical, 9)
+    }
+}
+
+extension ConnectionGroup {
+    /// Identity for `ForEach`: the connection's id, or a fixed sentinel for
+    /// the single orphaned-accounts group (`connection == nil` can only
+    /// occur once per list, per `groupByConnection`'s contract).
+    fileprivate var groupID: UUID {
+        connection?.id ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+    }
+}
+
+#Preview {
+    AccountsView()
+}

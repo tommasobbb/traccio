@@ -132,6 +132,9 @@ class ConnectionRow(Base):
         the SCA callback back to this pending connection. Unique; cleared to
         ``None`` once the connection is activated, re-set to a fresh value on
         re-authorization.
+    last_synced_at : datetime or None
+        When a sync last ran against this connection. ``None`` until the first
+        sync; stamped by ``db/repositories.py::mark_connection_synced``.
     """
 
     __tablename__ = "connections"
@@ -147,6 +150,7 @@ class ConnectionRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     encrypted_credentials: Mapped[str | None] = mapped_column(Text, nullable=True)
     auth_state: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AccountRow(Base):

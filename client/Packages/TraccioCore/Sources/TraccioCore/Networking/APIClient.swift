@@ -137,6 +137,55 @@ public struct APIClient: Sendable {
         return envelope.advances
     }
 
+    /// Fetch the caller's bank connections, oldest first.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded connections from `GET /connections`, each carrying the
+    /// server-derived `consentState` and `daysUntilExpiry` — the client
+    /// renders these and never recomputes them from `expiresAt`.
+    public func connections() async throws -> [ConnectionResponse] {
+        let envelope: ConnectionsResponse = try await get("connections")
+        return envelope.connections
+    }
+
+    /// Sync a connection's accounts and transactions with the bank.
+    ///
+    /// The client's first write action: a real provider call with a real
+    /// rate-limit budget (`docs/openbanking.md`), so this should only be
+    /// invoked on a deliberate user action (a tap), never polled.
+    ///
+    /// Parameters
+    /// ----------
+    /// connectionID:
+    ///     The connection to sync.
+    ///
+    /// Returns
+    /// -------
+    /// How many accounts and transactions were discovered and persisted. The
+    /// data itself is read back via `accounts()`/`transactions(...)`.
+    public func syncConnection(connectionID: UUID) async throws -> SyncResponse {
+        try await post("connections/\(connectionID.uuidString)/sync")
+    }
+
+    /// Re-authorize a connection whose consent has lapsed or is close to it.
+    ///
+    /// Mirrors `POST /connections/{id}/reauthorize`: re-arms the existing
+    /// connection with a fresh SCA round rather than creating a new one.
+    ///
+    /// Parameters
+    /// ----------
+    /// connectionID:
+    ///     The connection to re-authorize.
+    ///
+    /// Returns
+    /// -------
+    /// Where to send the user — open `authorizationURL` in the system
+    /// browser, never an in-app `WebView`.
+    public func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse {
+        try await post("connections/\(connectionID.uuidString)/reauthorize")
+    }
+
     /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
     ///
     /// Wraps every failure in an `APIError` so no framework error — which may
@@ -166,6 +215,43 @@ public struct APIClient: Sendable {
         let response: URLResponse
         do {
             (data, response) = try await session.data(from: url)
+        } catch {
+            throw APIError.transport(underlying: error)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.notHTTP
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.badStatus(http.statusCode)
+        }
+
+        do {
+            return try TraccioCore.jsonDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(underlying: error)
+        }
+    }
+
+    /// Perform a `POST` for `path` relative to `baseURL` and decode the body.
+    ///
+    /// No request body: every write in this client so far (`syncConnection`,
+    /// `reauthorizeConnection`) takes none. A method taking an `Encodable`
+    /// body is a separate addition for the first write that needs one.
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    private func post<T: Decodable>(_ path: String) async throws -> T {
+        let url = baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
         } catch {
             throw APIError.transport(underlying: error)
         }

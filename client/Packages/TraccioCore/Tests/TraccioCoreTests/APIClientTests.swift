@@ -256,6 +256,145 @@ struct APIClientTests {
         #expect(advances[0].ownShare == 1800)
         #expect(advances[0].status == .open)
     }
+
+    /// A representative `GET /connections` envelope: one connection, expiring
+    /// soon, never synced.
+    private static let connectionsEnvelope = """
+        { "connections": [
+          {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "provider": "enable_banking",
+            "institution_name": "Revolut",
+            "status": "active",
+            "consent_state": "expiring_soon",
+            "days_until_expiry": 9,
+            "expires_at": "2026-09-01T00:00:00+00:00",
+            "created_at": "2026-08-01T09:30:00+00:00",
+            "last_synced_at": null
+          }
+        ] }
+        """
+
+    @Test func connectionsDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/connections")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.connectionsEnvelope.utf8))
+        }
+
+        let connections = try await client.connections()
+        #expect(connections.count == 1)
+        #expect(connections[0].institutionName == "Revolut")
+        #expect(connections[0].status == .active)
+        #expect(connections[0].consentState == .expiringSoon)
+        #expect(connections[0].daysUntilExpiry == 9)
+        #expect(connections[0].lastSyncedAt == nil)
+    }
+
+    @Test func connectionsRejectsAnUnknownConsentState() async {
+        let unknownStateEnvelope = """
+            { "connections": [
+              {
+                "id": "11111111-1111-1111-1111-111111111111",
+                "provider": "enable_banking",
+                "institution_name": "Revolut",
+                "status": "active",
+                "consent_state": "not_a_real_state",
+                "days_until_expiry": 9,
+                "expires_at": null,
+                "created_at": "2026-08-01T09:30:00+00:00",
+                "last_synced_at": null
+              }
+            ] }
+            """
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(unknownStateEnvelope.utf8))
+        }
+
+        await #expect {
+            try await client.connections()
+        } throws: { error in
+            guard case APIError.decoding = error else { return false }
+            return true
+        }
+    }
+
+    @Test func connectionsDecodesAnEmptyEnvelope() async throws {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{ "connections": [] }"#.utf8))
+        }
+
+        let connections = try await client.connections()
+        #expect(connections.isEmpty)
+    }
+
+    private static let syncEnvelope = """
+        { "accounts_synced": 2, "transactions_synced": 5 }
+        """
+
+    @Test func syncConnectionPostsToTheSyncEndpoint() async throws {
+        let connectionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/connections/\(connectionID.uuidString)/sync")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.syncEnvelope.utf8))
+        }
+
+        let result = try await client.syncConnection(connectionID: connectionID)
+        #expect(result.accountsSynced == 2)
+        #expect(result.transactionsSynced == 5)
+    }
+
+    @Test func syncConnectionThrowsBadStatusOnLapsedConsent() async {
+        let connectionID = UUID()
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "consent_expired"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.syncConnection(connectionID: connectionID)
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    private static let startConnectionEnvelope = """
+        {
+          "connection_id": "11111111-1111-1111-1111-111111111111",
+          "authorization_url": "https://sca.example/go"
+        }
+        """
+
+    @Test func reauthorizeConnectionPostsToTheReauthorizeEndpoint() async throws {
+        let connectionID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/connections/\(connectionID.uuidString)/reauthorize")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.startConnectionEnvelope.utf8))
+        }
+
+        let result = try await client.reauthorizeConnection(connectionID: connectionID)
+        #expect(result.connectionID == connectionID)
+        #expect(result.authorizationURL == "https://sca.example/go")
+    }
 }
 
 /// A `URLProtocol` that returns a canned response supplied by a handler.

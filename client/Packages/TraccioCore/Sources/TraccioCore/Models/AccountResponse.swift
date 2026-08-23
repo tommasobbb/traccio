@@ -11,7 +11,7 @@ import Foundation
 /// the type decodes with a plain decoder without relying on a global key
 /// strategy. A backend field rename therefore surfaces as a decode-test
 /// failure rather than a silent `nil`.
-public struct AccountResponse: Codable, Sendable, Identifiable {
+public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     /// Stable account identifier.
     public let id: UUID
     /// Connection currently exposing this account.
