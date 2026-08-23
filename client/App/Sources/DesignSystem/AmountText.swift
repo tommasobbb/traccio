@@ -18,6 +18,11 @@ struct AmountText: View {
         /// The one genuinely signed figure (`income - spending`). Carries the
         /// accent color when positive; ink otherwise.
         case net
+        /// A transaction whose `effective_amount` is zero (a transfer leg, a
+        /// reimbursement) — the bank's raw amount is still shown, but muted,
+        /// per `docs/design/tokens.md`'s "non-counted amounts" ink tone. Never
+        /// used for a spending or income figure.
+        case notCounted
     }
 
     let amount: Int
@@ -38,7 +43,7 @@ struct AmountText: View {
 
     private var explicitSign: Bool {
         switch kind {
-        case .spending: false
+        case .spending, .notCounted: false
         case .income, .net: true
         }
     }
@@ -48,6 +53,7 @@ struct AmountText: View {
         case .spending: Palette.ink
         case .income: Palette.income
         case .net: amount > 0 ? Palette.accent : Palette.ink
+        case .notCounted: Palette.inkQuaternary
         }
     }
 }

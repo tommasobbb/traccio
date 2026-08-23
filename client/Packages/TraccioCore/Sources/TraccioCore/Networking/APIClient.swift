@@ -81,6 +81,50 @@ public struct APIClient: Sendable {
         return try await get("dashboard/summary", query: query)
     }
 
+    /// Fetch a page of the caller's transactions, most recent first.
+    ///
+    /// Mirrors `GET /transactions` (`docs/api/openapi.json`). Ordering,
+    /// pagination bounds, and the account-scoping rule all live on the
+    /// backend; this method only shapes the request and decodes the result.
+    ///
+    /// Parameters
+    /// ----------
+    /// accountID:
+    ///     When given, restrict to this account. `nil` returns every account.
+    /// limit:
+    ///     Page size; the backend validates `1...200` and defaults to `50`.
+    /// offset:
+    ///     Number of rows to skip, for paging past the first page.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded page of transactions, most recent first.
+    public func transactions(
+        accountID: UUID? = nil,
+        limit: Int = 50,
+        offset: Int = 0
+    ) async throws -> [TransactionResponse] {
+        var query: [URLQueryItem] = [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
+        ]
+        if let accountID {
+            query.append(URLQueryItem(name: "account_id", value: accountID.uuidString))
+        }
+        let envelope: TransactionsResponse = try await get("transactions", query: query)
+        return envelope.transactions
+    }
+
+    /// Fetch the caller's categories.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded categories from `GET /categories`.
+    public func categories() async throws -> [CategoryResponse] {
+        let envelope: CategoriesResponse = try await get("categories")
+        return envelope.categories
+    }
+
     /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
     ///
     /// Wraps every failure in an `APIError` so no framework error — which may
