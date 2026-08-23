@@ -48,12 +48,63 @@ public struct APIClient: Sendable {
         try await get("health")
     }
 
+    /// Summarize real spending and income over a period, per currency.
+    ///
+    /// Mirrors `GET /dashboard/summary` (ADR 0007). Both bounds are optional;
+    /// omitting one leaves that side of the period open-ended. When supplied,
+    /// `start` is inclusive and `end` is exclusive — a half-open interval, so
+    /// the caller must pass the first instant of the day *after* the last day
+    /// to include, not that day's midnight.
+    ///
+    /// Parameters
+    /// ----------
+    /// start:
+    ///     Inclusive lower bound, or `nil` for open-ended.
+    /// end:
+    ///     Exclusive upper bound, or `nil` for open-ended.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded summary: one entry per currency with transactions in the
+    /// period, never combined across currencies.
+    public func dashboardSummary(
+        start: Date? = nil,
+        end: Date? = nil
+    ) async throws -> DashboardSummaryResponse {
+        var query: [URLQueryItem] = []
+        if let start {
+            query.append(URLQueryItem(name: "start", value: TraccioCore.iso8601String(from: start)))
+        }
+        if let end {
+            query.append(URLQueryItem(name: "end", value: TraccioCore.iso8601String(from: end)))
+        }
+        return try await get("dashboard/summary", query: query)
+    }
+
     /// Perform a `GET` for `path` relative to `baseURL` and decode the body.
     ///
     /// Wraps every failure in an `APIError` so no framework error — which may
     /// carry a response body — propagates unchanged.
-    private func get<T: Decodable>(_ path: String) async throws -> T {
-        let url = baseURL.appendingPathComponent(path)
+    ///
+    /// Parameters
+    /// ----------
+    /// path:
+    ///     Endpoint path, relative to `baseURL`, with no leading slash.
+    /// query:
+    ///     Query items to append; an empty array (the default) produces a URL
+    ///     with no `?` at all, matching the two-argument call sites exactly.
+    private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: true
+        ) else {
+            throw APIError.invalidURL
+        }
+        if !query.isEmpty {
+            components.queryItems = query
+        }
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
 
         let data: Data
         let response: URLResponse

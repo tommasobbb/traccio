@@ -1,0 +1,12 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Dashboard", "x": 0, "y": 0, "w": 390, "h": 844 },
+    { "file": "Transactions.dc.html", "title": "Movimenti", "x": 480, "y": 0, "w": 390, "h": 844 },
+    { "file": "TransactionDetail.dc.html", "title": "Dettaglio anticipo", "x": 960, "y": 0, "w": 390, "h": 844 },
+    { "file": "Accounts.dc.html", "title": "Conti", "x": 1440, "y": 0, "w": 390, "h": 844 }
+  ],
+  "annotations": [
+    { "id": "brief-note", "x": 0, "y": -150, "w": 900, "text": "Traccio — M3 design canvas\nStile chiaro e ariato, dati sintetici. La quota anticipo (advance) sulla Dashboard e nel Dettaglio e' il pezzo che chiude il \"done when\" di M2. Le card con badge \"Concept\" (grafico per categoria, andamento) non hanno ancora dati dal backend." }
+  ],
+  "launch": { "view": "canvas" }
+}

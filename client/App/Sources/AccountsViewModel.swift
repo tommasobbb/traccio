@@ -52,11 +52,3 @@ final class AccountsViewModel {
         }
     }
 }
-
-extension APIClient {
-    /// A client pointed at the local dev backend (`make run`).
-    ///
-    /// Hard-coded for M0 local development only; there is no configuration UI
-    /// yet and no secrets are involved (the client has no notion of tokens).
-    static let devDefault = APIClient(baseURL: URL(string: "http://localhost:8000")!)
-}

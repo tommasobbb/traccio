@@ -99,6 +99,52 @@ struct APIClientTests {
             return true
         }
     }
+
+    /// A representative `GET /dashboard/summary` envelope: one currency.
+    private static let dashboardEnvelope = """
+        { "currencies": [
+          { "currency": "EUR", "spending": 124050, "income": 210000, "net": 85950, "transaction_count": 42 }
+        ] }
+        """
+
+    @Test func dashboardSummaryEncodesBothBoundsAsQueryItems() async throws {
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(request.url?.path == "/dashboard/summary")
+            #expect(query.contains("start=2026-08-01"))
+            #expect(query.contains("end=2026-09-01"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.dashboardEnvelope.utf8))
+        }
+
+        var startComponents = DateComponents()
+        startComponents.year = 2026; startComponents.month = 8; startComponents.day = 1
+        startComponents.timeZone = TimeZone(identifier: "UTC")
+        var endComponents = DateComponents()
+        endComponents.year = 2026; endComponents.month = 9; endComponents.day = 1
+        endComponents.timeZone = TimeZone(identifier: "UTC")
+        let calendar = Calendar(identifier: .iso8601)
+        let start = calendar.date(from: startComponents)!
+        let end = calendar.date(from: endComponents)!
+
+        let summary = try await client.dashboardSummary(start: start, end: end)
+        #expect(summary.currencies.first?.currency == "EUR")
+    }
+
+    @Test func dashboardSummaryOmitsTheQueryStringWhenBothBoundsAreNil() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/dashboard/summary")
+            #expect(request.url?.query == nil)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.dashboardEnvelope.utf8))
+        }
+
+        _ = try await client.dashboardSummary()
+    }
 }
 
 /// A `URLProtocol` that returns a canned response supplied by a handler.

@@ -16,4 +16,6 @@ public enum APIError: Error, Sendable {
     case decoding(underlying: any Error)
     /// The response was not an `HTTPURLResponse` (should not happen over HTTP).
     case notHTTP
+    /// The request path and query could not be assembled into a valid URL.
+    case invalidURL
 }
