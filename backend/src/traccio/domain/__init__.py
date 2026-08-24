@@ -34,6 +34,7 @@ from traccio.domain.models import (
 )
 from traccio.domain.money import CurrencyCode, Money
 from traccio.domain.rules import rule_matches
+from traccio.domain.sync_schedule import SyncDecision, sync_decision
 
 __all__ = [
     "Account",
@@ -54,6 +55,7 @@ __all__ = [
     "Reimbursement",
     "Rule",
     "RuleMatchKind",
+    "SyncDecision",
     "SyncRun",
     "SyncRunOutcome",
     "SyncTrigger",
@@ -70,4 +72,5 @@ __all__ = [
     "event_total",
     "rule_matches",
     "summarize",
+    "sync_decision",
 ]

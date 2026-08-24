@@ -453,19 +453,33 @@ it stays an explicit user action, like transfer detection.
 
 ## Sync
 
-One attempt to pull fresh data for a `Connection`. Records what was
-attempted, when, and what failed.
+One attempt to pull fresh data for a `Connection`, modeled as `SyncRun`
+(`domain/models.py`, ADR 0010). Records what was attempted, when, and what
+failed — including a skip, which is what makes the background fetch budget
+below verifiable rather than trusted on faith.
 
-Two modes, and the distinction is not cosmetic:
+Two modes (`SyncTrigger`), and the distinction is not cosmetic:
 - **User-present**: the user is actively waiting. Provider requests carry the
-  PSU headers signalling this.
-- **Background**: no user present. Many banks allow only ~4 background
-  fetches per day per consent. Exceeding this gets the consent throttled, so
-  background frequency is a hard constraint on product design, not a tuning
-  parameter.
+  PSU headers signalling this (not yet wired to the adapter — see
+  `tasks/backlog.md`).
+- **Background**: no user present, run by `services/scheduler.py` on a timer.
+  Many banks allow only ~4 background fetches per day per consent. Exceeding
+  this gets the consent throttled, so background frequency is a hard
+  constraint on product design, not a tuning parameter — read here as ~4
+  `SyncRun`s per rolling 24h per connection
+  (`domain/sync_schedule.py::sync_decision`), since one run already makes
+  several provider calls internally.
+
+Whether a connection is *due* for a background sync right now is derived
+fresh on every scheduler tick — never stored — from the connection's
+consent state, its recent `SyncRun` history, and the clock: the same
+derived-not-stored reasoning as `ConsentState` (ADR 0006).
 
 Syncs are idempotent: running the same sync twice produces no duplicate
-transactions.
+transactions. The very first sync on a connection is greedy (the short
+post-authorization window is the only chance at full history); every sync
+after that requests only since the last one, with a small overlap to absorb
+retroactively dated entries.
 
 ---
 

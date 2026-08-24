@@ -31,18 +31,21 @@ def current_user_id() -> UUID:
     return get_settings().dev_user_id
 
 
-def get_bank_provider() -> Iterator[EnableBankingProvider]:
-    """Yield the Enable Banking provider, built from settings.
+def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
+    """Construct a bank provider and its underlying client, outside FastAPI's DI.
 
     Requires the Enable Banking application id and private-key path to be
-    configured; a missing one is a misconfiguration and fails loudly here rather
-    than deeper down. The underlying HTTP client is closed when the request ends.
-    Tests override this dependency with a fake provider.
+    configured; a missing one is a misconfiguration and fails loudly here
+    rather than deeper down. Returns the client alongside the provider so the
+    caller can close it — the two have different lifecycles depending on the
+    caller: :func:`get_bank_provider` closes it when one request ends, while
+    ``api/main.py``'s lifespan keeps one alive for the whole background
+    scheduler's run (``services/scheduler.py``).
 
-    Yields
-    ------
-    EnableBankingProvider
-        A provider ready to start and complete authorizations.
+    Returns
+    -------
+    tuple[EnableBankingProvider, EnableBankingClient]
+        The provider, and the client whose ``.close()`` the caller owns.
     """
     settings = get_settings()
     if settings.enable_banking_application_id is None:
@@ -55,8 +58,23 @@ def get_bank_provider() -> Iterator[EnableBankingProvider]:
         private_key_pem=load_private_key_pem(settings.enable_banking_private_key_path),
         base_url=settings.enable_banking_base_url,
     )
+    return EnableBankingProvider(client), client
+
+
+def get_bank_provider() -> Iterator[EnableBankingProvider]:
+    """Yield the Enable Banking provider, built from settings.
+
+    The underlying HTTP client is closed when the request ends. Tests
+    override this dependency with a fake provider.
+
+    Yields
+    ------
+    EnableBankingProvider
+        A provider ready to start and complete authorizations.
+    """
+    provider, client = build_bank_provider()
     try:
-        yield EnableBankingProvider(client)
+        yield provider
     finally:
         client.close()
 

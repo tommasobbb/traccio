@@ -90,6 +90,24 @@ class Settings(BaseSettings):
         reappear within a defined window are dropped"). Chosen conservatively:
         card authorization holds can legitimately sit for weeks depending on
         merchant category.
+    background_sync_enabled : bool
+        Whether ``api/main.py``'s lifespan starts the background scheduler
+        (``services/scheduler.py``, ADR 0010). ``False`` by default: the app
+        must boot with no ``.env`` (``backend/CLAUDE.md``) without silently
+        calling a real bank on startup — this is switched on deliberately.
+    background_sync_interval_minutes : int
+        Minutes between the end of one scheduler tick and the start of the
+        next.
+    background_sync_budget_per_day : int
+        Maximum sync runs (any outcome) per connection per rolling 24h — the
+        hard per-consent background fetch budget most banks enforce
+        (``docs/openbanking.md``: "~4 background fetches per day"), read as
+        *runs*, not raw provider HTTP calls (see
+        ``db/repositories.py::count_recent_sync_runs``).
+    sync_min_interval_hours : int
+        Minimum whole hours between two syncs of the same connection, so a
+        sync moments ago (user-triggered or background) is not immediately
+        repeated even with budget left.
     """
 
     model_config = SettingsConfigDict(
@@ -137,6 +155,13 @@ class Settings(BaseSettings):
     # How many days a pending transaction may go unseen by a sync before it is
     # considered abandoned. See db/repositories.py::prune_stale_pending_transactions.
     pending_transaction_ttl_days: int = 30
+    # Background sync scheduler (ADR 0010). Off by default — see the class
+    # docstring; turning it on is a deliberate step, never a side effect of
+    # booting with no .env.
+    background_sync_enabled: bool = False
+    background_sync_interval_minutes: int = 60
+    background_sync_budget_per_day: int = 4
+    sync_min_interval_hours: int = 6
 
 
 @lru_cache
