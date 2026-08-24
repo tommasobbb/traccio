@@ -22,17 +22,28 @@ wrong number in a finance app destroys trust faster than a missing feature.
 Dependencies point inward. A layer may import from layers below it, never
 above.
 
-| Layer        | Contains                                   | May import        |
-| ------------ | ------------------------------------------- | ----------------- |
-| `domain/`    | Entities, value objects, derivation rules  | nothing           |
-| `services/`  | Sync, matching, detection, categorization  | `domain`          |
-| `providers/` | Bank adapters                              | `domain`          |
-| `db/`        | Persistence, repositories                  | `domain`          |
-| `api/`       | HTTP routing, request/response schemas     | all of the above  |
-| `core/`      | Config, logging, crypto, auth              | nothing           |
+| Layer        | Contains                                   | May import                          |
+| ------------ | ------------------------------------------- | ------------------------------------ |
+| `domain/`    | Entities, value objects, derivation rules  | nothing                             |
+| `services/`  | Sync, matching, detection, categorization  | `domain`, `db`, `providers`, `core` |
+| `providers/` | Bank adapters                              | `domain`                            |
+| `db/`        | Persistence, repositories                  | `domain`                            |
+| `api/`       | HTTP routing, request/response schemas     | all of the above                    |
+| `core/`      | Config, logging, crypto, auth              | nothing                             |
 
 `domain/` importing SQLAlchemy or FastAPI is a bug. It must stay testable
 with no database and no network.
+
+Most of `services/` is still pure — `advances.py`, `categorization.py`, and
+`transfers.py` import only `domain`, same as the table used to require of the
+whole layer. `services/sync.py` is the exception: sync is inherently I/O
+orchestration (decrypt a stored credential, call the bank adapter, write
+rows), and both an HTTP-triggered sync and the background scheduler run the
+exact same path — see ADR 0010 for why the column was widened rather than
+duplicating that orchestration once inside `api/` and once in a scheduler
+module. What still holds without exception: `db/`, `providers/`, and `core/`
+never import `services/`, and `services/` never imports `api/` — HTTP
+concerns (status codes, request/response schemas) stay in the router.
 
 ## Invariants
 

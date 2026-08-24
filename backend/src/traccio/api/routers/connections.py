@@ -14,7 +14,7 @@ Data safety (``.claude/rules/data-safety.md``): these handlers log only the
 or the authorization url (which embeds ``state``).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -38,18 +38,21 @@ from traccio.db.repositories import (
     create_connection,
     find_pending_connection_id,
     get_connection,
-    get_connection_credentials,
     list_connections,
-    mark_connection_synced,
     set_connection_auth_state,
-    upsert_account,
-    upsert_transaction,
 )
 from traccio.db.session import get_session
-from traccio.domain.consent import consent_state
-from traccio.domain.enums import ConnectionStatus, ConsentState
-from traccio.domain.models import Account, Connection
+from traccio.domain.enums import ConnectionStatus
+from traccio.domain.models import Connection
 from traccio.providers.base import BankProvider, ProviderError, SyncContext
+from traccio.services.sync import (
+    ConnectionNotFoundError,
+    ConsentExpiredError,
+    CredentialsUnavailableError,
+)
+from traccio.services.sync import (
+    sync_connection as run_sync,
+)
 
 logger = get_logger(__name__)
 
@@ -197,15 +200,13 @@ def sync_connection(
 ) -> SyncResponse:
     """Sync the accounts and transactions reachable through an active connection.
 
-    Reads the encrypted consent secret, decrypts it, lists the accounts the
-    consent exposes and upserts each one, then fetches and upserts each account's
-    transactions over a greedy history window. Idempotent on stable identity, so
-    a re-sync updates rather than duplicates. Scoped to the current user.
-
-    Refuses fast on a lapsed consent: a stored ``status`` of ``active`` does not
-    by itself mean the 180-day consent window still holds (see
-    ``domain/consent.py``), so this checks the *derived* state first rather than
-    letting the provider call fail with an opaque error.
+    A thin HTTP wrapper: the orchestration itself
+    (:func:`~traccio.services.sync.sync_connection`) is shared with the
+    background scheduler (``services/scheduler.py``), so a user-triggered sync
+    and a scheduled one go through the exact same path. This handler's own job
+    is PSU-present context (a user is actively waiting, so this is not subject
+    to the background fetch budget — ``docs/openbanking.md``), translating the
+    service's exceptions into the right status code, and committing on success.
 
     Parameters
     ----------
@@ -225,66 +226,40 @@ def sync_connection(
     SyncResponse
         How many accounts and transactions were discovered and persisted.
     """
-    connection = get_connection(session, user_id=user_id, connection_id=connection_id)
-    if connection is None:
-        raise HTTPException(status_code=404, detail="unknown connection")
     settings = get_settings()
-    state = consent_state(
-        connection, now=datetime.now(UTC), warning_window_days=settings.consent_warning_window_days
-    )
-    if state is ConsentState.EXPIRED:
-        raise HTTPException(status_code=409, detail="consent_expired")
-
-    encrypted = get_connection_credentials(session, user_id=user_id, connection_id=connection_id)
-    if encrypted is None:
-        raise HTTPException(status_code=404, detail="unknown or inactive connection")
-
-    credentials = cipher.decrypt(encrypted)
-    # PSU-present: the user is actively waiting, so this is not subject to the
-    # background fetch budget (docs/openbanking.md).
     context = SyncContext(psu_present=True)
-    now = datetime.now(UTC)
-    since = now - timedelta(days=settings.initial_history_days)
     try:
-        provider_accounts = provider.list_accounts(credentials=credentials, context=context)
-        transactions_synced = 0
-        for provider_account in provider_accounts:
-            account = upsert_account(
-                session,
-                account=Account(
-                    user_id=user_id,
-                    connection_id=connection_id,
-                    kind=provider_account.kind,
-                    currency=provider_account.currency,
-                    identification_hash=provider_account.identification_hash,
-                    name=provider_account.name,
-                ),
-            )
-            transactions = provider.fetch_transactions(
-                credentials=credentials,
-                account=account,
-                since=since,
-                until=None,
-                context=context,
-            )
-            for transaction in transactions:
-                upsert_transaction(session, transaction=transaction, now=now)
-            transactions_synced += len(transactions)
+        outcome = run_sync(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=user_id,
+            connection_id=connection_id,
+            context=context,
+            initial_history_days=settings.initial_history_days,
+            consent_warning_window_days=settings.consent_warning_window_days,
+            now=datetime.now(UTC),
+        )
+    except ConnectionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="unknown connection") from exc
+    except ConsentExpiredError as exc:
+        raise HTTPException(status_code=409, detail="consent_expired") from exc
+    except CredentialsUnavailableError as exc:
+        raise HTTPException(status_code=404, detail="unknown or inactive connection") from exc
     except ProviderError as exc:
         raise HTTPException(status_code=502, detail="provider sync failed") from exc
 
-    mark_connection_synced(session, user_id=user_id, connection_id=connection_id, now=now)
     session.commit()
 
     logger.info(
         "connections.sync",
         connection_id=str(connection_id),
-        accounts_synced=len(provider_accounts),
-        transactions_synced=transactions_synced,
+        accounts_synced=outcome.accounts_synced,
+        transactions_synced=outcome.transactions_synced,
     )
     return SyncResponse(
-        accounts_synced=len(provider_accounts),
-        transactions_synced=transactions_synced,
+        accounts_synced=outcome.accounts_synced,
+        transactions_synced=outcome.transactions_synced,
     )
 
 
