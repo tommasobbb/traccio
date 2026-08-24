@@ -30,15 +30,20 @@ targets:
     dependencies:
       - package: TraccioCore
     # Generated Info.plist (gitignored, like the .xcodeproj — run `make xcode`).
-    # Its only non-default content is the ATS exception below: the M0 app talks
-    # to the dev backend over http://localhost, and the iOS simulator blocks
-    # cleartext HTTP without NSAllowsLocalNetworking. Dev-only; no production
-    # endpoint is cleartext.
+    # Non-default content: the ATS exception below (the M0 app talks to the
+    # dev backend over http://localhost, and the iOS simulator blocks
+    # cleartext HTTP without NSAllowsLocalNetworking; dev-only, no production
+    # endpoint is cleartext) and NSFaceIDUsageDescription, required by iOS to
+    # evaluate .deviceOwnerAuthentication with Face ID (biometric lock,
+    # docs/decisions/0013-biometric-lock.md). Unconditional even though the
+    # feature is iOS-only: macOS never reads this key, so there is nothing to
+    # gate. Italian, matching the client's Italian-only UI (tasks/backlog.md).
     info:
       path: App/Info.plist
       properties:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        NSFaceIDUsageDescription: "Traccio usa Face ID per sbloccare l'app e proteggere i tuoi dati finanziari."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.traccio.app

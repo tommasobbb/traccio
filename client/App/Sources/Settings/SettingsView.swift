@@ -2,9 +2,9 @@ import SwiftUI
 import TraccioCore
 
 /// The Impostazioni tab — the container for every settings-shaped screen
-/// this app has or will have (ADR 0009). "Categorie e regole" and "Eventi"
-/// are the entries today; biometric lock and backup/export are tracked in
-/// `tasks/backlog.md` as later entries here.
+/// this app has or will have (ADR 0009). "Categorie e regole", "Eventi", and
+/// (iOS only) "Blocco con Face ID" are the entries today; backup/export is
+/// tracked in `tasks/backlog.md` as a later entry here.
 ///
 /// No mockup covers this screen (`docs/design/canvas/` mocks only
 /// Panoramica/Movimenti/Conti/Dettaglio) — a fourth tab is a deliberate
@@ -14,6 +14,7 @@ import TraccioCore
 /// reintroduce the plain-row look ADR 0008 replaced.
 struct SettingsView: View {
     @Environment(DataFreshness.self) private var freshness
+    @Environment(AppLock.self) private var lock
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,10 @@ struct SettingsView: View {
                         settingsRow(title: "Eventi", systemImage: "calendar")
                     }
                     .buttonStyle(.plain)
+                    #if os(iOS)
+                    Divider().overlay(Palette.separator)
+                    biometricLockRow
+                    #endif
                 }
                 .padding(20)
             }
@@ -43,6 +48,22 @@ struct SettingsView: View {
     }
 
     private func settingsRow(title: String, systemImage: String) -> some View {
+        HStack(spacing: 12) {
+            settingsRowLabel(title: title, systemImage: systemImage)
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.inkQuaternary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    /// The icon-tile-plus-title lead-in shared by every row, whatever
+    /// trailing control it ends in — a `NavigationLink`'s chevron
+    /// (`settingsRow`) or, on iOS, a `Toggle` (`biometricLockRow`).
+    private func settingsRowLabel(title: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .regular))
@@ -54,18 +75,38 @@ struct SettingsView: View {
             Text(title)
                 .font(Typography.body.weight(.semibold))
                 .foregroundStyle(Palette.ink)
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Palette.inkQuaternary)
-                .accessibilityHidden(true)
         }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
     }
+
+    #if os(iOS)
+    /// Biometric lock toggle (`docs/decisions/0013-biometric-lock.md`) — iOS
+    /// only, same scoping as the feature itself. Disabled with an
+    /// explanatory caption when the device has no passcode set at all, the
+    /// one case `.deviceOwnerAuthentication` cannot evaluate.
+    @ViewBuilder
+    private var biometricLockRow: some View {
+        Toggle(isOn: Bindable(lock).isEnabled) {
+            settingsRowLabel(title: "Blocco con Face ID", systemImage: "faceid")
+        }
+        .tint(Palette.accent)
+        .disabled(!lock.isBiometryAvailable)
+        .padding(.vertical, 4)
+        if !lock.isBiometryAvailable {
+            Text("Imposta un codice di sblocco sul dispositivo per usare il blocco.")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+        }
+    }
+    #endif
 }
 
 #Preview {
     SettingsView()
         .environment(DataFreshness())
+        .environment(
+            AppLock(
+                authenticator: UnavailableBiometricAuthenticator(),
+                defaults: UserDefaults(suiteName: "SettingsView.preview") ?? .standard
+            )
+        )
 }

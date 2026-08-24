@@ -8,6 +8,11 @@ struct TraccioApp: App {
     /// Shared cross-tab invalidation signal — see `DataFreshness`'s
     /// docstring. Owned here so every tab observes the same instance.
     @State private var freshness = DataFreshness()
+    /// Biometric lock state, iOS-only in effect (`docs/decisions/0013-biometric-lock.md`)
+    /// but not gated itself — see `AppLock`'s own doc comment. Injected
+    /// unconditionally so `SettingsView` can read it without conditionally
+    /// declaring the environment.
+    @State private var lock = AppLock()
 
     var body: some Scene {
         WindowGroup {
@@ -30,6 +35,10 @@ struct TraccioApp: App {
                     }
             }
             .environment(freshness)
+            .environment(lock)
+            #if os(iOS)
+            .appLockOverlay(lock)
+            #endif
         }
     }
 }
