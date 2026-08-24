@@ -85,18 +85,24 @@ class EnableBankingClient:
         *,
         params: Mapping[str, str] | None = None,
         json: Mapping[str, Any] | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> Any:
         """Send an authenticated request and return the parsed JSON body.
+
+        ``extra_headers``, when given, are sent alongside the bearer JWT —
+        the PSU-present headers a data-retrieval call may carry (ADR 0011),
+        never used for the auth/session calls that never pass any.
 
         A non-2xx status or a transport failure is wrapped in a
         :class:`~traccio.providers.base.ProviderError` with a value-free message;
         the provider exception is chained (``raise ... from``) for debugging but
         its detail never enters the message we raise (data-safety).
         """
+        headers = self._auth_header()
+        if extra_headers:
+            headers.update(extra_headers)
         try:
-            response = self._client.request(
-                method, url, params=params, json=json, headers=self._auth_header()
-            )
+            response = self._client.request(method, url, params=params, json=json, headers=headers)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise ProviderError(
@@ -179,7 +185,9 @@ class EnableBankingClient:
         """
         return cast(dict[str, Any], self._request_json("POST", "/sessions", json={"code": code}))
 
-    def get_session(self, session_id: str) -> dict[str, Any]:
+    def get_session(
+        self, session_id: str, *, extra_headers: Mapping[str, str] | None = None
+    ) -> dict[str, Any]:
         """Retrieve a stored session (``GET /sessions/{session_id}``).
 
         Parameters
@@ -187,6 +195,8 @@ class EnableBankingClient:
         session_id : str
             The session identifier obtained from :meth:`authorize_session`; the
             consent credential. Placed in the path, never logged.
+        extra_headers : Mapping or None, optional
+            PSU-present headers to attach, when the caller has them (ADR 0011).
 
         Returns
         -------
@@ -195,15 +205,22 @@ class EnableBankingClient:
             strings). Full per-account details are fetched separately with
             :meth:`get_account_details`.
         """
-        return cast(dict[str, Any], self._request_json("GET", f"/sessions/{session_id}"))
+        return cast(
+            dict[str, Any],
+            self._request_json("GET", f"/sessions/{session_id}", extra_headers=extra_headers),
+        )
 
-    def get_account_details(self, account_uid: str) -> dict[str, Any]:
+    def get_account_details(
+        self, account_uid: str, *, extra_headers: Mapping[str, str] | None = None
+    ) -> dict[str, Any]:
         """Retrieve one account's details (``GET /accounts/{account_uid}/details``).
 
         Parameters
         ----------
         account_uid : str
             An account UID from :meth:`get_session`.
+        extra_headers : Mapping or None, optional
+            PSU-present headers to attach, when the caller has them (ADR 0011).
 
         Returns
         -------
@@ -212,7 +229,12 @@ class EnableBankingClient:
             ``identification_hash``, ``cash_account_type``, ``currency``, and
             ``product``. Normalized into a domain object by the provider, not here.
         """
-        return cast(dict[str, Any], self._request_json("GET", f"/accounts/{account_uid}/details"))
+        return cast(
+            dict[str, Any],
+            self._request_json(
+                "GET", f"/accounts/{account_uid}/details", extra_headers=extra_headers
+            ),
+        )
 
     def get_account_transactions(
         self,
@@ -221,6 +243,7 @@ class EnableBankingClient:
         date_from: str,
         date_to: str | None = None,
         continuation_key: str | None = None,
+        extra_headers: Mapping[str, str] | None = None,
     ) -> dict[str, Any]:
         """Retrieve one page of an account's transactions.
 
@@ -239,6 +262,8 @@ class EnableBankingClient:
             Inclusive upper bound, ISO date. Omitted means up to now.
         continuation_key : str or None, optional
             The paging token returned by a previous page; omitted for the first.
+        extra_headers : Mapping or None, optional
+            PSU-present headers to attach, when the caller has them (ADR 0011).
 
         Returns
         -------
@@ -253,7 +278,12 @@ class EnableBankingClient:
             params["continuation_key"] = continuation_key
         return cast(
             dict[str, Any],
-            self._request_json("GET", f"/accounts/{account_uid}/transactions", params=params),
+            self._request_json(
+                "GET",
+                f"/accounts/{account_uid}/transactions",
+                params=params,
+                extra_headers=extra_headers,
+            ),
         )
 
     def close(self) -> None:

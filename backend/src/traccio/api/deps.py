@@ -58,7 +58,8 @@ def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
         private_key_pem=load_private_key_pem(settings.enable_banking_private_key_path),
         base_url=settings.enable_banking_base_url,
     )
-    return EnableBankingProvider(client), client
+    provider = EnableBankingProvider(client, send_psu_headers=settings.send_psu_headers)
+    return provider, client
 
 
 def get_bank_provider() -> Iterator[EnableBankingProvider]:

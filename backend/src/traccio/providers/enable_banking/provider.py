@@ -50,6 +50,31 @@ _PSU_TYPE = "personal"
 # Consent lifetime requested; the maximum most banks allow. The bank may grant
 # less, so the response's valid_until is authoritative (see docs/openbanking.md).
 _MAX_CONSENT_DAYS = 180
+
+# PSU-present headers sent to the two data-retrieval calls, when both
+# `EnableBankingProvider.send_psu_headers` and `SyncContext.psu_present` are
+# true (ADR 0011). Deliberately partial: the full documented set is
+# `Psu-Ip-Address`, `Psu-User-Agent`, `Psu-Referer`, `Psu-Accept`,
+# `Psu-Accept-Charset`, `Psu-Accept-Encoding`, `Psu-Accept-language`,
+# `Psu-Geo-Location` (docs/openbanking.md). This codebase has no honest value
+# for three of them in a headless backend: `Psu-Ip-Address` and
+# `Psu-Geo-Location` need a real device, which does not reach this backend
+# yet (`tasks/backlog.md` — the client only reaches localhost); `Psu-Referer`
+# names a browser referring page, which has no equivalent for a server-to-
+# server call. Fabricating any of the three would be worse than omitting
+# them. Enable Banking's header set is all-or-nothing per the bank's own
+# `required_psu_headers` (not fetched anywhere in this codebase), so even
+# with the flag on, a bank whose required set includes one of the three
+# omitted headers still refuses with `PSU_HEADER_NOT_PROVIDED`. This is a
+# deliberately incomplete implementation, staged for the day client
+# reachability or per-ASPSP header requirements are solved — see ADR 0011.
+_PSU_HEADERS = {
+    "Psu-User-Agent": "Traccio/1.0",
+    "Psu-Accept": "application/json",
+    "Psu-Accept-Charset": "utf-8",
+    "Psu-Accept-Encoding": "identity",
+    "Psu-Accept-language": "en",
+}
 # ISO 20022 external cash-account-type -> our AccountKind. The kinds M1 targets
 # (personal current, savings, card) plus OTHR, which banks use for a
 # currency-agnostic wallet such as PayPal (mapped to WALLET; the account may also
@@ -72,10 +97,29 @@ class EnableBankingProvider(BankProvider):
     ----------
     client : EnableBankingClient
         The authenticated HTTP client used for all provider calls.
+    send_psu_headers : bool, optional
+        Whether to actually attach :data:`_PSU_HEADERS` to a data-retrieval
+        call when its ``SyncContext.psu_present`` is true. ``False`` by
+        default and in production today (``Settings.send_psu_headers``,
+        ADR 0011) — with it off, behavior is byte-for-byte what it was before
+        this parameter existed, regardless of ``psu_present``.
     """
 
-    def __init__(self, client: EnableBankingClient) -> None:
+    def __init__(self, client: EnableBankingClient, *, send_psu_headers: bool = False) -> None:
         self._client = client
+        self._send_psu_headers = send_psu_headers
+
+    def _psu_headers_for(self, context: SyncContext) -> dict[str, str] | None:
+        """Return the PSU headers for this call, or ``None`` to send none.
+
+        ``None`` — not an empty dict — whenever either gate is off, so the
+        client's ``extra_headers`` merge is skipped entirely rather than
+        merging nothing (see :data:`_PSU_HEADERS`'s docstring for what's
+        deliberately missing even when both gates are on).
+        """
+        if self._send_psu_headers and context.psu_present:
+            return _PSU_HEADERS
+        return None
 
     @property
     def name(self) -> str:
@@ -128,14 +172,15 @@ class EnableBankingProvider(BankProvider):
         )
 
     def list_accounts(self, *, credentials: str, context: SyncContext) -> list[ProviderAccount]:
-        # context is threaded for the PSU-present headers a later slice will set on
-        # the account calls; the client does not send them yet (see docs/openbanking.md).
-        del context
-        session = self._client.get_session(credentials)
+        headers = self._psu_headers_for(context)
+        session = self._client.get_session(credentials, extra_headers=headers)
         account_uids = session.get("accounts")
         if not isinstance(account_uids, list):
             raise ProviderError("Enable Banking /sessions response is missing 'accounts'")
-        return [_to_provider_account(self._client.get_account_details(uid)) for uid in account_uids]
+        return [
+            _to_provider_account(self._client.get_account_details(uid, extra_headers=headers))
+            for uid in account_uids
+        ]
 
     def fetch_transactions(
         self,
@@ -146,11 +191,10 @@ class EnableBankingProvider(BankProvider):
         until: datetime | None,
         context: SyncContext,
     ) -> list[Transaction]:
-        # context is threaded for the PSU-present headers a later slice will set;
-        # the client does not send them yet (see docs/openbanking.md), mirroring
-        # list_accounts.
-        del context
-        account_uid = self._resolve_account_uid(credentials, account.identification_hash)
+        headers = self._psu_headers_for(context)
+        account_uid = self._resolve_account_uid(
+            credentials, account.identification_hash, extra_headers=headers
+        )
         date_from = since.date().isoformat()
         date_to = until.date().isoformat() if until is not None else None
 
@@ -163,6 +207,7 @@ class EnableBankingProvider(BankProvider):
                 date_from=date_from,
                 date_to=date_to,
                 continuation_key=continuation_key,
+                extra_headers=headers,
             )
             entries = page.get("transactions")
             if not isinstance(entries, list):
@@ -178,7 +223,9 @@ class EnableBankingProvider(BankProvider):
             seen_keys.add(continuation_key)
         return transactions
 
-    def _resolve_account_uid(self, credentials: str, identification_hash: str) -> str:
+    def _resolve_account_uid(
+        self, credentials: str, identification_hash: str, *, extra_headers: dict[str, str] | None
+    ) -> str:
         """Resolve the Enable Banking account UID for a stored account.
 
         The domain :class:`Account` carries the stable ``identification_hash`` but
@@ -188,12 +235,12 @@ class EnableBankingProvider(BankProvider):
         details. Stateless, at the cost of the extra detail calls — acceptable at
         the handful-of-accounts scale this runs at.
         """
-        session = self._client.get_session(credentials)
+        session = self._client.get_session(credentials, extra_headers=extra_headers)
         account_uids = session.get("accounts")
         if not isinstance(account_uids, list):
             raise ProviderError("Enable Banking /sessions response is missing 'accounts'")
         for uid in account_uids:
-            details = self._client.get_account_details(uid)
+            details = self._client.get_account_details(uid, extra_headers=extra_headers)
             if details.get("identification_hash") == identification_hash:
                 return cast(str, uid)
         raise ProviderError("Enable Banking session does not expose the requested account")

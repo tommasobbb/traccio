@@ -108,6 +108,16 @@ class Settings(BaseSettings):
         Minimum whole hours between two syncs of the same connection, so a
         sync moments ago (user-triggered or background) is not immediately
         repeated even with budget left.
+    send_psu_headers : bool
+        Whether ``EnableBankingProvider`` actually attaches PSU-present
+        headers to a user-present data-retrieval call (ADR 0011).
+        ``False`` by default: the header set this codebase can honestly send
+        is incomplete (no real device IP or geolocation is available while
+        the client only reaches the backend from localhost —
+        ``tasks/backlog.md``), and a bank whose ``required_psu_headers``
+        needs one of the missing ones refuses with
+        ``PSU_HEADER_NOT_PROVIDED`` regardless. Built and tested, deliberately
+        not turned on.
     """
 
     model_config = SettingsConfigDict(
@@ -162,6 +172,10 @@ class Settings(BaseSettings):
     background_sync_interval_minutes: int = 60
     background_sync_budget_per_day: int = 4
     sync_min_interval_hours: int = 6
+    # PSU-present headers (ADR 0011). Built and tested, off by default: the
+    # header set this codebase can honestly send is incomplete — see the
+    # class docstring.
+    send_psu_headers: bool = False
 
 
 @lru_cache

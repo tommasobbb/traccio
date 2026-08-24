@@ -34,13 +34,15 @@ def _synthetic_pem() -> str:
     ).decode("ascii")
 
 
-def _provider(handler: httpx.MockTransport) -> EnableBankingProvider:
+def _provider(
+    handler: httpx.MockTransport, *, send_psu_headers: bool = False
+) -> EnableBankingProvider:
     client = EnableBankingClient(
         application_id=_APPLICATION_ID,
         private_key_pem=_synthetic_pem(),
         transport=handler,
     )
-    return EnableBankingProvider(client)
+    return EnableBankingProvider(client, send_psu_headers=send_psu_headers)
 
 
 def test_start_authorization_builds_auth_request_and_returns_start() -> None:
@@ -432,3 +434,100 @@ def test_provider_name_is_stable() -> None:
     provider = _provider(httpx.MockTransport(lambda request: httpx.Response(200, json={})))
 
     assert provider.name == "enable_banking"
+
+
+# --- PSU-present headers (ADR 0011): built and tested, off by default. ---
+
+
+def _accounts_handler_recording_headers(
+    seen: list[str | None], *, session_body: dict[str, Any], details: dict[str, dict[str, Any]]
+) -> httpx.MockTransport:
+    """Serve the same two calls as :func:`_accounts_handler`, recording each
+    request's ``Psu-User-Agent`` header into ``seen`` in call order."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("Psu-User-Agent"))
+        path = request.url.path
+        if path == f"/sessions/{_SESSION_ID}":
+            return httpx.Response(200, json=session_body)
+        prefix, _, suffix = path.partition("/accounts/")
+        if prefix == "" and suffix.endswith("/details"):
+            uid = suffix.removesuffix("/details")
+            return httpx.Response(200, json=details[uid])
+        raise AssertionError(f"unexpected path: {path}")
+
+    return httpx.MockTransport(handler)
+
+
+def test_list_accounts_sends_no_psu_headers_when_the_setting_is_off() -> None:
+    """The default (send_psu_headers=False) is unchanged behavior, even with
+    a user-present context — proves the flag, not psu_present alone, gates
+    whether anything is actually sent."""
+    seen: list[str | None] = []
+    provider = _provider(
+        _accounts_handler_recording_headers(
+            seen, session_body={"accounts": ["uid-curr-01"]}, details=_DETAILS
+        ),
+        send_psu_headers=False,
+    )
+
+    provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
+
+    assert seen == [None, None]
+
+
+def test_list_accounts_sends_psu_headers_when_the_setting_is_on_and_psu_present() -> None:
+    seen: list[str | None] = []
+    provider = _provider(
+        _accounts_handler_recording_headers(
+            seen, session_body={"accounts": ["uid-curr-01"]}, details=_DETAILS
+        ),
+        send_psu_headers=True,
+    )
+
+    provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=True))
+
+    assert seen == ["Traccio/1.0", "Traccio/1.0"]
+
+
+def test_list_accounts_sends_no_psu_headers_for_a_background_run_even_with_the_setting_on() -> None:
+    """psu_present=False (a scheduled background sync) never carries PSU
+    headers, regardless of the setting — that distinction is the entire
+    reason the two gates are separate (docs/openbanking.md)."""
+    seen: list[str | None] = []
+    provider = _provider(
+        _accounts_handler_recording_headers(
+            seen, session_body={"accounts": ["uid-curr-01"]}, details=_DETAILS
+        ),
+        send_psu_headers=True,
+    )
+
+    provider.list_accounts(credentials=_SESSION_ID, context=SyncContext(psu_present=False))
+
+    assert seen == [None, None]
+
+
+def test_fetch_transactions_sends_psu_headers_when_both_gates_are_on() -> None:
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("Psu-User-Agent"))
+        path = request.url.path
+        if path == f"/sessions/{_SESSION_ID}":
+            return httpx.Response(200, json={"accounts": ["uid-curr-01"]})
+        if path.endswith("/details"):
+            return httpx.Response(200, json=_DETAILS["uid-curr-01"])
+        return httpx.Response(200, json={"transactions": []})
+
+    provider = _provider(httpx.MockTransport(handler), send_psu_headers=True)
+
+    provider.fetch_transactions(
+        credentials=_SESSION_ID,
+        account=_account("IDHASH-CURR-01"),
+        since=datetime(2026, 1, 1, tzinfo=UTC),
+        until=None,
+        context=SyncContext(psu_present=True),
+    )
+
+    # Session lookup, account details, and the transactions page all carry it.
+    assert seen == ["Traccio/1.0"] * 3
