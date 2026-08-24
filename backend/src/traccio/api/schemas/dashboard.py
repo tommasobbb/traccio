@@ -7,9 +7,66 @@ spanning multiple currencies produces one entry per currency rather than a
 single combined total.
 """
 
+from collections.abc import Mapping
+from uuid import UUID
+
 from pydantic import BaseModel
 
-from traccio.domain.dashboard import CurrencySummary
+from traccio.domain.dashboard import CategorySummary, CurrencySummary
+
+
+class CategorySummaryResponse(BaseModel):
+    """Spending and income totals for one category, as returned to the client.
+
+    Attributes
+    ----------
+    category_id : UUID or None
+        The category this entry is for, or ``None`` for the "no category"
+        bucket — a real, counted entry, never omitted.
+    category_name : str or None
+        The category's current name, resolved by the router at read time (not
+        stored on the domain summary — see
+        ``api/routers/dashboard.py``). ``None`` iff ``category_id`` is
+        ``None``.
+    spending : int
+        Total spending in minor units (cents), a positive magnitude.
+    income : int
+        Total income in minor units (cents), a positive magnitude.
+    transaction_count : int
+        How many transactions fall in this category.
+    """
+
+    category_id: UUID | None
+    category_name: str | None
+    spending: int
+    income: int
+    transaction_count: int
+
+    @classmethod
+    def from_domain(
+        cls, summary: CategorySummary, *, category_names: Mapping[UUID, str]
+    ) -> "CategorySummaryResponse":
+        """Project a domain :class:`~traccio.domain.dashboard.CategorySummary`.
+
+        Parameters
+        ----------
+        summary : CategorySummary
+            The pure aggregation result for one category.
+        category_names : Mapping[UUID, str]
+            The current user's category names, keyed by id — resolved by the
+            router (a repository read), never looked up here. A
+            ``category_id`` absent from this mapping (deleted between the
+            aggregation and the read) falls back to ``None`` rather than
+            raising, same posture as any other best-effort display join.
+        """
+        name = None if summary.category_id is None else category_names.get(summary.category_id)
+        return cls(
+            category_id=summary.category_id,
+            category_name=name,
+            spending=summary.spending.amount,
+            income=summary.income.amount,
+            transaction_count=summary.transaction_count,
+        )
 
 
 class CurrencySummaryResponse(BaseModel):
@@ -29,6 +86,10 @@ class CurrencySummaryResponse(BaseModel):
         ``income - spending`` in minor units (cents), signed.
     transaction_count : int
         How many transactions were considered for this currency.
+    by_category : list[CategorySummaryResponse]
+        This currency's totals partitioned by category, sorted by spending
+        then income descending. Sums to this entry's own
+        ``spending``/``income``/``transaction_count``.
     """
 
     currency: str
@@ -36,9 +97,12 @@ class CurrencySummaryResponse(BaseModel):
     income: int
     net: int
     transaction_count: int
+    by_category: list[CategorySummaryResponse]
 
     @classmethod
-    def from_domain(cls, summary: CurrencySummary) -> "CurrencySummaryResponse":
+    def from_domain(
+        cls, summary: CurrencySummary, *, category_names: Mapping[UUID, str]
+    ) -> "CurrencySummaryResponse":
         """Project a domain :class:`~traccio.domain.dashboard.CurrencySummary`."""
         return cls(
             currency=summary.currency,
@@ -46,6 +110,10 @@ class CurrencySummaryResponse(BaseModel):
             income=summary.income.amount,
             net=summary.net.amount,
             transaction_count=summary.transaction_count,
+            by_category=[
+                CategorySummaryResponse.from_domain(entry, category_names=category_names)
+                for entry in summary.by_category
+            ],
         )
 
 

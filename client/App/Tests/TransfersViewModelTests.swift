@@ -119,6 +119,79 @@ struct TransfersViewModelTests {
         )
     }
 
+    @Test func confirmSuccessInvalidatesTheDashboardFreshnessScope() async throws {
+        // Confirming zeroes both legs' effectiveAmount — a change GET
+        // /dashboard/summary's totals must reflect (`DataFreshness`'s doc
+        // comment).
+        let client = await Self.makeClientWithOneSuggestion()
+        await client.setTransaction(
+            Self.makeTransaction(id: Self.outgoingID, amount: -25000), forID: Self.outgoingID
+        )
+        await client.setTransaction(
+            Self.makeTransaction(id: Self.incomingID, amount: 25000), forID: Self.incomingID
+        )
+        await client.setConfirmTransferResult(
+            TransferResponse(
+                id: UUID(), outgoingTransactionID: Self.outgoingID, incomingTransactionID: Self.incomingID,
+                createdAt: Date()
+            )
+        )
+        let freshness = DataFreshness()
+
+        let model = TransfersViewModel(
+            client: client, onDashboardStale: { freshness.markStale([.dashboard]) }
+        )
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded pair")
+            return
+        }
+
+        await model.confirm(pair)
+
+        #expect(freshness.token(for: .dashboard) == 1)
+    }
+
+    @Test func confirmFailureNeverInvalidatesDashboardFreshness() async throws {
+        let client = await Self.makeClientWithOneSuggestion()
+        await client.setConfirmTransferError(FakeAPIError())
+        let freshness = DataFreshness()
+
+        let model = TransfersViewModel(
+            client: client, onDashboardStale: { freshness.markStale([.dashboard]) }
+        )
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded pair")
+            return
+        }
+
+        await model.confirm(pair)
+
+        #expect(model.actionFailure == .generic)
+        #expect(freshness.token(for: .dashboard) == 0)
+    }
+
+    @Test func rejectNeverInvalidatesDashboardFreshness() async throws {
+        // A reject only records a dismissal — no role changes, so nothing
+        // on the dashboard changes either.
+        let client = await Self.makeClientWithOneSuggestion()
+        let freshness = DataFreshness()
+
+        let model = TransfersViewModel(
+            client: client, onDashboardStale: { freshness.markStale([.dashboard]) }
+        )
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded pair")
+            return
+        }
+
+        await model.reject(pair)
+
+        #expect(freshness.token(for: .dashboard) == 0)
+    }
+
     @Test func confirmFailureKeepsThePairAndSetsActionFailure() async throws {
         let client = await Self.makeClientWithOneSuggestion()
         await client.setConfirmTransferError(FakeAPIError())

@@ -508,8 +508,16 @@ never overlap. A transaction with neither date set is excluded by any bound
 on that side, and included only when the period is fully open. Pending
 transactions are included — money already committed is not a maybe.
 
-No category breakdown yet; the aggregation's signature is additive, so this
-is a later, unblocked extension (`tasks/backlog.md`).
+**Category breakdown** (2026-08-24): each currency's totals additionally
+partition by `effective_category` — one `CategorySummary` per category
+present, plus a fixed entry for `category_id = None` covering every
+transaction with no category at all (a real, counted bucket, never omitted).
+Same conventions as the currency level: `spending`/`income` are positive
+magnitudes, a zero-`effective_amount` transaction is counted but contributes
+to neither, and a category never spans currencies — the partition sums
+exactly to its own currency's totals, never a separate cross-currency figure.
+Sorted by `spending` descending, then `income` descending, then `category_id`
+for a deterministic order.
 
 ---
 

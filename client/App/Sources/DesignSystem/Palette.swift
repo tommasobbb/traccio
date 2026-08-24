@@ -50,6 +50,42 @@ enum Palette {
     static let categoryRed = Color(hex: 0xD7_0015)
     static let categoryRedTint = Color(hex: 0xFF_EDEC)
 
+    // MARK: Category chart
+
+    /// Rank-based colors for the dashboard's "Per categoria" donut and
+    /// legend — assigned by position in the sorted `by_category` list
+    /// (biggest spender first), not per-category, so a category's color can
+    /// shift between periods if its rank does. Green is deliberately absent:
+    /// it is reserved for `income`, and a green segment next to a green
+    /// income figure would read as two different things. The fixed "no
+    /// category" bucket and the donut track reuse `inkTertiary` and
+    /// `neutralFill` rather than a dedicated color — see
+    /// `docs/design/tokens.md`'s "Category chart" section.
+    static let categoryChart1 = Color(hex: 0x2A_78D6)
+    static let categoryChart2 = Color(hex: 0xED_A100)
+    static let categoryChart3 = Color(hex: 0xEB_6834)
+    static let categoryChart4 = Color(hex: 0xE8_7BA4)
+    static let categoryChart5 = Color(hex: 0x1C_93A6)
+
+    /// The rotation `categoryChart(rank:)` cycles through once every color
+    /// has been used once (see its doc comment).
+    private static let categoryChartRotation: [Color] = [
+        categoryChart1, categoryChart2, categoryChart3, categoryChart4, categoryChart5,
+    ]
+
+    /// The color for the category at `rank` (0-based) in a sorted
+    /// `by_category` list, cycling through `categoryChartRotation` once
+    /// exhausted rather than growing the palette for a rank the design never
+    /// had to solve for.
+    ///
+    /// - Parameter rank: 0-based position in the sorted list (0 = biggest
+    ///   spender). Negative values clamp to 0.
+    /// - Returns: The color to render this rank's donut segment and legend dot.
+    static func categoryChart(rank: Int) -> Color {
+        let index = max(0, rank) % categoryChartRotation.count
+        return categoryChartRotation[index]
+    }
+
     // MARK: Separators and shadow
 
     static let separator = ink.opacity(0.08)

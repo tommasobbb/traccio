@@ -1,5 +1,46 @@
 import Foundation
 
+/// Spending and income totals for one category, within one currency, as
+/// returned by `GET /dashboard/summary`.
+///
+/// Mirrors the `CategorySummaryResponse` schema in `docs/api/openapi.json`.
+/// There is no `net` here — unlike `CurrencySummaryResponse`, nothing today
+/// consumes a signed per-category figure.
+public struct CategorySummaryResponse: Codable, Sendable, Equatable {
+    /// The category this entry is for, or `nil` for the "no category" bucket
+    /// — a real, counted entry, never omitted from `byCategory`.
+    public let categoryID: UUID?
+    /// The category's current name, resolved by the backend at read time.
+    /// `nil` iff `categoryID` is `nil`.
+    public let categoryName: String?
+    /// Total spending in this category, a non-negative magnitude, minor units.
+    public let spending: Int
+    /// Total income in this category, a non-negative magnitude, minor units.
+    public let income: Int
+    /// Count of transactions in this category, including zero-`effective_amount`
+    /// ones (transfers, reimbursements).
+    public let transactionCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case categoryID = "category_id"
+        case categoryName = "category_name"
+        case spending
+        case income
+        case transactionCount = "transaction_count"
+    }
+
+    public init(
+        categoryID: UUID?, categoryName: String?, spending: Int, income: Int,
+        transactionCount: Int
+    ) {
+        self.categoryID = categoryID
+        self.categoryName = categoryName
+        self.spending = spending
+        self.income = income
+        self.transactionCount = transactionCount
+    }
+}
+
 /// Spending and income totals for one currency over a period, as returned by
 /// `GET /dashboard/summary`.
 ///
@@ -22,6 +63,10 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
     /// Count of transactions contributing to this currency's totals,
     /// including zero-`effective_amount` ones (transfers, reimbursements).
     public let transactionCount: Int
+    /// This currency's totals partitioned by category, sorted by spending
+    /// then income descending. Sums to this entry's own
+    /// `spending`/`income`/`transactionCount`.
+    public let byCategory: [CategorySummaryResponse]
 
     private enum CodingKeys: String, CodingKey {
         case currency
@@ -29,14 +74,19 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
         case income
         case net
         case transactionCount = "transaction_count"
+        case byCategory = "by_category"
     }
 
-    public init(currency: String, spending: Int, income: Int, net: Int, transactionCount: Int) {
+    public init(
+        currency: String, spending: Int, income: Int, net: Int, transactionCount: Int,
+        byCategory: [CategorySummaryResponse] = []
+    ) {
         self.currency = currency
         self.spending = spending
         self.income = income
         self.net = net
         self.transactionCount = transactionCount
+        self.byCategory = byCategory
     }
 }
 

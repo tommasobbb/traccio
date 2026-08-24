@@ -21,6 +21,7 @@ from traccio.api.schemas.dashboard import CurrencySummaryResponse, DashboardSumm
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     list_advances,
+    list_categories,
     list_transactions_in_period,
     sum_reimbursements_by_advance,
 )
@@ -75,10 +76,18 @@ def dashboard_summary(
 
     summaries = summarize(found, advance_shares=shares)
 
+    # Category names are a read-time join for display, not a domain
+    # derivation — the aggregation itself only ever handles category ids
+    # (see domain/dashboard.py). Never logged: user-typed text.
+    category_names = {category.id: category.name for category in list_categories(session, user_id)}
+
     # Log currencies and a count, never amounts (see data-safety rules).
     logger.info(
         "dashboard.summary", currencies=[s.currency for s in summaries], count=len(found)
     )
     return DashboardSummaryResponse(
-        currencies=[CurrencySummaryResponse.from_domain(s) for s in summaries]
+        currencies=[
+            CurrencySummaryResponse.from_domain(s, category_names=category_names)
+            for s in summaries
+        ]
     )

@@ -77,6 +77,43 @@ struct TransactionDetailViewModelTests {
         #expect(await client.transactionFetchCount == 1)
     }
 
+    @Test func confirmSuccessInvalidatesOnlyTheDashboardFreshnessScope() async throws {
+        // The scope split this test exists for: confirming a category
+        // changes GET /dashboard/summary's by_category breakdown, but not
+        // *which* rows Movimenti's own list shows — so only `.dashboard`
+        // should bump, never `.transactions` (see `DataFreshness`'s doc
+        // comment).
+        let client = FakeAPIClient()
+        await client.setTransaction(Self.makeTransaction(confirmedCategoryID: Self.categoryID))
+        let freshness = DataFreshness()
+
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onDashboardStale: { freshness.markStale([.dashboard]) }
+        )
+
+        await model.confirm(categoryID: Self.categoryID)
+
+        #expect(freshness.token(for: .dashboard) == 1)
+        #expect(freshness.token(for: .transactions) == 0)
+    }
+
+    @Test func confirmFailureNeverInvalidatesDashboardFreshness() async throws {
+        let client = FakeAPIClient()
+        await client.setConfirmCategoryError(FakeAPIError())
+        let freshness = DataFreshness()
+
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onDashboardStale: { freshness.markStale([.dashboard]) }
+        )
+
+        await model.confirm(categoryID: Self.categoryID)
+
+        #expect(model.actionFailure == .generic)
+        #expect(freshness.token(for: .dashboard) == 0)
+    }
+
     @Test func confirmFailureLeavesTransactionUnchangedAndNeverCallsOnUpdate() async throws {
         let client = FakeAPIClient()
         await client.setConfirmCategoryError(FakeAPIError())

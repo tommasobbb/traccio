@@ -26,8 +26,19 @@ struct TransfersView: View {
     /// onUpdate:
     ///     Called once per refreshed leg after a successful confirm, so the
     ///     caller can update its own list in place.
-    init(client: any APIClientProtocol, onUpdate: @escaping (TransactionResponse) -> Void) {
-        _model = State(wrappedValue: TransfersViewModel(client: client, onUpdate: onUpdate))
+    /// onDashboardStale:
+    ///     Called after a successful confirm, so the caller can invalidate
+    ///     `DataFreshness.Scope.dashboard`. Defaults to a no-op.
+    init(
+        client: any APIClientProtocol,
+        onUpdate: @escaping (TransactionResponse) -> Void,
+        onDashboardStale: @escaping () -> Void = {}
+    ) {
+        _model = State(
+            wrappedValue: TransfersViewModel(
+                client: client, onUpdate: onUpdate, onDashboardStale: onDashboardStale
+            )
+        )
     }
 
     var body: some View {

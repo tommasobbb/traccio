@@ -255,6 +255,55 @@
         "title": "CategoryResponse",
         "type": "object"
       },
+      "CategorySummaryResponse": {
+        "description": "Spending and income totals for one category, as returned to the client.\n\nAttributes\n----------\ncategory_id : UUID or None\n    The category this entry is for, or ``None`` for the \"no category\"\n    bucket \u2014 a real, counted entry, never omitted.\ncategory_name : str or None\n    The category's current name, resolved by the router at read time (not\n    stored on the domain summary \u2014 see\n    ``api/routers/dashboard.py``). ``None`` iff ``category_id`` is\n    ``None``.\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall in this category.",
+        "properties": {
+          "category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_id",
+          "category_name",
+          "spending",
+          "income",
+          "transaction_count"
+        ],
+        "title": "CategorySummaryResponse",
+        "type": "object"
+      },
       "ConfirmCategoryRequest": {
         "description": "Body for confirming a transaction's category.\n\nAttributes\n----------\ncategory_id : UUID\n    The category to confirm. Must belong to the caller.",
         "properties": {
@@ -582,8 +631,15 @@
         "type": "object"
       },
       "CurrencySummaryResponse": {
-        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.",
+        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.\nby_category : list[CategorySummaryResponse]\n    This currency's totals partitioned by category, sorted by spending\n    then income descending. Sums to this entry's own\n    ``spending``/``income``/``transaction_count``.",
         "properties": {
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/CategorySummaryResponse"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
           "currency": {
             "title": "Currency",
             "type": "string"
@@ -610,7 +666,8 @@
           "spending",
           "income",
           "net",
-          "transaction_count"
+          "transaction_count",
+          "by_category"
         ],
         "title": "CurrencySummaryResponse",
         "type": "object"

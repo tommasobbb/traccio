@@ -54,6 +54,11 @@ final class TransfersViewModel {
     /// caller can hand each row straight to
     /// `TransactionsViewModel.replace(_:)` and update Movimenti in place.
     private let onUpdate: (TransactionResponse) -> Void
+    /// Called after a successful confirm — the two legs' `effectiveAmount`
+    /// go from the full amount each (double-counted) to zero each, which
+    /// changes `GET /dashboard/summary`'s totals. Not called after a reject:
+    /// that only records a dismissal, no `role` changes.
+    private let onDashboardStale: () -> Void
 
     /// Create the view model.
     ///
@@ -65,12 +70,17 @@ final class TransfersViewModel {
     /// onUpdate:
     ///     Called with the refreshed legs after a successful confirm.
     ///     Defaults to a no-op for previews and callers that don't need it.
+    /// onDashboardStale:
+    ///     Called after a successful confirm. Defaults to a no-op for
+    ///     previews and callers that don't need it.
     init(
         client: any APIClientProtocol = APIClient.devDefault,
-        onUpdate: @escaping (TransactionResponse) -> Void = { _ in }
+        onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         self.client = client
         self.onUpdate = onUpdate
+        self.onDashboardStale = onDashboardStale
     }
 
     /// Fetch suggestions, resolve both legs of each, and publish the result.
@@ -124,6 +134,9 @@ final class TransfersViewModel {
             async let outgoing = client.transaction(id: pair.suggestion.outgoingTransactionID)
             async let incoming = client.transaction(id: pair.suggestion.incomingTransactionID)
             return try await [outgoing, incoming]
+        }
+        if actionFailure == nil {
+            onDashboardStale()
         }
     }
 

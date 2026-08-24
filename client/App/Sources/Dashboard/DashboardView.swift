@@ -12,10 +12,12 @@ import TraccioCore
 /// `GET /transactions` — a later slice (ADR 0008's consequences section).
 struct DashboardView: View {
     @State private var model = DashboardViewModel()
-    /// Bumped by a write on another tab that can change this screen's
-    /// numbers (e.g. applying categorization rules once a category
-    /// breakdown exists — `tasks/backlog.md`). Keying `.task(id:)` to it
-    /// triggers a full re-fetch, never a local recomputation.
+    /// `.dashboard` is bumped by a write on another tab that can change this
+    /// screen's totals or category breakdown — applying categorization
+    /// rules, confirming/clearing a category, a transfer confirm/reject/
+    /// unlink, or an advance/reimbursement create/delete/write-off/reopen.
+    /// Keying `.task(id:)` to it triggers a full re-fetch, never a local
+    /// recomputation — see `DataFreshness`'s doc comment.
     @Environment(DataFreshness.self) private var freshness
 
     var body: some View {
@@ -27,7 +29,7 @@ struct DashboardView: View {
             .background(Palette.background)
             .navigationTitle("Panoramica")
         }
-        .task(id: freshness.token) { await model.load() }
+        .task(id: freshness.token(for: .dashboard)) { await model.load() }
     }
 
     @ViewBuilder
@@ -88,6 +90,14 @@ struct DashboardView: View {
             if !others.isEmpty {
                 otherCurrenciesCard(others)
             }
+
+            // Only the primary currency gets a breakdown — same rule as the
+            // hero card, and for the same reason: a donut mixing currencies
+            // would misrepresent proportions Traccio never converts between
+            // (ADR 0007). Renders nothing at all when this currency's period
+            // was pure income (spending == 0), same as `DonutChart`'s own
+            // empty case.
+            categoryBreakdownCard(primary)
         } else {
             Card {
                 EyebrowLabel(text: "Speso questo periodo")
@@ -164,6 +174,70 @@ struct DashboardView: View {
             Text("Non sommate all'importo principale — Traccio non applica cambi tra valute.")
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkTertiary)
+        }
+    }
+
+    /// The "Per categoria" card (`docs/design/canvas/Main.dc.html`), the
+    /// mockup element the "Concept · richiede backend" badge blocked until
+    /// `GET /dashboard/summary` started returning `by_category`. Renders
+    /// nothing when there is nothing to show, rather than an empty donut —
+    /// same posture as `heroCard`'s own empty-period branch above.
+    @ViewBuilder
+    private func categoryBreakdownCard(_ summary: CurrencySummaryResponse) -> some View {
+        let segments = TraccioCore.donutSegments(summary.byCategory)
+        // Mirrors donutSegments' own filter so each segment lines up with
+        // exactly one legend row, in the same order — an income-only entry
+        // (spending == 0) gets neither an arc nor a row.
+        let entries = summary.byCategory.filter { $0.spending > 0 }
+
+        if !segments.isEmpty {
+            Card {
+                EyebrowLabel(text: "Per categoria")
+                HStack(alignment: .center, spacing: 20) {
+                    ZStack {
+                        DonutChart(segments: segments)
+                        VStack(spacing: 2) {
+                            AmountText(
+                                amount: summary.spending,
+                                currencyCode: summary.currency,
+                                kind: .spending,
+                                font: Typography.statFigure
+                            )
+                            Text("totale")
+                                .font(Typography.caption)
+                                .foregroundStyle(Palette.inkTertiary)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(zip(segments, entries)), id: \.0.rank) { segment, entry in
+                            categoryLegendRow(segment: segment, entry: entry, currency: summary.currency)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    private func categoryLegendRow(
+        segment: DonutSegment, entry: CategorySummaryResponse, currency: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Palette.categoryChart(rank: segment.rank))
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            Text(entry.categoryName ?? "Senza categoria")
+                .font(Typography.caption.weight(.semibold))
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            AmountText(
+                amount: entry.spending,
+                currencyCode: currency,
+                kind: .spending,
+                font: Typography.caption.weight(.bold)
+            )
         }
     }
 }

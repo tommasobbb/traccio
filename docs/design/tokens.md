@@ -57,6 +57,41 @@ an amount.
 place accent doubles as a semantic color, because `net` is the one genuinely
 signed figure — see ADR 0007).
 
+## Category chart
+
+The dashboard's "Per categoria" donut and legend (`docs/design/canvas/Main.dc.html`,
+unblocked once `GET /dashboard/summary` started returning `by_category` —
+`docs/decisions/0007-dashboard-aggregation.md`'s "Revisit when"). A rank-based
+palette, not a per-category one: color is assigned by position in the sorted
+list (biggest spender first), so a category's color can shift between months
+if its rank does. A real per-category color is a separate, deliberately
+deferred decision (`tasks/backlog.md`).
+
+| Token           | Hex       | Swift name                  | Use                              |
+| ---------------- | --------- | ----------------------------- | ----------------------------------- |
+| Category chart 1 | `#2A78D6` | `Palette.categoryChart1`      | Rank 1 (biggest spender) — blue    |
+| Category chart 2 | `#EDA100` | `Palette.categoryChart2`      | Rank 2 — amber                     |
+| Category chart 3 | `#EB6834` | `Palette.categoryChart3`      | Rank 3 — orange                    |
+| Category chart 4 | `#E87BA4` | `Palette.categoryChart4`      | Rank 4 — pink                      |
+| Category chart 5 | `#1C93A6` | `Palette.categoryChart5`      | Rank 5 — teal (new; a fifth rank color the canvas never needed) |
+| Category chart, no category | `#8E8E93` | `Palette.inkTertiary`  | Fixed — the "Senza categoria" bucket never rotates through ranks |
+| Category chart track | `#E5E5EA` | `Palette.neutralFill`  | Donut background ring |
+
+Green is deliberately excluded from the rotation — it is reserved for
+`income`, and a green donut segment next to a green income figure would read
+as two different things. Ranks beyond 5 (a sixth-or-later category, or the
+"no category" bucket when it isn't the smallest) reuse `categoryChart5` rather
+than growing the palette further; that ambiguity is judged better than adding
+a sixth rank color for a case the four-way canvas mockup never had to solve.
+
+Two corrections from the canvas's first-cut values, made here because ADR 0008
+already rejected the same warm, off-palette instinct once (see History
+below): the canvas's donut track was `#EFEEE9` (a warm off-white) — replaced
+with `Palette.neutralFill`, the cool gray already used for every other track
+and fill; and the canvas's fifth/grey slice `#C7C6CE` — replaced with
+`Palette.inkTertiary`, already the palette's own cool gray rather than an
+unrelated one introduced just for this chart.
+
 ## Separators and shadows
 
 | Token             | Value                              | Use                        |
@@ -102,6 +137,9 @@ typeface. On review the palette and font read as generic "AI product" rather
 than native-feeling, so both were replaced with the Apple-native values above:
 system font, cooler neutral background, and Apple's system indigo as the
 accent (distinctive without being a made-up brand color). The category-chart
-palette (blue/orange/pink/gray used in the "Concept" donut) was left
-unchanged — it is a functional categorical palette, not part of the app's
-tone, and is not relevant until the category-breakdown backend item exists.
+palette (blue/amber/orange/pink used in the "Concept" donut) was left
+unchanged at the time — it is a functional categorical palette, not part of
+the app's tone. **Settled 2026-08-24** once the category-breakdown backend
+item shipped: see the "Category chart" section above for the final five
+colors (a teal added for a fifth rank) and the two corrections made to the
+canvas's warm off-palette track and grey.

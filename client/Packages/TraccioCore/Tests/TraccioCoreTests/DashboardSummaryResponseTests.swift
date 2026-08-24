@@ -20,14 +20,39 @@ struct DashboardSummaryResponseTests {
               "spending": 18000,
               "income": 0,
               "net": -18000,
-              "transaction_count": 3
+              "transaction_count": 3,
+              "by_category": [
+                {
+                  "category_id": null,
+                  "category_name": null,
+                  "spending": 18000,
+                  "income": 0,
+                  "transaction_count": 3
+                }
+              ]
             },
             {
               "currency": "EUR",
               "spending": 124050,
               "income": 210000,
               "net": 85950,
-              "transaction_count": 42
+              "transaction_count": 42,
+              "by_category": [
+                {
+                  "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+                  "category_name": "Groceries",
+                  "spending": 60000,
+                  "income": 0,
+                  "transaction_count": 20
+                },
+                {
+                  "category_id": null,
+                  "category_name": null,
+                  "spending": 64050,
+                  "income": 210000,
+                  "transaction_count": 22
+                }
+              ]
             }
           ]
         }
@@ -47,6 +72,12 @@ struct DashboardSummaryResponseTests {
         #expect(eur.income == 210000)
         #expect(eur.net == 85950)
         #expect(eur.transactionCount == 42)
+        #expect(eur.byCategory.count == 2)
+        #expect(eur.byCategory[0].categoryName == "Groceries")
+        #expect(eur.byCategory[0].spending == 60000)
+        // The "no category" bucket is a real entry, never omitted.
+        #expect(eur.byCategory[1].categoryID == nil)
+        #expect(eur.byCategory[1].categoryName == nil)
 
         let chf = response.currencies[0]
         #expect(chf.currency == "CHF")
@@ -54,6 +85,41 @@ struct DashboardSummaryResponseTests {
         // loss for this currency — only `net` carries the sign.
         #expect(chf.spending == 18000)
         #expect(chf.net == -18000)
+        #expect(chf.byCategory.count == 1)
+    }
+
+    @Test func decodesEmptyByCategoryAsAValidState() throws {
+        // A currency summary can legitimately carry no categories at all
+        // (e.g. every transaction rejected) — an empty array, not a missing
+        // key.
+        let json = """
+            { "currencies": [
+              {
+                "currency": "EUR", "spending": 0, "income": 0, "net": 0,
+                "transaction_count": 0, "by_category": []
+              }
+            ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.currencies[0].byCategory.isEmpty)
+    }
+
+    @Test func rejectsMissingByCategoryField() {
+        // `by_category` is required on the wire — the backend never omits it.
+        let json = """
+            { "currencies": [
+              { "currency": "EUR", "spending": 100, "income": 0, "net": -100, "transaction_count": 1 }
+            ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                DashboardSummaryResponse.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
     @Test func decodesEmptyCurrenciesAsAValidState() throws {
@@ -114,5 +180,51 @@ struct PrimaryCurrencyTests {
     @Test func returnsNilForAnEmptyList() {
         let empty: [CurrencySummaryResponse] = []
         #expect(empty.primary() == nil)
+    }
+}
+
+/// Decoding tests for `CategorySummaryResponse` in isolation, covering the
+/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
+struct CategorySummaryResponseTests {
+    @Test func decodesTheNoCategoryBucket() throws {
+        let json = """
+            {
+              "category_id": null, "category_name": null,
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            CategorySummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.categoryID == nil)
+        #expect(entry.categoryName == nil)
+    }
+
+    @Test func rejectsAMalformedCategoryID() {
+        let json = """
+            {
+              "category_id": "not-a-uuid", "category_name": "Groceries",
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                CategorySummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+
+    @Test func rejectsMissingTransactionCount() {
+        let json = """
+            {
+              "category_id": null, "category_name": null,
+              "spending": 5000, "income": 0
+            }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                CategorySummaryResponse.self, from: Data(json.utf8)
+            )
+        }
     }
 }

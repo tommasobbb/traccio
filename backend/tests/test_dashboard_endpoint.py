@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.db.base import Base
-from traccio.db.models import TransactionRow
+from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
 from traccio.domain.enums import KeyStrategy, TransactionStatus
 
@@ -33,6 +33,7 @@ def _tx(
     amount: int,
     stable_key: str,
     booked_at: datetime = _IN_PERIOD,
+    confirmed_category_id: UUID | None = None,
 ) -> TransactionRow:
     return TransactionRow(
         id=uuid4(),
@@ -48,6 +49,7 @@ def _tx(
         entry_reference=stable_key,
         stable_key=stable_key,
         key_strategy=KeyStrategy.ENTRY_REFERENCE,
+        confirmed_category_id=confirmed_category_id,
     )
 
 
@@ -75,13 +77,33 @@ def _sqlite_engine() -> Engine:
 
 
 def _seed_tx(
-    engine: Engine, *, user_id: UUID, amount: int, stable_key: str, booked_at: datetime = _IN_PERIOD
+    engine: Engine,
+    *,
+    user_id: UUID,
+    amount: int,
+    stable_key: str,
+    booked_at: datetime = _IN_PERIOD,
+    confirmed_category_id: UUID | None = None,
 ) -> str:
     with Session(engine) as session:
-        tx = _tx(user_id=user_id, amount=amount, stable_key=stable_key, booked_at=booked_at)
+        tx = _tx(
+            user_id=user_id,
+            amount=amount,
+            stable_key=stable_key,
+            booked_at=booked_at,
+            confirmed_category_id=confirmed_category_id,
+        )
         session.add(tx)
         session.commit()
         return str(tx.id)
+
+
+def _seed_category(engine: Engine, *, user_id: UUID, name: str) -> str:
+    with Session(engine) as session:
+        category = CategoryRow(id=uuid4(), user_id=user_id, name=name, created_at=_IN_PERIOD)
+        session.add(category)
+        session.commit()
+        return str(category.id)
 
 
 def test_summary_with_only_personal_transactions() -> None:
@@ -102,6 +124,15 @@ def test_summary_with_only_personal_transactions() -> None:
                 "income": 2000,
                 "net": -3000,
                 "transaction_count": 2,
+                "by_category": [
+                    {
+                        "category_id": None,
+                        "category_name": None,
+                        "spending": 5000,
+                        "income": 2000,
+                        "transaction_count": 2,
+                    }
+                ],
             }
         ]
     }
@@ -190,3 +221,75 @@ def test_summary_is_user_scoped() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"currencies": []}
+
+
+def test_summary_by_category_resolves_the_category_name() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    groceries_id = _seed_category(engine, user_id=dev_user_id, name="Groceries")
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-3000,
+        stable_key="GROCERIES",
+        confirmed_category_id=UUID(groceries_id),
+    )
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    assert summary["by_category"] == [
+        {
+            "category_id": groceries_id,
+            "category_name": "Groceries",
+            "spending": 3000,
+            "income": 0,
+            "transaction_count": 1,
+        }
+    ]
+
+
+def test_summary_by_category_has_a_null_bucket_for_uncategorized() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    groceries_id = _seed_category(engine, user_id=dev_user_id, name="Groceries")
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-3000,
+        stable_key="GROCERIES",
+        confirmed_category_id=UUID(groceries_id),
+    )
+    _seed_tx(engine, user_id=dev_user_id, amount=-1000, stable_key="UNCATEGORIZED")
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    by_category_ids = {entry["category_id"] for entry in summary["by_category"]}
+    assert None in by_category_ids
+    none_entry = next(e for e in summary["by_category"] if e["category_id"] is None)
+    assert none_entry["category_name"] is None
+    assert none_entry["spending"] == 1000
+
+
+def test_summary_never_resolves_another_users_category_name() -> None:
+    """A category id can only ever come from this user's own transactions
+    (every query is user_id-scoped), but the name lookup itself must not leak
+    another user's category row even if ids collided by coincidence."""
+    dev_user_id = get_settings().dev_user_id
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    _seed_category(engine, user_id=stranger_id, name="Stranger's category")
+    _seed_tx(engine, user_id=dev_user_id, amount=-1000, stable_key="PERSONAL")
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    names = {entry["category_name"] for entry in summary["by_category"]}
+    assert "Stranger's category" not in names

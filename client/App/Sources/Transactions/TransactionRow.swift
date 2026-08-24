@@ -36,6 +36,10 @@ struct TransactionRow: View {
     /// keep `advancesByTransactionID` in sync — an advance is not part of
     /// `TransactionResponse`, so `onUpdate` alone cannot carry this.
     let onAdvanceUpdate: (AdvanceResponse?) -> Void
+    /// Called after any successful write on the detail screen that can
+    /// change the dashboard's totals, so the caller can invalidate
+    /// `DataFreshness.Scope.dashboard`.
+    let onDashboardStale: () -> Void
 
     var body: some View {
         NavigationLink {
@@ -47,7 +51,8 @@ struct TransactionRow: View {
                 account: accountsByID[transaction.accountID],
                 client: client,
                 onUpdate: onUpdate,
-                onAdvanceChange: onAdvanceUpdate
+                onAdvanceChange: onAdvanceUpdate,
+                onDashboardStale: onDashboardStale
             )
         } label: {
             rowContent

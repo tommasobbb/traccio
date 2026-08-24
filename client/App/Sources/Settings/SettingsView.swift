@@ -21,7 +21,9 @@ struct SettingsView: View {
             ScrollView {
                 Card {
                     NavigationLink {
-                        CategorizationView(onSuggestionsChanged: { freshness.markStale() })
+                        CategorizationView(
+                            onSuggestionsChanged: { freshness.markStale([.dashboard, .transactions]) }
+                        )
                     } label: {
                         settingsRow(title: "Categorie e regole", systemImage: "tag")
                     }

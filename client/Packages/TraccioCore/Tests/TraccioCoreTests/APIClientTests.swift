@@ -103,7 +103,10 @@ struct APIClientTests {
     /// A representative `GET /dashboard/summary` envelope: one currency.
     private static let dashboardEnvelope = """
         { "currencies": [
-          { "currency": "EUR", "spending": 124050, "income": 210000, "net": 85950, "transaction_count": 42 }
+          {
+            "currency": "EUR", "spending": 124050, "income": 210000, "net": 85950,
+            "transaction_count": 42, "by_category": []
+          }
         ] }
         """
 

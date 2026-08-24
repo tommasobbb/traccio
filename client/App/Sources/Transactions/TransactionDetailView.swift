@@ -62,6 +62,10 @@ struct TransactionDetailView: View {
     ///     Called with this transaction's current advance after a successful
     ///     create/delete, so the caller can keep its own advance lookup in
     ///     place. Defaults to a no-op.
+    /// onDashboardStale:
+    ///     Called after any successful write that can change the dashboard's
+    ///     totals, so the caller can invalidate `DataFreshness.Scope.dashboard`.
+    ///     Defaults to a no-op.
     init(
         transaction: TransactionResponse,
         categories: [CategoryResponse],
@@ -70,12 +74,14 @@ struct TransactionDetailView: View {
         account: AccountResponse?,
         client: any APIClientProtocol = APIClient.devDefault,
         onUpdate: @escaping (TransactionResponse) -> Void,
-        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in }
+        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
                 transaction: transaction, advance: advance, categories: categories, transfer: transfer,
-                client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange
+                client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange,
+                onDashboardStale: onDashboardStale
             )
         )
         self.account = account

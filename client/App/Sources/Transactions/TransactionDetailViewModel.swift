@@ -72,6 +72,13 @@ final class TransactionDetailViewModel {
     /// `advancesByTransactionID` in sync — an advance is not part of
     /// `TransactionResponse`, so `onUpdate` alone cannot carry this.
     private let onAdvanceChange: (AdvanceResponse?) -> Void
+    /// Invoked after any successful write on this screen that can change
+    /// `GET /dashboard/summary`'s totals — a category confirm/clear, an
+    /// unlink, or an advance/reimbursement create/delete/write-off/reopen.
+    /// The caller (`SettingsView`'s pattern via `TraccioApp`'s shared
+    /// `DataFreshness`) bumps `.dashboard` so Panoramica re-fetches rather
+    /// than showing a now-stale total — see `DataFreshness`'s doc comment.
+    private let onDashboardStale: () -> Void
 
     /// Create the view model.
     ///
@@ -98,6 +105,10 @@ final class TransactionDetailViewModel {
     ///     Called with the transaction's current advance after a successful
     ///     create/delete. Defaults to a no-op for previews and callers that
     ///     don't need it.
+    /// onDashboardStale:
+    ///     Called after any successful write that can change the dashboard's
+    ///     totals. Defaults to a no-op for previews and callers that don't
+    ///     need it.
     init(
         transaction: TransactionResponse,
         advance: AdvanceResponse? = nil,
@@ -105,7 +116,8 @@ final class TransactionDetailViewModel {
         transfer: TransferResponse? = nil,
         client: any APIClientProtocol = APIClient.devDefault,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
-        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in }
+        onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         self.transaction = transaction
         self.advance = advance
@@ -114,6 +126,7 @@ final class TransactionDetailViewModel {
         self.client = client
         self.onUpdate = onUpdate
         self.onAdvanceChange = onAdvanceChange
+        self.onDashboardStale = onDashboardStale
     }
 
     /// Fetch categories if none were seeded at `init`.
@@ -205,6 +218,7 @@ final class TransactionDetailViewModel {
             self.counterpartTransaction = nil
             onUpdate(refreshedOwn)
             onUpdate(refreshedCounterpart)
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }
@@ -246,6 +260,7 @@ final class TransactionDetailViewModel {
             advance = created
             onUpdate(refreshed)
             onAdvanceChange(created)
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }
@@ -269,6 +284,7 @@ final class TransactionDetailViewModel {
             self.advance = nil
             onUpdate(refreshed)
             onAdvanceChange(nil)
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }
@@ -343,6 +359,7 @@ final class TransactionDetailViewModel {
                 let refreshedLinked = try await client.transaction(id: transactionID)
                 onUpdate(refreshedLinked)
             }
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }
@@ -372,6 +389,7 @@ final class TransactionDetailViewModel {
             let updated = try await write(client, advance.id)
             self.advance = updated
             onAdvanceChange(updated)
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }
@@ -400,6 +418,7 @@ final class TransactionDetailViewModel {
             let refreshed = try await client.transaction(id: transaction.id)
             transaction = refreshed
             onUpdate(refreshed)
+            onDashboardStale()
         } catch {
             actionFailure = .generic
         }

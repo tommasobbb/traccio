@@ -13,10 +13,12 @@ import TraccioCore
 /// category filter chips.
 struct TransactionsView: View {
     @State private var model = TransactionsViewModel()
-    /// Bumped by a write on another tab that can change a row's category
-    /// (applying rules, deleting a category — `CategorizationViewModel`).
-    /// Keying `.task(id:)` to it triggers a full reload, never a local
-    /// recomputation.
+    /// `.transactions` is bumped by a write on another tab that can change
+    /// *which* rows should appear or how many — applying rules, deleting a
+    /// category (`CategorizationViewModel`). A single row's own fields stay
+    /// in sync via `onUpdate` without keying off this at all, so most writes
+    /// made from this screen's own `TransactionDetailView` do not bump it —
+    /// see `DataFreshness`'s doc comment.
     @Environment(DataFreshness.self) private var freshness
 
     var body: some View {
@@ -29,7 +31,11 @@ struct TransactionsView: View {
                     if model.transferSuggestionCount > 0 {
                         ToolbarItem(placement: .primaryAction) {
                             NavigationLink {
-                                TransfersView(client: model.client, onUpdate: { model.replace($0) })
+                                TransfersView(
+                                    client: model.client,
+                                    onUpdate: { model.replace($0) },
+                                    onDashboardStale: { freshness.markStale([.dashboard]) }
+                                )
                             } label: {
                                 Label(
                                     "\(model.transferSuggestionCount) trasferimenti",
@@ -40,7 +46,7 @@ struct TransactionsView: View {
                     }
                 }
         }
-        .task(id: freshness.token) { await model.load() }
+        .task(id: freshness.token(for: .transactions)) { await model.load() }
     }
 
     @ViewBuilder
@@ -88,7 +94,8 @@ struct TransactionsView: View {
                         accountsByID: model.accountsByID,
                         client: model.client,
                         onUpdate: { model.replace($0) },
-                        onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) }
+                        onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
+                        onDashboardStale: { freshness.markStale([.dashboard]) }
                     )
                     .onAppear {
                         if isLastGroup, transaction.id == group.transactions.last?.id {

@@ -121,3 +121,21 @@ already described. Tracked in `tasks/backlog.md`.
   `GET /dashboard/summary` as-is: per-currency, magnitudes plus one signed
   net, no client-side derivation (`client/CLAUDE.md`: "the backend owns every
   derived value").
+
+## Revision — 2026-08-24: category breakdown
+
+Both "Revisit when" items above are done. `domain/dashboard.py::summarize`
+now also groups by `effective_category`, exactly the additive extension
+Decision 5 anticipated — `advance_shares` unchanged, one new
+`CategorySummary` per category (plus a fixed `category_id = None` bucket)
+nested inside each `CurrencySummary` as `by_category`, never beside it (a
+category cannot span currencies, same reasoning as Decision 2). Category
+*names* are resolved by the router at read time, not carried on the domain
+`CategorySummary` — the aggregation stays free of a repository dependency,
+consistent with `domain/` importing nothing.
+
+The client's Panoramica screen now renders the mockup's "Per categoria" donut
+and legend (`docs/design/canvas/Main.dc.html`, previously "Concept · richiede
+backend"), unblocking the second of the two `#Preview` gaps that badge was
+tracking — the trend line (`Andamento netto`) remains open, still needing its
+own granularity decision (see `tasks/backlog.md`).
