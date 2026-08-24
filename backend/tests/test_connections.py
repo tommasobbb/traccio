@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, select, update
@@ -365,6 +366,31 @@ def test_list_connections_returns_the_users_connections_without_secrets() -> Non
     assert "auth_state" not in body
     assert _SESSION_ID not in response.text
     assert _STATE not in response.text
+    # The scheduler is off by default (Settings.background_sync_enabled),
+    # so its two derived fields have nothing meaningful to report.
+    assert body["background_sync_enabled"] is False
+    assert body["sync_budget_remaining"] is None
+    assert body["next_sync_at"] is None
+
+
+def test_list_connections_exposes_scheduler_state_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(get_settings(), "background_sync_enabled", True)
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+    _activate_a_connection(client)
+
+    response = client.get("/connections")
+
+    assert response.status_code == 200
+    body = response.json()["connections"][0]
+    assert body["background_sync_enabled"] is True
+    # A freshly activated connection has no recorded runs: full budget, and
+    # already due (never synced -> no interval to wait out), so no
+    # meaningful "next sync at" to show.
+    assert body["sync_budget_remaining"] == 4
+    assert body["next_sync_at"] is None
 
 
 def test_list_connections_excludes_other_users() -> None:

@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from traccio.db.base import Base
-from traccio.db.repositories import count_recent_sync_runs, list_sync_runs, record_sync_run
+from traccio.db.repositories import (
+    count_recent_sync_runs,
+    list_sync_runs,
+    oldest_recent_sync_run_started_at,
+    record_sync_run,
+)
 from traccio.domain.enums import SyncRunOutcome, SyncTrigger
 from traccio.domain.models import SyncRun
 
@@ -173,4 +178,61 @@ def test_count_recent_sync_runs_is_zero_for_an_unknown_connection() -> None:
         assert (
             count_recent_sync_runs(session, connection_id=uuid4(), since=_NOW - timedelta(hours=24))
             == 0
+        )
+
+
+def test_oldest_recent_sync_run_started_at_returns_the_earliest_in_window() -> None:
+    engine = _engine()
+    connection_id = uuid4()
+    with Session(engine) as session:
+        record_sync_run(
+            session,
+            sync_run=_run(connection_id=connection_id, started_at=_NOW - timedelta(hours=20)),
+        )
+        record_sync_run(
+            session,
+            sync_run=_run(connection_id=connection_id, started_at=_NOW - timedelta(hours=5)),
+        )
+        session.commit()
+
+        oldest = oldest_recent_sync_run_started_at(
+            session, connection_id=connection_id, since=_NOW - timedelta(hours=24)
+        )
+
+        # SQLite drops tzinfo on read-back (PostgreSQL preserves it); compare
+        # the wall-clock value regardless, same as elsewhere in this suite.
+        assert oldest is not None
+        assert oldest.replace(tzinfo=UTC) == _NOW - timedelta(hours=20)
+
+
+def test_oldest_recent_sync_run_started_at_ignores_runs_outside_the_window() -> None:
+    engine = _engine()
+    connection_id = uuid4()
+    with Session(engine) as session:
+        record_sync_run(
+            session,
+            sync_run=_run(connection_id=connection_id, started_at=_NOW - timedelta(hours=30)),
+        )
+        record_sync_run(
+            session,
+            sync_run=_run(connection_id=connection_id, started_at=_NOW - timedelta(hours=5)),
+        )
+        session.commit()
+
+        oldest = oldest_recent_sync_run_started_at(
+            session, connection_id=connection_id, since=_NOW - timedelta(hours=24)
+        )
+
+        assert oldest is not None
+        assert oldest.replace(tzinfo=UTC) == _NOW - timedelta(hours=5)
+
+
+def test_oldest_recent_sync_run_started_at_is_none_with_no_runs_in_window() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        assert (
+            oldest_recent_sync_run_started_at(
+                session, connection_id=uuid4(), since=_NOW - timedelta(hours=24)
+            )
+            is None
         )

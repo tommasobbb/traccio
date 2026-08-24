@@ -20,7 +20,10 @@ struct ConnectionGroupTests {
             daysUntilExpiry: 30,
             expiresAt: nil,
             createdAt: Date(timeIntervalSince1970: 0),
-            lastSyncedAt: nil
+            lastSyncedAt: nil,
+            backgroundSyncEnabled: false,
+            syncBudgetRemaining: nil,
+            nextSyncAt: nil
         )
     }
 

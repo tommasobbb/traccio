@@ -100,6 +100,23 @@ class ConnectionResponse(BaseModel):
     last_synced_at : datetime or None
         When a sync last ran against this connection; ``None`` until the first
         sync. A display figure only.
+    background_sync_enabled : bool
+        Whether the background scheduler is running at all
+        (``Settings.background_sync_enabled``, ADR 0010). When ``False``,
+        ``sync_budget_remaining`` and ``next_sync_at`` are both ``None`` —
+        they have nothing meaningful to say if nothing is scheduling syncs.
+    sync_budget_remaining : int or None
+        How many more background sync runs this connection may have in the
+        current rolling 24h, or ``None`` when
+        ``background_sync_enabled`` is ``False``. Derived fresh on every
+        read from :func:`~traccio.db.repositories.count_recent_sync_runs`,
+        never stored (ADR 0006's discipline).
+    next_sync_at : datetime or None
+        When this connection is next expected to become eligible for a
+        background sync (:func:`~traccio.domain.sync_schedule.next_sync_eligible_at`),
+        or ``None`` when ``background_sync_enabled`` is ``False``, the
+        connection is already due (the next tick will sync it), or its
+        consent needs the user to re-authorize rather than time to pass.
     """
 
     id: UUID
@@ -111,10 +128,20 @@ class ConnectionResponse(BaseModel):
     expires_at: datetime | None
     created_at: datetime
     last_synced_at: datetime | None
+    background_sync_enabled: bool
+    sync_budget_remaining: int | None
+    next_sync_at: datetime | None
 
     @classmethod
     def from_domain(
-        cls, connection: Connection, *, now: datetime, warning_window_days: int
+        cls,
+        connection: Connection,
+        *,
+        now: datetime,
+        warning_window_days: int,
+        background_sync_enabled: bool,
+        sync_budget_remaining: int | None,
+        next_sync_at: datetime | None,
     ) -> "ConnectionResponse":
         """Project a domain :class:`~traccio.domain.models.Connection`.
 
@@ -128,6 +155,18 @@ class ConnectionResponse(BaseModel):
         warning_window_days : int
             How many days before expiry count as "expiring soon" (see
             ``Settings.consent_warning_window_days``).
+        background_sync_enabled : bool
+            Whether the scheduler is running at all
+            (``Settings.background_sync_enabled``).
+        sync_budget_remaining : int or None
+            Pre-computed remaining budget for this connection, or ``None``
+            when the scheduler is disabled. The caller (the router) computes
+            this — it needs a database query
+            (``count_recent_sync_runs``) this schema module has no business
+            making.
+        next_sync_at : datetime or None
+            Pre-computed next-eligible time for this connection, or ``None``.
+            Same reasoning as ``sync_budget_remaining``.
 
         Returns
         -------
@@ -146,6 +185,9 @@ class ConnectionResponse(BaseModel):
             expires_at=connection.expires_at,
             created_at=connection.created_at,
             last_synced_at=connection.last_synced_at,
+            background_sync_enabled=background_sync_enabled,
+            sync_budget_remaining=sync_budget_remaining,
+            next_sync_at=next_sync_at,
         )
 
 

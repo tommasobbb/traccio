@@ -57,6 +57,9 @@ struct AccountsView: View {
         }
         return ScrollView {
             LazyVStack(spacing: 14) {
+                if let actionFailure = model.actionFailure {
+                    Banner(message: actionFailureMessage(actionFailure))
+                }
                 ForEach(attentionNeeded) { connection in
                     Banner(
                         message: warningMessage(for: connection),
@@ -70,6 +73,21 @@ struct AccountsView: View {
                 }
             }
             .padding(20)
+        }
+    }
+
+    /// Copy for a failed manual sync or re-authorization
+    /// (`AccountsViewModel.actionFailure`) — previously assigned but never
+    /// read, so a failed action disappeared silently beyond the spinner
+    /// stopping (`tasks/backlog.md`). Distinct from `warningMessage(for:)`
+    /// below: that one is proactive (renew before it bites), this one is
+    /// reactive (the action you just took didn't work, and why).
+    private func actionFailureMessage(_ failure: AccountsViewModel.ActionFailure) -> String {
+        switch failure {
+        case .consentExpired:
+            return "Sincronizzazione non riuscita: il consenso è scaduto. Rinnova per continuare."
+        case .generic:
+            return "Non è stato possibile completare l'operazione. Riprova."
         }
     }
 
@@ -164,11 +182,32 @@ struct AccountsView: View {
         case .error: stateLabel = "Errore"
         case .pending: stateLabel = "In attesa"
         }
-        guard let lastSyncedAt = connection.lastSyncedAt else {
-            return "\(stateLabel) · mai sincronizzato"
+        let syncLabel: String
+        if let lastSyncedAt = connection.lastSyncedAt {
+            syncLabel = "sincronizzato \(TraccioCore.relativeTime(from: lastSyncedAt, to: Date()))"
+        } else {
+            syncLabel = "mai sincronizzato"
         }
-        let relative = TraccioCore.relativeTime(from: lastSyncedAt, to: Date())
-        return "\(stateLabel) · sincronizzato \(relative)"
+        return "\(stateLabel) · \(syncLabel)\(automaticSyncSuffix(for: connection))"
+    }
+
+    /// The scheduler's own state, appended to `statusLine(for:)`. Every
+    /// figure here is derived server-side (`GET /connections`) and rendered
+    /// as-is — the client never computes when the next sync will happen
+    /// (`client/CLAUDE.md`). Empty when the scheduler is off, so an ordinary
+    /// manual-only setup reads exactly as it did before this existed.
+    private func automaticSyncSuffix(for connection: ConnectionResponse) -> String {
+        guard connection.backgroundSyncEnabled else { return "" }
+        if let nextSyncAt = connection.nextSyncAt {
+            let relative = TraccioCore.relativeTime(from: nextSyncAt, to: Date())
+            return " · automatica, prossima \(relative)"
+        }
+        // nextSyncAt is nil while background_sync_enabled is true either
+        // because it's already due (the next tick will sync it) or its
+        // consent needs re-authorization rather than time to pass — the
+        // consent-warning banner above already covers the latter, so a
+        // single "in coda" reading is honest for both without guessing which.
+        return " · automatica, in coda"
     }
 
     // MARK: Accounts

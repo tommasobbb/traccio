@@ -885,7 +885,10 @@ struct APIClientTests {
             "days_until_expiry": 9,
             "expires_at": "2026-09-01T00:00:00+00:00",
             "created_at": "2026-08-01T09:30:00+00:00",
-            "last_synced_at": null
+            "last_synced_at": null,
+            "background_sync_enabled": false,
+            "sync_budget_remaining": null,
+            "next_sync_at": null
           }
         ] }
         """
@@ -920,7 +923,10 @@ struct APIClientTests {
                 "days_until_expiry": 9,
                 "expires_at": null,
                 "created_at": "2026-08-01T09:30:00+00:00",
-                "last_synced_at": null
+                "last_synced_at": null,
+                "background_sync_enabled": false,
+                "sync_budget_remaining": null,
+                "next_sync_at": null
               }
             ] }
             """

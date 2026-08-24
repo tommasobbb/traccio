@@ -2048,6 +2048,43 @@ def count_recent_sync_runs(session: Session, *, connection_id: UUID, since: date
     )
 
 
+def oldest_recent_sync_run_started_at(
+    session: Session, *, connection_id: UUID, since: datetime
+) -> datetime | None:
+    """Return the earliest ``started_at`` among a connection's runs since ``since``.
+
+    The read side of "when does the background budget next free a slot" —
+    once this run ages past the rolling window, the count
+    :func:`count_recent_sync_runs` returns for the same ``since`` drops by
+    one (assuming no newer run has landed since — an estimate, not a
+    promise). See :func:`~traccio.domain.sync_schedule.next_sync_eligible_at`.
+
+    Not scoped by ``user_id``, for the same reason as
+    :func:`count_recent_sync_runs`.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    connection_id : UUID
+        The connection to look at.
+    since : datetime
+        Only runs with ``started_at >= since`` are considered.
+
+    Returns
+    -------
+    datetime or None
+        The earliest ``started_at`` in the window, or ``None`` if there are
+        no runs in it.
+    """
+    return session.scalars(
+        select(func.min(SyncRunRow.started_at)).where(
+            SyncRunRow.connection_id == connection_id,
+            SyncRunRow.started_at >= since,
+        )
+    ).one()
+
+
 def list_sync_runs(
     session: Session, *, user_id: UUID, connection_id: UUID | None = None, limit: int = 50
 ) -> list[SyncRun]:

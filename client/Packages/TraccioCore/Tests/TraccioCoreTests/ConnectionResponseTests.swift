@@ -23,7 +23,10 @@ struct ConnectionResponseTests {
               "days_until_expiry": 9,
               "expires_at": "2026-09-01T00:00:00+00:00",
               "created_at": "2026-08-01T09:30:00+00:00",
-              "last_synced_at": "2026-08-23T09:26:00+00:00"
+              "last_synced_at": "2026-08-23T09:26:00+00:00",
+              "background_sync_enabled": true,
+              "sync_budget_remaining": 3,
+              "next_sync_at": "2026-08-24T13:00:00+00:00"
             }
           ]
         }
@@ -44,6 +47,60 @@ struct ConnectionResponseTests {
         #expect(connection.daysUntilExpiry == 9)
         #expect(connection.expiresAt != nil)
         #expect(connection.lastSyncedAt != nil)
+        #expect(connection.backgroundSyncEnabled == true)
+        #expect(connection.syncBudgetRemaining == 3)
+        #expect(connection.nextSyncAt != nil)
+    }
+
+    @Test func decodesSchedulerFieldsAsNilWhenTheSchedulerIsDisabled() throws {
+        let json = """
+            { "connections": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "provider": "enable_banking",
+              "institution_name": "Revolut",
+              "status": "active",
+              "consent_state": "active",
+              "days_until_expiry": 30,
+              "expires_at": "2026-09-01T00:00:00+00:00",
+              "created_at": "2026-08-01T09:30:00+00:00",
+              "last_synced_at": null,
+              "background_sync_enabled": false,
+              "sync_budget_remaining": null,
+              "next_sync_at": null
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            ConnectionsResponse.self, from: Data(json.utf8)
+        )
+        let connection = response.connections[0]
+        #expect(connection.backgroundSyncEnabled == false)
+        #expect(connection.syncBudgetRemaining == nil)
+        #expect(connection.nextSyncAt == nil)
+    }
+
+    @Test func rejectsMissingBackgroundSyncEnabled() {
+        // Unlike syncBudgetRemaining/nextSyncAt (nullable, so a missing key
+        // still decodes to nil), backgroundSyncEnabled is non-optional — the
+        // backend always sends it, so a missing key is a contract violation
+        // that must throw, not silently default (client/CLAUDE.md).
+        let json = """
+            { "connections": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "provider": "enable_banking",
+              "institution_name": "Revolut",
+              "status": "active",
+              "consent_state": "active",
+              "days_until_expiry": 30,
+              "expires_at": null,
+              "created_at": "2026-08-01T09:30:00+00:00",
+              "last_synced_at": null,
+              "sync_budget_remaining": null,
+              "next_sync_at": null
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(ConnectionsResponse.self, from: Data(json.utf8))
+        }
     }
 
     @Test func decodesEveryConsentState() throws {
@@ -106,7 +163,10 @@ struct ConnectionResponseTests {
               "days_until_expiry": null,
               "expires_at": null,
               "created_at": "2026-08-01T09:30:00+00:00",
-              "last_synced_at": null
+              "last_synced_at": null,
+              "background_sync_enabled": false,
+              "sync_budget_remaining": null,
+              "next_sync_at": null
             } ] }
             """
         let response = try TraccioCore.jsonDecoder().decode(
@@ -120,8 +180,9 @@ struct ConnectionResponseTests {
 
     @Test func rejectsMissingRequiredField() {
         // `institution_name` omitted — a non-optional field must actually be
-        // present; the two optional fields (`days_until_expiry`, `expires_at`,
-        // `last_synced_at`) would decode a missing key as `nil` instead.
+        // present; the optional fields (`days_until_expiry`, `expires_at`,
+        // `last_synced_at`, `sync_budget_remaining`, `next_sync_at`) would
+        // decode a missing key as `nil` instead.
         let json = """
             { "connections": [ {
               "id": "11111111-1111-1111-1111-111111111111",
@@ -131,7 +192,10 @@ struct ConnectionResponseTests {
               "days_until_expiry": 9,
               "expires_at": null,
               "created_at": "2026-08-01T09:30:00+00:00",
-              "last_synced_at": null
+              "last_synced_at": null,
+              "background_sync_enabled": false,
+              "sync_budget_remaining": null,
+              "next_sync_at": null
             } ] }
             """
         #expect(throws: DecodingError.self) {
@@ -164,7 +228,10 @@ struct ConnectionResponseTests {
           "days_until_expiry": 9,
           "expires_at": "2026-09-01T00:00:00+00:00",
           "created_at": "2026-08-01T09:30:00+00:00",
-          "last_synced_at": null
+          "last_synced_at": null,
+          "background_sync_enabled": false,
+          "sync_budget_remaining": null,
+          "next_sync_at": null
         } ] }
         """
     }

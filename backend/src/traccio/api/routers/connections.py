@@ -14,7 +14,7 @@ Data safety (``.claude/rules/data-safety.md``): these handlers log only the
 or the authorization url (which embeds ``state``).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -30,20 +30,24 @@ from traccio.api.schemas.connections import (
     StartConnectionResponse,
     SyncResponse,
 )
-from traccio.core.config import get_settings
+from traccio.core.config import Settings, get_settings
 from traccio.core.crypto import TokenCipher
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     activate_connection,
+    count_recent_sync_runs,
     create_connection,
     find_pending_connection_id,
     get_connection,
     list_connections,
+    oldest_recent_sync_run_started_at,
     set_connection_auth_state,
 )
 from traccio.db.session import get_session
+from traccio.domain.consent import consent_state as derive_consent_state
 from traccio.domain.enums import ConnectionStatus
 from traccio.domain.models import Connection
+from traccio.domain.sync_schedule import next_sync_eligible_at
 from traccio.providers.base import BankProvider, ProviderError, SyncContext
 from traccio.services.sync import (
     ConnectionNotFoundError,
@@ -291,15 +295,73 @@ def connections(
     # Log a count, never connection contents (see data-safety rules).
     logger.info("connections.list", count=len(found))
     now = datetime.now(UTC)
-    warning_window_days = get_settings().consent_warning_window_days
-    return ConnectionsResponse(
-        connections=[
+    settings = get_settings()
+    responses = []
+    for connection in found:
+        budget_remaining, next_sync_at = _scheduler_projection(
+            session, connection, now=now, settings=settings
+        )
+        responses.append(
             ConnectionResponse.from_domain(
-                connection, now=now, warning_window_days=warning_window_days
+                connection,
+                now=now,
+                warning_window_days=settings.consent_warning_window_days,
+                background_sync_enabled=settings.background_sync_enabled,
+                sync_budget_remaining=budget_remaining,
+                next_sync_at=next_sync_at,
             )
-            for connection in found
-        ]
+        )
+    return ConnectionsResponse(connections=responses)
+
+
+def _scheduler_projection(
+    session: Session, connection: Connection, *, now: datetime, settings: Settings
+) -> tuple[int | None, datetime | None]:
+    """Derive one connection's ``sync_budget_remaining``/``next_sync_at``.
+
+    Both are ``None`` when the scheduler is disabled — there is nothing
+    meaningful to show if nothing is scheduling syncs
+    (``ConnectionResponse.from_domain``'s docstring). Derived fresh on every
+    call, never stored (ADR 0006's discipline, same as ``consent_state``).
+
+    Parameters
+    ----------
+    session : Session
+        Request-scoped database session.
+    connection : Connection
+        The connection to project.
+    now : datetime
+        The current time.
+    settings : Settings
+        Read for the scheduler's on/off flag and budget/interval knobs.
+
+    Returns
+    -------
+    tuple[int or None, datetime or None]
+        ``(sync_budget_remaining, next_sync_at)``.
+    """
+    if not settings.background_sync_enabled:
+        return None, None
+
+    since = now - timedelta(hours=24)
+    runs_last_24h = count_recent_sync_runs(session, connection_id=connection.id, since=since)
+    oldest_run_started_at = oldest_recent_sync_run_started_at(
+        session, connection_id=connection.id, since=since
     )
+    state = derive_consent_state(
+        connection, now=now, warning_window_days=settings.consent_warning_window_days
+    )
+    budget_remaining = max(0, settings.background_sync_budget_per_day - runs_last_24h)
+    next_sync_at = next_sync_eligible_at(
+        consent_state=state,
+        runs_last_24h=runs_last_24h,
+        oldest_run_started_at=oldest_run_started_at,
+        last_synced_at=connection.last_synced_at,
+        now=now,
+        budget_per_day=settings.background_sync_budget_per_day,
+        min_interval_hours=settings.sync_min_interval_hours,
+    )
+    return budget_remaining, next_sync_at
 
 
 @router.post("/connections/{connection_id}/reauthorize", response_model=StartConnectionResponse)

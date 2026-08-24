@@ -133,3 +133,68 @@ def sync_decision(
         return SyncDecision(due=False, skip_reason=SyncRunOutcome.SKIPPED_INTERVAL)
 
     return SyncDecision(due=True)
+
+
+def next_sync_eligible_at(
+    *,
+    consent_state: ConsentState,
+    runs_last_24h: int,
+    oldest_run_started_at: datetime | None,
+    last_synced_at: datetime | None,
+    now: datetime,
+    budget_per_day: int,
+    min_interval_hours: int,
+) -> datetime | None:
+    """Return when this connection next becomes eligible for a background sync.
+
+    A display figure for the client ("prossima sync tra Xh") — derived fresh
+    on every call from :func:`sync_decision`, never stored, same discipline
+    as everything else in this module. Reuses ``sync_decision`` rather than
+    re-checking the gates, so the two can never disagree about *why* a
+    connection isn't due right now.
+
+    ``None`` means one of two different things, which is fine for a display
+    figure but worth knowing: either the connection is already due (the next
+    scheduler tick will sync it, so there is no meaningful "in how long" to
+    show), or its consent needs the user to re-authorize, which is not a
+    matter of time at all.
+
+    Parameters
+    ----------
+    consent_state, runs_last_24h, last_synced_at, now, budget_per_day,
+    min_interval_hours
+        Forwarded to :func:`sync_decision` — see its docstring.
+    oldest_run_started_at : datetime or None
+        The earliest ``started_at`` among the runs counted in
+        ``runs_last_24h`` (:func:`~traccio.db.repositories.oldest_recent_sync_run_started_at`).
+        Only consulted when the budget gate is what's blocking: once that run
+        ages past 24h old, the rolling count drops and a slot frees up
+        (assuming nothing else fills it first — this is an estimate, not a
+        promise, since a new run recorded before then would push the window
+        forward again).
+
+    Returns
+    -------
+    datetime or None
+        When a slot is expected to open, or ``None`` (already due, or
+        blocked on re-authorization rather than time).
+    """
+    decision = sync_decision(
+        consent_state=consent_state,
+        runs_last_24h=runs_last_24h,
+        last_synced_at=last_synced_at,
+        now=now,
+        budget_per_day=budget_per_day,
+        min_interval_hours=min_interval_hours,
+    )
+    if decision.due or decision.skip_reason is SyncRunOutcome.SKIPPED_CONSENT:
+        return None
+    if decision.skip_reason is SyncRunOutcome.SKIPPED_INTERVAL:
+        # sync_decision only returns this when last_synced_at is not None.
+        assert last_synced_at is not None
+        return _as_aware_utc(last_synced_at) + timedelta(hours=min_interval_hours)
+    if decision.skip_reason is SyncRunOutcome.SKIPPED_BUDGET:
+        if oldest_run_started_at is None:
+            return None
+        return _as_aware_utc(oldest_run_started_at) + timedelta(hours=24)
+    return None

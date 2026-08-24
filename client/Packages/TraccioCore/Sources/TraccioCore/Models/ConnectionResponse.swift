@@ -30,6 +30,20 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
     /// When a sync last ran against this connection; `nil` until the first
     /// sync. A display figure only — nothing derives from it.
     public let lastSyncedAt: Date?
+    /// Whether the background scheduler is running at all. When `false`,
+    /// `syncBudgetRemaining` and `nextSyncAt` are both `nil` — they have
+    /// nothing meaningful to say if nothing is scheduling syncs.
+    public let backgroundSyncEnabled: Bool
+    /// How many more background sync runs this connection may have in the
+    /// current rolling 24h, or `nil` when `backgroundSyncEnabled` is
+    /// `false`. Derived by the backend on every read, never stored — render
+    /// it, never compute it (`client/CLAUDE.md`).
+    public let syncBudgetRemaining: Int?
+    /// When this connection is next expected to become eligible for a
+    /// background sync, or `nil` when `backgroundSyncEnabled` is `false`,
+    /// the connection is already due (the next tick will sync it), or its
+    /// consent needs the user to re-authorize rather than time to pass.
+    public let nextSyncAt: Date?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -41,6 +55,9 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         case expiresAt = "expires_at"
         case createdAt = "created_at"
         case lastSyncedAt = "last_synced_at"
+        case backgroundSyncEnabled = "background_sync_enabled"
+        case syncBudgetRemaining = "sync_budget_remaining"
+        case nextSyncAt = "next_sync_at"
     }
 
     public init(
@@ -52,7 +69,10 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         daysUntilExpiry: Int?,
         expiresAt: Date?,
         createdAt: Date,
-        lastSyncedAt: Date?
+        lastSyncedAt: Date?,
+        backgroundSyncEnabled: Bool,
+        syncBudgetRemaining: Int?,
+        nextSyncAt: Date?
     ) {
         self.id = id
         self.provider = provider
@@ -63,5 +83,8 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         self.expiresAt = expiresAt
         self.createdAt = createdAt
         self.lastSyncedAt = lastSyncedAt
+        self.backgroundSyncEnabled = backgroundSyncEnabled
+        self.syncBudgetRemaining = syncBudgetRemaining
+        self.nextSyncAt = nextSyncAt
     }
 }
