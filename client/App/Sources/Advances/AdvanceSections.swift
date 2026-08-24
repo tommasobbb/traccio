@@ -19,10 +19,17 @@ import TraccioCore
 /// reimbursement status ("Marco — Rimborsato" / "Giulia — In attesa") is
 /// built from `ParticipantResponse.status` (ADR 0012) — the mockup element
 /// this file used to be unable to support honestly, now that a
-/// `Reimbursement` can attribute itself to one `Participant`.
+/// `Reimbursement` can attribute itself to one `Participant`. The
+/// reimbursements card also lists each recorded reimbursement individually,
+/// with a per-row delete — `GET`/`DELETE /advances/{id}/reimbursements` had
+/// no client caller until this list existed.
 struct AdvanceSections: View {
     let transaction: TransactionResponse
     let advance: AdvanceResponse
+    /// The advance's recorded reimbursements, for the per-row list. Loading
+    /// and failure states are shown quietly — the summary figures above
+    /// already come straight off `advance`, not off this list.
+    let reimbursements: TransactionDetailViewModel.ReimbursementsState
     /// Set while a delete/write-off/reopen/reimbursement is in flight, to
     /// disable the actions here.
     var isUpdating: Bool = false
@@ -37,9 +44,16 @@ struct AdvanceSections: View {
     let onReopen: () -> Void
     /// Called to present `AddReimbursementSheet`.
     let onAddReimbursement: () -> Void
+    /// Called after the destructive confirmation, to delete one recorded
+    /// reimbursement.
+    let onDeleteReimbursement: (ReimbursementResponse) -> Void
 
     @State private var isConfirmingUnlink = false
     @State private var isConfirmingWriteOff = false
+    /// The reimbursement pending a destructive confirmation, if any —
+    /// `.confirmationDialog(item:)` needs the row itself, not just a `Bool`,
+    /// since the dialog's message depends on whether it links a transaction.
+    @State private var reimbursementPendingDeletion: ReimbursementResponse?
 
     var body: some View {
         splitCard
@@ -194,7 +208,92 @@ struct AdvanceSections: View {
             }
             Divider().overlay(Palette.separator)
             summaryRow(label: "Totale anticipato", amount: advance.receivable, tint: .neutral)
+            reimbursementsList
         }
+        .confirmationDialog(
+            "Eliminare il rimborso?",
+            isPresented: Binding(
+                get: { reimbursementPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented { reimbursementPendingDeletion = nil }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: reimbursementPendingDeletion
+        ) { reimbursement in
+            Button("Elimina", role: .destructive) { onDeleteReimbursement(reimbursement) }
+            Button("Chiudi", role: .cancel) {}
+        } message: { reimbursement in
+            Text(reimbursement.transactionID != nil
+                ? "L'importo tornerà tra quelli ancora da ricevere. Il movimento collegato tornerà personale."
+                : "L'importo tornerà tra quelli ancora da ricevere.")
+        }
+    }
+
+    /// The individual reimbursement rows, below the summary figures above —
+    /// oldest first, matching `GET /advances/{id}/reimbursements`'s order.
+    /// Quiet on `.loading`/an empty list/`.failed`: the totals above already
+    /// hold, this is purely the detail underneath them.
+    @ViewBuilder
+    private var reimbursementsList: some View {
+        switch reimbursements {
+        case .loading:
+            EmptyView()
+        case .loaded(let rows):
+            if !rows.isEmpty {
+                Divider().overlay(Palette.separator)
+                ForEach(rows) { reimbursement in
+                    reimbursementRow(reimbursement)
+                }
+            }
+        case .failed:
+            Text("Non è stato possibile caricare l'elenco dei rimborsi.")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+        }
+    }
+
+    private func reimbursementRow(_ reimbursement: ReimbursementResponse) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    TraccioCore.formatMoney(
+                        amount: reimbursement.amount, currencyCode: advance.currency,
+                        explicitSign: true
+                    )
+                )
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(Palette.income)
+                .monospacedDigit()
+                Text(reimbursementCaption(reimbursement))
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkSecondary)
+            }
+            Spacer()
+            Button {
+                reimbursementPendingDeletion = reimbursement
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundStyle(Palette.inkSecondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isUpdating)
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Date · participant name · "collegato a un movimento" · note, each
+    /// piece included only when present — same "join what exists" pattern as
+    /// `TransactionDetailView.headerSubtitle`.
+    private func reimbursementCaption(_ reimbursement: ReimbursementResponse) -> String {
+        let dateText = TraccioCore.formatCalendarDate(CalendarDate(date: reimbursement.createdAt))
+        let participantName = reimbursement.participantID.flatMap { id in
+            advance.participants.first { $0.id == id }?.name
+        }
+        let linked = reimbursement.transactionID != nil ? "collegato a un movimento" : nil
+        return [dateText, participantName, linked, reimbursement.note]
+            .compactMap { $0 }
+            .joined(separator: " · ")
     }
 
     private var statusLabel: String {

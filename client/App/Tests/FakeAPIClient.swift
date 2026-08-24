@@ -61,6 +61,8 @@ actor FakeAPIClient: APIClientProtocol {
     var createReimbursementToReturn: ReimbursementResponse?
     var createReimbursementError: Error?
     var reimbursementsToReturn: [ReimbursementResponse] = []
+    var reimbursementsError: Error?
+    var deleteReimbursementError: Error?
     var connectionsToReturn: [ConnectionResponse] = []
     var syncConnectionToReturn = SyncResponse(accountsSynced: 0, transactionsSynced: 0)
     var reauthorizeConnectionToReturn = StartConnectionResponse(
@@ -109,6 +111,7 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var writeOffAdvanceCallCount = 0
     private(set) var reopenAdvanceCallCount = 0
     private(set) var createdReimbursementRequests: [CreateReimbursementRequest] = []
+    private(set) var deletedReimbursementIDs: [UUID] = []
     private(set) var createdCategoryNames: [String] = []
     private(set) var renamedCategories: [RecordedRename] = []
     private(set) var deletedCategoryIDs: [UUID] = []
@@ -312,6 +315,18 @@ actor FakeAPIClient: APIClientProtocol {
         createReimbursementError = error
     }
 
+    func setDeleteReimbursementError(_ error: Error) {
+        deleteReimbursementError = error
+    }
+
+    func setReimbursements(_ reimbursements: [ReimbursementResponse]) {
+        reimbursementsToReturn = reimbursements
+    }
+
+    func setReimbursementsError(_ error: Error) {
+        reimbursementsError = error
+    }
+
     func setEvents(_ events: [EventResponse]) {
         eventsToReturn = events
     }
@@ -511,7 +526,13 @@ actor FakeAPIClient: APIClientProtocol {
     }
 
     func reimbursements(advanceID: UUID) async throws -> [ReimbursementResponse] {
-        reimbursementsToReturn
+        if let reimbursementsError { throw reimbursementsError }
+        return reimbursementsToReturn
+    }
+
+    func deleteReimbursement(advanceID: UUID, id: UUID) async throws {
+        if let deleteReimbursementError { throw deleteReimbursementError }
+        deletedReimbursementIDs.append(id)
     }
 
     func connections() async throws -> [ConnectionResponse] {

@@ -923,6 +923,41 @@ struct APIClientTests {
         #expect(reimbursements[0].amount == 1800)
     }
 
+    @Test func deleteReimbursementIssuesADeleteToTheReimbursementEndpoint() async throws {
+        let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let reimbursementID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(
+                request.url?.path
+                    == "/advances/\(advanceID.uuidString)/reimbursements/\(reimbursementID.uuidString)"
+            )
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteReimbursement(advanceID: advanceID, id: reimbursementID)
+    }
+
+    @Test func deleteReimbursementThrowsBadStatusOnUnknownReimbursement() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown reimbursement"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteReimbursement(advanceID: UUID(), id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
     /// A representative `GET /connections` envelope: one connection, expiring
     /// soon, never synced.
     private static let connectionsEnvelope = """

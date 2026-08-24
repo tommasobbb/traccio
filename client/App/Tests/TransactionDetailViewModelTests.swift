@@ -16,11 +16,15 @@ struct TransactionDetailViewModelTests {
     private static let counterpartID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
     private static let transferID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
 
+    private static let eventID = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
+    private static let otherEventID = UUID(uuidString: "77777777-7777-7777-7777-777777777777")!
+
     private static func makeTransaction(
         id: UUID = transactionID,
         amount: Int = -1000,
         role: TransactionRole = .personal,
-        confirmedCategoryID: UUID? = nil
+        confirmedCategoryID: UUID? = nil,
+        eventID: UUID? = nil
     ) -> TransactionResponse {
         TransactionResponse(
             id: id,
@@ -37,7 +41,7 @@ struct TransactionDetailViewModelTests {
             suggestedCategoryID: nil,
             confirmedCategoryID: confirmedCategoryID,
             effectiveCategoryID: confirmedCategoryID,
-            eventID: nil
+            eventID: eventID
         )
     }
 
@@ -587,5 +591,256 @@ struct TransactionDetailViewModelTests {
         let recorded = await client.createdReimbursementRequests
         #expect(recorded.count == 1)
         #expect(recorded.first?.participantID == participantID)
+    }
+
+    private static func makeReimbursement(
+        id: UUID = UUID(), transactionID: UUID? = nil, participantID: UUID? = nil
+    ) -> ReimbursementResponse {
+        ReimbursementResponse(
+            id: id, advanceID: advanceID, amount: 1000, currency: "EUR",
+            transactionID: transactionID, participantID: participantID, note: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
+    @Test func loadReimbursementsPopulatesLoadedState() async throws {
+        let client = FakeAPIClient()
+        let reimbursement = Self.makeReimbursement()
+        await client.setReimbursements([reimbursement])
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client
+        )
+
+        await model.loadReimbursements()
+
+        #expect(model.reimbursements == .loaded([reimbursement]))
+    }
+
+    @Test func loadReimbursementsSetsFailedOnError() async throws {
+        let client = FakeAPIClient()
+        await client.setReimbursementsError(FakeAPIError())
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client
+        )
+
+        await model.loadReimbursements()
+
+        #expect(model.reimbursements == .failed)
+    }
+
+    @Test func loadReimbursementsIsANoOpWithoutAnAdvance() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.loadReimbursements()
+
+        #expect(model.reimbursements == .loading)
+    }
+
+    @Test func deleteReimbursementCashSucceedsRefetchesAdvanceAndDoesNotCallOnUpdate() async throws {
+        let client = FakeAPIClient()
+        let reimbursement = Self.makeReimbursement()
+        let refreshedAdvance = Self.makeAdvance()
+        await client.setAdvance(refreshedAdvance)
+
+        var updateCallCount = 0
+        var advanceChangeCallCount = 0
+        var dashboardStaleCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { _ in updateCallCount += 1 },
+            onAdvanceChange: { _ in advanceChangeCallCount += 1 },
+            onDashboardStale: { dashboardStaleCallCount += 1 }
+        )
+
+        await model.deleteReimbursement(reimbursement)
+
+        #expect(model.advance?.id == refreshedAdvance.id)
+        #expect(model.actionFailure == nil)
+        #expect(advanceChangeCallCount == 1)
+        #expect(updateCallCount == 0)
+        #expect(dashboardStaleCallCount == 1)
+        let recorded = await client.deletedReimbursementIDs
+        #expect(recorded == [reimbursement.id])
+    }
+
+    @Test func deleteReimbursementLinkedRefetchesTheLinkedTransactionAndCallsOnUpdate() async throws {
+        let client = FakeAPIClient()
+        let linkedID = Self.counterpartID
+        let reimbursement = Self.makeReimbursement(transactionID: linkedID)
+        await client.setAdvance(Self.makeAdvance())
+        let refreshedLinked = Self.makeTransaction(id: linkedID, amount: -1000, role: .personal)
+        await client.setTransaction(refreshedLinked, forID: linkedID)
+
+        var updatedTransaction: TransactionResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { updatedTransaction = $0 }
+        )
+
+        await model.deleteReimbursement(reimbursement)
+
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.id == linkedID)
+        #expect(updatedTransaction?.role == .personal)
+    }
+
+    @Test func deleteReimbursementFailureSetsActionFailureAndNeverCallsOnUpdate() async throws {
+        let client = FakeAPIClient()
+        await client.setAdvance(Self.makeAdvance())
+        await client.setDeleteReimbursementError(FakeAPIError())
+
+        var updateCallCount = 0
+        var dashboardStaleCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client, onUpdate: { _ in updateCallCount += 1 },
+            onDashboardStale: { dashboardStaleCallCount += 1 }
+        )
+
+        await model.deleteReimbursement(Self.makeReimbursement())
+
+        #expect(model.actionFailure == .generic)
+        #expect(updateCallCount == 0)
+        #expect(dashboardStaleCallCount == 0)
+    }
+
+    @Test func deleteReimbursementIsANoOpWithoutAnAdvance() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.deleteReimbursement(Self.makeReimbursement())
+
+        #expect(model.actionFailure == nil)
+        let recorded = await client.deletedReimbursementIDs
+        #expect(recorded.isEmpty)
+    }
+
+    @Test func assignToEventFromNoEventCallsAssignOnlyAndRefetches() async throws {
+        let client = FakeAPIClient()
+        let refreshed = Self.makeTransaction(eventID: Self.eventID)
+        await client.setTransaction(refreshed)
+
+        var updatedTransaction: TransactionResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onUpdate: { updatedTransaction = $0 }
+        )
+
+        await model.assignToEvent(Self.eventID)
+
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.eventID == Self.eventID)
+        let assigned = await client.assignedEventMembers
+        let unassigned = await client.unassignedEventMembers
+        #expect(assigned == [FakeAPIClient.RecordedEventMember(eventID: Self.eventID, transactionID: Self.transactionID)])
+        #expect(unassigned.isEmpty)
+    }
+
+    @Test func assignToEventFromAnotherEventUnassignsThenAssignsInOrder() async throws {
+        let client = FakeAPIClient()
+        let refreshed = Self.makeTransaction(eventID: Self.otherEventID)
+        await client.setTransaction(refreshed)
+
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(eventID: Self.eventID), client: client
+        )
+
+        await model.assignToEvent(Self.otherEventID)
+
+        #expect(model.actionFailure == nil)
+        let unassigned = await client.unassignedEventMembers
+        let assigned = await client.assignedEventMembers
+        #expect(unassigned == [FakeAPIClient.RecordedEventMember(eventID: Self.eventID, transactionID: Self.transactionID)])
+        #expect(assigned == [FakeAPIClient.RecordedEventMember(eventID: Self.otherEventID, transactionID: Self.transactionID)])
+    }
+
+    @Test func assignToEventAlreadyAssignedIsANoOp() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(eventID: Self.eventID), client: client
+        )
+
+        await model.assignToEvent(Self.eventID)
+
+        #expect(model.actionFailure == nil)
+        let assigned = await client.assignedEventMembers
+        let unassigned = await client.unassignedEventMembers
+        #expect(assigned.isEmpty)
+        #expect(unassigned.isEmpty)
+    }
+
+    @Test func assignToEventConflictSetsTransactionInAnotherEvent() async throws {
+        let client = FakeAPIClient()
+        await client.setAssignTransactionError(APIError.badStatus(409))
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.assignToEvent(Self.eventID)
+
+        #expect(model.actionFailure == .transactionInAnotherEvent)
+    }
+
+    @Test func assignToEventMixedCurrencySetsMixedCurrency() async throws {
+        let client = FakeAPIClient()
+        await client.setAssignTransactionError(APIError.badStatus(422))
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.assignToEvent(Self.eventID)
+
+        #expect(model.actionFailure == .mixedCurrency)
+    }
+
+    @Test func assignToEventPartialFailureStillRefetchesTheRealState() async throws {
+        // The old event's `unassign` can succeed while the new one's
+        // `assign` fails — the transaction is genuinely event-less at that
+        // point, so the re-fetch (and `onUpdate`) must still run rather than
+        // leaving a stale chip for a membership that no longer exists.
+        let client = FakeAPIClient()
+        await client.setAssignTransactionError(FakeAPIError())
+        let reverted = Self.makeTransaction(eventID: nil)
+        await client.setTransaction(reverted)
+
+        var updatedTransaction: TransactionResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(eventID: Self.eventID), client: client,
+            onUpdate: { updatedTransaction = $0 }
+        )
+
+        await model.assignToEvent(Self.otherEventID)
+
+        #expect(model.actionFailure == .generic)
+        #expect(updatedTransaction?.eventID == nil)
+    }
+
+    @Test func removeFromEventSucceedsAndRefetches() async throws {
+        let client = FakeAPIClient()
+        let refreshed = Self.makeTransaction(eventID: nil)
+        await client.setTransaction(refreshed)
+
+        var updatedTransaction: TransactionResponse?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(eventID: Self.eventID), client: client,
+            onUpdate: { updatedTransaction = $0 }
+        )
+
+        await model.removeFromEvent()
+
+        #expect(model.actionFailure == nil)
+        #expect(updatedTransaction?.eventID == nil)
+        let unassigned = await client.unassignedEventMembers
+        #expect(unassigned == [FakeAPIClient.RecordedEventMember(eventID: Self.eventID, transactionID: Self.transactionID)])
+    }
+
+    @Test func removeFromEventIsANoOpWithoutAnEvent() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.removeFromEvent()
+
+        #expect(model.actionFailure == nil)
+        let unassigned = await client.unassignedEventMembers
+        #expect(unassigned.isEmpty)
     }
 }

@@ -461,6 +461,26 @@ public struct APIClient: Sendable {
         return envelope.reimbursements
     }
 
+    /// Delete a reimbursement and revert its linked transaction to `personal`,
+    /// if it had one.
+    ///
+    /// Mirrors `DELETE /advances/{advanceID}/reimbursements/{id}`,
+    /// `204 No Content` on success. The caller re-fetches the advance via
+    /// `advance(id:)` to observe the reduced `reimbursed`/`outstanding`, and —
+    /// when the deleted reimbursement carried a `transactionID` — that
+    /// transaction via `transaction(id:)` to observe its restored
+    /// `effectiveAmount`.
+    ///
+    /// Parameters
+    /// ----------
+    /// advanceID:
+    ///     The advance the reimbursement belongs to.
+    /// id:
+    ///     The reimbursement to delete.
+    public func deleteReimbursement(advanceID: UUID, id: UUID) async throws {
+        try await delete("advances/\(advanceID.uuidString)/reimbursements/\(id.uuidString)")
+    }
+
     /// Fetch the caller's bank connections, oldest first.
     ///
     /// Returns

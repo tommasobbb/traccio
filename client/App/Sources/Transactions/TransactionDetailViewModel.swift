@@ -21,6 +21,22 @@ final class TransactionDetailViewModel {
     /// `AccountsViewModel.ActionFailure`.
     enum ActionFailure: Equatable {
         case generic
+        /// `409` from `POST /events/{id}/transactions` — this transaction
+        /// already belongs to a different event.
+        case transactionInAnotherEvent
+        /// `422` from the same endpoint — the event and this transaction
+        /// don't share a currency.
+        case mixedCurrency
+    }
+
+    /// This transaction's advance's recorded reimbursements, oldest first —
+    /// distinct from a plain array so a load failure ("`.failed`") is never
+    /// confused with "no reimbursements exist yet" (`.loaded([])`), which
+    /// would be a lie whenever `advance.reimbursed > 0`.
+    enum ReimbursementsState: Equatable {
+        case loading
+        case loaded([ReimbursementResponse])
+        case failed
     }
 
     /// The transaction shown, refreshed in place after a successful
@@ -54,6 +70,11 @@ final class TransactionDetailViewModel {
     /// `AddReimbursementSheet` opens — a failure leaves it empty, which the
     /// sheet degrades to offering a cash-only entry.
     private(set) var reimbursementCandidates: [TransactionResponse] = []
+    /// This transaction's advance's recorded reimbursements, loaded by
+    /// `loadReimbursements()` and kept in sync by
+    /// `createReimbursement(...)`/`deleteReimbursement(_:)`. `.loading` until
+    /// the first fetch resolves.
+    private(set) var reimbursements: ReimbursementsState = .loading
     /// Set while a confirm/clear/seed-defaults call is in flight, to disable
     /// the picker and show a spinner rather than let a second tap race it.
     private(set) var isUpdating = false
@@ -321,6 +342,22 @@ final class TransactionDetailViewModel {
         }
     }
 
+    /// Fetch this transaction's advance's recorded reimbursements.
+    ///
+    /// A no-op without an advance. Unlike
+    /// `loadReimbursementCandidatesIfNeeded()`, this always re-runs when
+    /// called — `createReimbursement(...)`/`deleteReimbursement(_:)` already
+    /// keep `reimbursements` in sync after a write, so a caller only needs
+    /// this for the initial load or an explicit retry after `.failed`.
+    func loadReimbursements() async {
+        guard let advance else { return }
+        do {
+            reimbursements = .loaded(try await client.reimbursements(advanceID: advance.id))
+        } catch {
+            reimbursements = .failed
+        }
+    }
+
     /// Record a reimbursement against this transaction's advance — a manual
     /// cash entry, or a link to an incoming transaction.
     ///
@@ -363,7 +400,44 @@ final class TransactionDetailViewModel {
             let refreshedAdvance = try await client.advance(id: advance.id)
             self.advance = refreshedAdvance
             onAdvanceChange(refreshedAdvance)
+            reimbursements = .loaded(try await client.reimbursements(advanceID: advance.id))
             if let transactionID {
+                let refreshedLinked = try await client.transaction(id: transactionID)
+                onUpdate(refreshedLinked)
+            }
+            onDashboardStale()
+        } catch {
+            actionFailure = .generic
+        }
+    }
+
+    /// Delete a previously recorded reimbursement.
+    ///
+    /// A no-op without an advance. On success, both the advance (its
+    /// `reimbursed`/`outstanding`/`status` all shrink server-side) and the
+    /// reimbursements list are re-fetched and published; when the deleted
+    /// reimbursement had linked a transaction, that transaction reverted to
+    /// `role == .personal` server-side, so it is re-fetched too and handed to
+    /// `onUpdate` — the same two-effect discipline as
+    /// `createReimbursement(...)`, just undoing it.
+    ///
+    /// Parameters
+    /// ----------
+    /// reimbursement:
+    ///     The reimbursement to delete.
+    func deleteReimbursement(_ reimbursement: ReimbursementResponse) async {
+        guard let advance, !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            try await client.deleteReimbursement(advanceID: advance.id, id: reimbursement.id)
+            let refreshedAdvance = try await client.advance(id: advance.id)
+            self.advance = refreshedAdvance
+            onAdvanceChange(refreshedAdvance)
+            reimbursements = .loaded(try await client.reimbursements(advanceID: advance.id))
+            if let transactionID = reimbursement.transactionID {
                 let refreshedLinked = try await client.transaction(id: transactionID)
                 onUpdate(refreshedLinked)
             }
@@ -429,6 +503,83 @@ final class TransactionDetailViewModel {
             onDashboardStale()
         } catch {
             actionFailure = .generic
+        }
+    }
+
+    /// Assign this transaction to an event, replacing any previous one.
+    ///
+    /// A no-op when `eventID` is already this transaction's event. The
+    /// backend refuses a second event with `409` (`docs/domain.md` §Event:
+    /// membership is exclusive), so switching is genuinely two calls —
+    /// `unassignTransaction` from the old event, then `assignTransaction` to
+    /// the new one. If the second call fails, the final re-fetch still runs,
+    /// so the view reflects the transaction's real (now event-less) state
+    /// rather than the one this call hoped for.
+    ///
+    /// Parameters
+    /// ----------
+    /// eventID:
+    ///     The event to assign this transaction to.
+    func assignToEvent(_ eventID: UUID) async {
+        guard transaction.eventID != eventID else { return }
+        let previousEventID = transaction.eventID
+        await performEventMembershipUpdate { client, transactionID in
+            if let previousEventID {
+                try await client.unassignTransaction(eventID: previousEventID, transactionID: transactionID)
+            }
+            try await client.assignTransaction(eventID: eventID, transactionID: transactionID)
+        }
+    }
+
+    /// Remove this transaction from its current event, if it has one.
+    ///
+    /// A no-op without an event.
+    func removeFromEvent() async {
+        guard let eventID = transaction.eventID else { return }
+        await performEventMembershipUpdate { client, transactionID in
+            try await client.unassignTransaction(eventID: eventID, transactionID: transactionID)
+        }
+    }
+
+    /// Shared shape for `assignToEvent(_:)` and `removeFromEvent()`: guard
+    /// against overlap, run the write, re-fetch the row, publish it, and
+    /// notify `onUpdate` — or record `actionFailure`. Unlike `performUpdate`,
+    /// this never calls `onDashboardStale` (event membership never touches
+    /// `role`/`effectiveAmount`), maps `APIError.badStatus` to the two
+    /// reasons the endpoint actually distinguishes (mirroring
+    /// `EventDetailViewModel.performMembershipUpdate`), and **always
+    /// re-fetches, even on failure** — `assignToEvent(_:)`'s
+    /// unassign-then-assign sequence can fail on the second call after the
+    /// first already succeeded, leaving the transaction genuinely
+    /// event-less; refetching shows that real state instead of a stale
+    /// chip for an event membership that no longer exists.
+    ///
+    /// Parameters
+    /// ----------
+    /// write:
+    ///     The membership write to perform, given the client and this
+    ///     transaction's id.
+    private func performEventMembershipUpdate(
+        _ write: (any APIClientProtocol, UUID) async throws -> Void
+    ) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            try await write(client, transaction.id)
+        } catch APIError.badStatus(409) {
+            actionFailure = .transactionInAnotherEvent
+        } catch APIError.badStatus(422) {
+            actionFailure = .mixedCurrency
+        } catch {
+            actionFailure = .generic
+        }
+
+        if let refreshed = try? await client.transaction(id: transaction.id) {
+            transaction = refreshed
+            onUpdate(refreshed)
         }
     }
 }

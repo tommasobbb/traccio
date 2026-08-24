@@ -30,6 +30,7 @@ struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
     @State private var isPresentingCreateAdvanceSheet = false
     @State private var isPresentingAddReimbursementSheet = false
+    @State private var isPresentingEventPickerSheet = false
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -108,8 +109,8 @@ struct TransactionDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                if model.actionFailure != nil {
-                    Banner(message: "Non è stato possibile completare l'operazione. Riprova.")
+                if let bannerMessage {
+                    Banner(message: bannerMessage)
                 }
                 categoryCard
                 eventCard
@@ -117,6 +118,7 @@ struct TransactionDetailView: View {
                     AdvanceSections(
                         transaction: model.transaction,
                         advance: advance,
+                        reimbursements: model.reimbursements,
                         isUpdating: model.isUpdating,
                         onUnlink: { Task { await model.deleteAdvance() } },
                         onWriteOff: { Task { await model.writeOffAdvance() } },
@@ -124,6 +126,9 @@ struct TransactionDetailView: View {
                         onAddReimbursement: {
                             Task { await model.loadReimbursementCandidatesIfNeeded() }
                             isPresentingAddReimbursementSheet = true
+                        },
+                        onDeleteReimbursement: { reimbursement in
+                            Task { await model.deleteReimbursement(reimbursement) }
                         }
                     )
                 } else if TraccioCore.canBecomeAdvance(model.transaction) {
@@ -144,6 +149,7 @@ struct TransactionDetailView: View {
         .task {
             await model.loadCategoriesIfNeeded()
             await model.loadTransferIfNeeded()
+            await model.loadReimbursements()
         }
         .sheet(isPresented: $isPresentingCreateAdvanceSheet) {
             CreateAdvanceSheet(
@@ -181,6 +187,23 @@ struct TransactionDetailView: View {
                     }
                 },
                 onCancel: { isPresentingAddReimbursementSheet = false }
+            )
+        }
+        .sheet(isPresented: $isPresentingEventPickerSheet) {
+            EventPickerSheet(
+                events: events,
+                selectedEventID: model.transaction.eventID,
+                isUpdating: model.isUpdating,
+                failureMessage: bannerMessage,
+                onSelect: { eventID in
+                    Task {
+                        await model.assignToEvent(eventID)
+                        if model.actionFailure == nil {
+                            isPresentingEventPickerSheet = false
+                        }
+                    }
+                },
+                onCancel: { isPresentingEventPickerSheet = false }
             )
         }
     }
@@ -230,6 +253,20 @@ struct TransactionDetailView: View {
     private var categoryName: String? {
         guard let id = model.transaction.effectiveCategoryID else { return nil }
         return model.categories.first { $0.id == id }?.name
+    }
+
+    /// The top banner's copy for the current `model.actionFailure`, `nil`
+    /// when there is none. Most actions on this screen share the generic
+    /// fallback; event-membership failures get their own copy since they
+    /// name a specific, recoverable cause rather than "something went
+    /// wrong."
+    private var bannerMessage: String? {
+        switch model.actionFailure {
+        case nil: nil
+        case .transactionInAnotherEvent: "Il movimento è già assegnato a un altro evento."
+        case .mixedCurrency: "Questo movimento ha una valuta diversa da quella dell'evento."
+        case .generic: "Non è stato possibile completare l'operazione. Riprova."
+        }
     }
 
     private var headerSubtitle: String {
@@ -334,23 +371,24 @@ struct TransactionDetailView: View {
 
     // MARK: Event
 
-    /// A chip naming the event this transaction belongs to, if any — closes
-    /// the "event chip" gap left open when the advance cards were still a
-    /// dedicated `AdvanceDetailView` (see `tasks/backlog.md`); they are now
-    /// `AdvanceSections` embedded right here, so one chip at this level
-    /// covers an advance transaction's event too, not just a plain one.
+    /// The event card: a chip naming this transaction's event, plus the
+    /// actions to change it — closes the "assign to event" gap left open
+    /// when `event_id` first landed on the read model (see
+    /// `tasks/backlog.md`), which only let a transaction be *added* to an
+    /// event from the event's own detail screen (`AddEventMembersSheet`).
+    /// This card is the reverse direction, so unlike the read-only chip it
+    /// replaced, it renders even without an event.
     ///
-    /// A `NavigationLink` to `EventDetailView` when the event resolved
-    /// against `events` (the caller's already-fetched list); otherwise a
-    /// non-navigable row showing a generic label, the same degrade
-    /// `TransactionRow`'s advance lookup already uses — the backend, not a
-    /// stale local list, stays the authority on whether the event still
-    /// exists.
-    @ViewBuilder
+    /// The chip is a `NavigationLink` to `EventDetailView` when the event
+    /// resolved against `events` (the caller's already-fetched list);
+    /// otherwise a non-navigable row showing a generic label, the same
+    /// degrade `TransactionRow`'s advance lookup already uses — the
+    /// backend, not a stale local list, stays the authority on whether the
+    /// event still exists.
     private var eventCard: some View {
-        if let eventID = model.transaction.eventID {
-            Card {
-                EyebrowLabel(text: "Evento")
+        Card {
+            EyebrowLabel(text: "Evento")
+            if let eventID = model.transaction.eventID {
                 if let event = events.first(where: { $0.id == eventID }) {
                     NavigationLink {
                         EventDetailView(event: event, client: client)
@@ -361,8 +399,28 @@ struct TransactionDetailView: View {
                 } else {
                     eventRow(name: "Evento", isNavigable: false)
                 }
+                Divider().overlay(Palette.separator)
+                eventActionRow(title: "Cambia evento") { isPresentingEventPickerSheet = true }
+                eventActionRow(title: "Rimuovi dall'evento") {
+                    Task { await model.removeFromEvent() }
+                }
+            } else {
+                eventActionRow(title: "Assegna a un evento") { isPresentingEventPickerSheet = true }
             }
         }
+    }
+
+    private func eventActionRow(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(Palette.inkSecondary)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isUpdating)
     }
 
     private func eventRow(name: String, isNavigable: Bool) -> some View {
