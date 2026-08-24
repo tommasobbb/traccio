@@ -41,6 +41,39 @@ public struct CategorySummaryResponse: Codable, Sendable, Equatable {
     }
 }
 
+/// Spending and income totals for one calendar day, within one currency, as
+/// returned by `GET /dashboard/summary`.
+///
+/// Mirrors the `DaySummaryResponse` schema in `docs/api/openapi.json`. There
+/// is no `net` here either, same reasoning as `CategorySummaryResponse`.
+public struct DaySummaryResponse: Codable, Sendable, Equatable {
+    /// The UTC calendar day this entry is for. `CalendarDate`, not `Date` —
+    /// the backend sends a bare `yyyy-MM-dd` with no time component, the same
+    /// convention as `EventResponse.startDate`/`endDate`.
+    public let date: CalendarDate
+    /// Total spending on this day, a non-negative magnitude, minor units.
+    public let spending: Int
+    /// Total income on this day, a non-negative magnitude, minor units.
+    public let income: Int
+    /// Count of transactions on this day, including zero-`effective_amount`
+    /// ones (transfers, reimbursements).
+    public let transactionCount: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case date
+        case spending
+        case income
+        case transactionCount = "transaction_count"
+    }
+
+    public init(date: CalendarDate, spending: Int, income: Int, transactionCount: Int) {
+        self.date = date
+        self.spending = spending
+        self.income = income
+        self.transactionCount = transactionCount
+    }
+}
+
 /// Spending and income totals for one currency over a period, as returned by
 /// `GET /dashboard/summary`.
 ///
@@ -67,6 +100,12 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
     /// then income descending. Sums to this entry's own
     /// `spending`/`income`/`transactionCount`.
     public let byCategory: [CategorySummaryResponse]
+    /// This currency's totals partitioned by UTC calendar day, sorted
+    /// chronologically. Unlike `byCategory`, this does **not** always sum
+    /// back to this entry's own totals — a transaction with neither a booked
+    /// nor a value date has nowhere to bucket, per
+    /// `docs/decisions/0007-dashboard-aggregation.md`.
+    public let byDay: [DaySummaryResponse]
 
     private enum CodingKeys: String, CodingKey {
         case currency
@@ -75,11 +114,12 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
         case net
         case transactionCount = "transaction_count"
         case byCategory = "by_category"
+        case byDay = "by_day"
     }
 
     public init(
         currency: String, spending: Int, income: Int, net: Int, transactionCount: Int,
-        byCategory: [CategorySummaryResponse] = []
+        byCategory: [CategorySummaryResponse] = [], byDay: [DaySummaryResponse] = []
     ) {
         self.currency = currency
         self.spending = spending
@@ -87,6 +127,7 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
         self.net = net
         self.transactionCount = transactionCount
         self.byCategory = byCategory
+        self.byDay = byDay
     }
 }
 

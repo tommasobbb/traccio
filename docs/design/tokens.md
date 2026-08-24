@@ -92,6 +92,16 @@ and fill; and the canvas's fifth/grey slice `#C7C6CE` — replaced with
 `Palette.inkTertiary`, already the palette's own cool gray rather than an
 unrelated one introduced just for this chart.
 
+## Daily bars
+
+The dashboard's "Spesa giornaliera" bar chart (`docs/design/canvas/Main.dc.html`,
+badge removed once `by_day` shipped —
+`docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25 revision). No new
+tokens: the fill reuses `Palette.accent` (the same color as the donut's rank-1
+segment coincidentally, but not linked — this chart has one series, not a
+rotation) and the track reuses `Palette.neutralFill`, same as the donut's own
+track.
+
 ## Separators and shadows
 
 | Token             | Value                              | Use                        |

@@ -8,11 +8,12 @@ single combined total.
 """
 
 from collections.abc import Mapping
+from datetime import date
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from traccio.domain.dashboard import CategorySummary, CurrencySummary
+from traccio.domain.dashboard import CategorySummary, CurrencySummary, DaySummary
 
 
 class CategorySummaryResponse(BaseModel):
@@ -69,6 +70,37 @@ class CategorySummaryResponse(BaseModel):
         )
 
 
+class DaySummaryResponse(BaseModel):
+    """Spending and income totals for one calendar day, as returned to the client.
+
+    Attributes
+    ----------
+    date : date
+        The UTC calendar day this entry is for.
+    spending : int
+        Total spending in minor units (cents), a positive magnitude.
+    income : int
+        Total income in minor units (cents), a positive magnitude.
+    transaction_count : int
+        How many transactions fall on this day.
+    """
+
+    date: date
+    spending: int
+    income: int
+    transaction_count: int
+
+    @classmethod
+    def from_domain(cls, summary: DaySummary) -> "DaySummaryResponse":
+        """Project a domain :class:`~traccio.domain.dashboard.DaySummary`."""
+        return cls(
+            date=summary.day,
+            spending=summary.spending.amount,
+            income=summary.income.amount,
+            transaction_count=summary.transaction_count,
+        )
+
+
 class CurrencySummaryResponse(BaseModel):
     """Spending and income totals for one currency, as returned to the client.
 
@@ -90,6 +122,12 @@ class CurrencySummaryResponse(BaseModel):
         This currency's totals partitioned by category, sorted by spending
         then income descending. Sums to this entry's own
         ``spending``/``income``/``transaction_count``.
+    by_day : list[DaySummaryResponse]
+        This currency's totals partitioned by UTC calendar day, sorted
+        chronologically. A transaction with neither ``booked_at`` nor
+        ``value_date`` set is excluded here while still counted in this
+        entry's own totals — the one field that does not sum back to the
+        parent, unlike ``by_category``.
     """
 
     currency: str
@@ -98,6 +136,7 @@ class CurrencySummaryResponse(BaseModel):
     net: int
     transaction_count: int
     by_category: list[CategorySummaryResponse]
+    by_day: list[DaySummaryResponse]
 
     @classmethod
     def from_domain(
@@ -114,6 +153,7 @@ class CurrencySummaryResponse(BaseModel):
                 CategorySummaryResponse.from_domain(entry, category_names=category_names)
                 for entry in summary.by_category
             ],
+            by_day=[DaySummaryResponse.from_domain(entry) for entry in summary.by_day],
         )
 
 

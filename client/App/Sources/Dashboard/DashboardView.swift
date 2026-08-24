@@ -6,10 +6,13 @@ import TraccioCore
 /// (`tasks/ROADMAP.md`: *"tag a real advance and watch the dashboard show my
 /// actual share"*).
 ///
-/// Follows the `docs/design/canvas/Main.dc.html` mockup, minus the two
-/// elements it marks "Concept · richiede backend" (the category donut and the
-/// trend line) and minus the recent-transactions list, which needs
-/// `GET /transactions` — a later slice (ADR 0008's consequences section).
+/// Follows the `docs/design/canvas/Main.dc.html` mockup, minus the
+/// recent-transactions list, which needs `GET /transactions` — a later slice
+/// (ADR 0008's consequences section). The mockup's two "Concept · richiede
+/// backend" elements — the category donut and the trend line — are both
+/// built now: the trend renders as daily spending bars, not the mockup's
+/// net line (`docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25
+/// revision).
 struct DashboardView: View {
     @State private var model = DashboardViewModel()
     /// `.dashboard` is bumped by a write on another tab that can change this
@@ -98,6 +101,11 @@ struct DashboardView: View {
             // was pure income (spending == 0), same as `DonutChart`'s own
             // empty case.
             categoryBreakdownCard(primary)
+
+            // Same primary-currency-only rule as the two cards above, for
+            // the same reason: a bar mixing currencies would misrepresent
+            // magnitudes Traccio never converts between (ADR 0007).
+            dailySpendingCard(primary)
         } else {
             Card {
                 EyebrowLabel(text: "Speso questo periodo")
@@ -238,6 +246,36 @@ struct DashboardView: View {
                 kind: .spending,
                 font: Typography.caption.weight(.bold)
             )
+        }
+    }
+
+    /// The "Spesa giornaliera" card (`docs/design/canvas/Main.dc.html`'s
+    /// "Andamento netto" slot, rebuilt as a spending bar chart rather than a
+    /// net line — the 2026-08-25 revision to ADR 0007). Renders nothing when
+    /// there is nothing to show, same posture as `heroCard`'s and
+    /// `categoryBreakdownCard`'s own empty branches.
+    ///
+    /// Uses the same period the rest of the screen shows — no independent
+    /// selector — but the axis itself is whatever UTC days `dailyBars(_:)`
+    /// returns, which is `by_day`'s own earliest-to-latest span, not
+    /// necessarily every day of `model.period` (see `dailyBars(_:)`'s doc
+    /// comment on why the two are not reconciled).
+    @ViewBuilder
+    private func dailySpendingCard(_ summary: CurrencySummaryResponse) -> some View {
+        let bars = TraccioCore.dailyBars(summary.byDay)
+
+        if let first = bars.first, let last = bars.last {
+            Card {
+                EyebrowLabel(text: "Spesa giornaliera")
+                DailyBarsChart(bars: bars)
+                HStack {
+                    Text(TraccioCore.formatCalendarDate(first.day))
+                    Spacer()
+                    Text(TraccioCore.formatCalendarDate(last.day))
+                }
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+            }
         }
     }
 }

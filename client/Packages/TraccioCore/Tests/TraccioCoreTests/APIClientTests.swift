@@ -105,7 +105,7 @@ struct APIClientTests {
         { "currencies": [
           {
             "currency": "EUR", "spending": 124050, "income": 210000, "net": 85950,
-            "transaction_count": 42, "by_category": []
+            "transaction_count": 42, "by_category": [], "by_day": []
           }
         ] }
         """

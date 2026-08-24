@@ -139,3 +139,40 @@ and legend (`docs/design/canvas/Main.dc.html`, previously "Concept · richiede
 backend"), unblocking the second of the two `#Preview` gaps that badge was
 tracking — the trend line (`Andamento netto`) remains open, still needing its
 own granularity decision (see `tasks/backlog.md`).
+
+## Revision — 2026-08-25: daily trend
+
+The remaining "Concept" gap. Granularity settled as **daily**
+(`tasks/backlog.md`'s M3 iPhone-trial roadmap), and the metric is **spending**,
+not the mockup's net line — the daily question that matters is "how much did I
+spend," and a net figure at daily granularity is almost always pure spending
+with isolated spikes on payday, which reads as noise rather than a trend.
+
+Third additive partition on `summarize`, same shape as Decision 5's category
+breakdown: a new `DaySummary` (no `net`, same YAGNI reasoning as
+`CategorySummary`) nested inside each `CurrencySummary` as `by_day`, never
+beside it — a day cannot span currencies either. The bucketing key is the UTC
+calendar day of `coalesce(booked_at, value_date)` — the exact same expression
+`list_transactions_in_period` filters on, so a row can never be counted in the
+period but excluded from every bucket, or vice versa. This is also `by_day`'s
+one departure from `by_category`'s invariant: a transaction with **neither**
+`booked_at` nor `value_date` set has nowhere to bucket and is excluded from
+`by_day`, while still counted in the currency's own totals — `by_category`
+never has this gap, because "no category" is itself a real bucket
+(`category_id = None`), but "no day" has no analogous bucket to fall into.
+
+The client's `TraccioCore.dailyBars(_:)` fills every day between the earliest
+and latest entry in `by_day` with a zero bar, so the chart never renders
+unevenly spaced bars — but it does **not** extend the axis to the full
+requested period. `MonthPeriod` (the period picker) is in local time, while
+`by_day` is bucketed in UTC days; reconciling the two would risk a day
+silently falling outside the client-drawn axis. The axis is therefore
+whatever `by_day` actually returned, not the nominal calendar month — a
+period picked as "August" in a non-UTC timezone can show a day from the very
+end of July or the start of September at its edge. Accepted as the honest
+reading of what the backend actually bucketed, rather than a client-side
+reinterpretation into local days that the backend never computed.
+
+The client's Panoramica screen now renders this as "Spesa giornaliera" bars
+(`docs/design/canvas/Main.dc.html`, badge removed), closing the roadmap's M3
+item 4.

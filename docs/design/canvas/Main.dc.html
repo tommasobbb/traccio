@@ -74,6 +74,9 @@
     .legend-amt { color: #6E6E73; font-variant-numeric: tabular-nums; font-weight: 600; }
     .trend-labels { display: flex; justify-content: space-between; padding: 0 2px; }
     .trend-labels span { font-size: 10.5px; color: #8E8E93; font-weight: 600; }
+    .bars-row { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
+    .bar-track { flex: 1; height: 100%; border-radius: 2px; background: #E5E5EA; display: flex; align-items: flex-end; }
+    .bar-fill { width: 100%; border-radius: 2px; background: {{accent}}; }
     .mini-list { display: flex; flex-direction: column; gap: 4px; }
     .mini-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
     .mini-icon { width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -175,16 +178,22 @@
 
     <div class="card">
       <div class="card-head">
-        <span class="eyebrow">Andamento netto</span>
-        <span class="badge-concept">Concept &middot; richiede backend</span>
+        <span class="eyebrow">Spesa giornaliera</span>
       </div>
-      <svg width="100%" height="90" viewBox="0 0 310 90" preserveAspectRatio="none">
-        <polygon points="0,55 62,75 124,35 186,58 248,15 310,28 310,90 0,90" fill="rgba(91,79,224,0.08)"></polygon>
-        <polyline points="0,55 62,75 124,35 186,58 248,15 310,28" fill="none" stroke="{{accent}}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-        <circle cx="310" cy="28" r="4" fill="{{accent}}" stroke="#FFFFFF" stroke-width="2"></circle>
-      </svg>
+      <div class="bars-row">
+        <div class="bar-track"><div class="bar-fill" style="height: 22%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 55%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 8%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 40%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 15%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 70%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 30%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 100%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 45%"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="height: 12%"></div></div>
+      </div>
       <div class="trend-labels">
-        <span>Mar</span><span>Apr</span><span>Mag</span><span>Giu</span><span>Lug</span><span>Ago</span>
+        <span>1 ago</span><span>10 ago</span>
       </div>
     </div>
 

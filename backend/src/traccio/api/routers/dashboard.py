@@ -82,12 +82,9 @@ def dashboard_summary(
     category_names = {category.id: category.name for category in list_categories(session, user_id)}
 
     # Log currencies and a count, never amounts (see data-safety rules).
-    logger.info(
-        "dashboard.summary", currencies=[s.currency for s in summaries], count=len(found)
-    )
+    logger.info("dashboard.summary", currencies=[s.currency for s in summaries], count=len(found))
     return DashboardSummaryResponse(
         currencies=[
-            CurrencySummaryResponse.from_domain(s, category_names=category_names)
-            for s in summaries
+            CurrencySummaryResponse.from_domain(s, category_names=category_names) for s in summaries
         ]
     )

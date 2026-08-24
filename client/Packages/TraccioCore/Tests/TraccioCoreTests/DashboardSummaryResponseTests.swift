@@ -29,6 +29,14 @@ struct DashboardSummaryResponseTests {
                   "income": 0,
                   "transaction_count": 3
                 }
+              ],
+              "by_day": [
+                {
+                  "date": "2026-08-10",
+                  "spending": 18000,
+                  "income": 0,
+                  "transaction_count": 3
+                }
               ]
             },
             {
@@ -51,6 +59,20 @@ struct DashboardSummaryResponseTests {
                   "spending": 64050,
                   "income": 210000,
                   "transaction_count": 22
+                }
+              ],
+              "by_day": [
+                {
+                  "date": "2026-08-10",
+                  "spending": 60000,
+                  "income": 100000,
+                  "transaction_count": 21
+                },
+                {
+                  "date": "2026-08-12",
+                  "spending": 64050,
+                  "income": 110000,
+                  "transaction_count": 21
                 }
               ]
             }
@@ -78,6 +100,10 @@ struct DashboardSummaryResponseTests {
         // The "no category" bucket is a real entry, never omitted.
         #expect(eur.byCategory[1].categoryID == nil)
         #expect(eur.byCategory[1].categoryName == nil)
+        #expect(eur.byDay.count == 2)
+        #expect(eur.byDay[0].date == CalendarDate(year: 2026, month: 8, day: 10))
+        #expect(eur.byDay[0].spending == 60000)
+        #expect(eur.byDay[1].date == CalendarDate(year: 2026, month: 8, day: 12))
 
         let chf = response.currencies[0]
         #expect(chf.currency == "CHF")
@@ -86,17 +112,18 @@ struct DashboardSummaryResponseTests {
         #expect(chf.spending == 18000)
         #expect(chf.net == -18000)
         #expect(chf.byCategory.count == 1)
+        #expect(chf.byDay.count == 1)
     }
 
-    @Test func decodesEmptyByCategoryAsAValidState() throws {
-        // A currency summary can legitimately carry no categories at all
-        // (e.g. every transaction rejected) — an empty array, not a missing
-        // key.
+    @Test func decodesEmptyByCategoryAndByDayAsAValidState() throws {
+        // A currency summary can legitimately carry no categories or days at
+        // all (e.g. every transaction rejected) — an empty array, not a
+        // missing key.
         let json = """
             { "currencies": [
               {
                 "currency": "EUR", "spending": 0, "income": 0, "net": 0,
-                "transaction_count": 0, "by_category": []
+                "transaction_count": 0, "by_category": [], "by_day": []
               }
             ] }
             """
@@ -105,13 +132,35 @@ struct DashboardSummaryResponseTests {
             from: Data(json.utf8)
         )
         #expect(response.currencies[0].byCategory.isEmpty)
+        #expect(response.currencies[0].byDay.isEmpty)
     }
 
     @Test func rejectsMissingByCategoryField() {
         // `by_category` is required on the wire — the backend never omits it.
         let json = """
             { "currencies": [
-              { "currency": "EUR", "spending": 100, "income": 0, "net": -100, "transaction_count": 1 }
+              {
+                "currency": "EUR", "spending": 100, "income": 0, "net": -100,
+                "transaction_count": 1, "by_day": []
+              }
+            ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                DashboardSummaryResponse.self,
+                from: Data(json.utf8)
+            )
+        }
+    }
+
+    @Test func rejectsMissingByDayField() {
+        // `by_day` is required on the wire — the backend never omits it.
+        let json = """
+            { "currencies": [
+              {
+                "currency": "EUR", "spending": 100, "income": 0, "net": -100,
+                "transaction_count": 1, "by_category": []
+              }
             ] }
             """
         #expect(throws: DecodingError.self) {
@@ -224,6 +273,56 @@ struct CategorySummaryResponseTests {
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(
                 CategorySummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+}
+
+/// Decoding tests for `DaySummaryResponse` in isolation, covering the
+/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
+struct DaySummaryResponseTests {
+    @Test func decodesABareCalendarDate() throws {
+        let json = """
+            { "date": "2026-08-10", "spending": 5000, "income": 0, "transaction_count": 2 }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            DaySummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.date == CalendarDate(year: 2026, month: 8, day: 10))
+        #expect(entry.spending == 5000)
+    }
+
+    @Test func rejectsAMalformedDate() {
+        let json = """
+            { "date": "10/08/2026", "spending": 5000, "income": 0, "transaction_count": 2 }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                DaySummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+
+    @Test func rejectsADateTimeInsteadOfABareDate() {
+        // `date` is a calendar date, not an instant — a full date-time string
+        // must not silently decode and drop its time component.
+        let json = """
+            { "date": "2026-08-10T00:00:00Z", "spending": 5000, "income": 0, "transaction_count": 2 }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                DaySummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+
+    @Test func rejectsMissingTransactionCount() {
+        let json = """
+            { "date": "2026-08-10", "spending": 5000, "income": 0 }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                DaySummaryResponse.self, from: Data(json.utf8)
             )
         }
     }

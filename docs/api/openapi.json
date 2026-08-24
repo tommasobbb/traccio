@@ -643,13 +643,20 @@
         "type": "object"
       },
       "CurrencySummaryResponse": {
-        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.\nby_category : list[CategorySummaryResponse]\n    This currency's totals partitioned by category, sorted by spending\n    then income descending. Sums to this entry's own\n    ``spending``/``income``/``transaction_count``.",
+        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.\nby_category : list[CategorySummaryResponse]\n    This currency's totals partitioned by category, sorted by spending\n    then income descending. Sums to this entry's own\n    ``spending``/``income``/``transaction_count``.\nby_day : list[DaySummaryResponse]\n    This currency's totals partitioned by UTC calendar day, sorted\n    chronologically. A transaction with neither ``booked_at`` nor\n    ``value_date`` set is excluded here while still counted in this\n    entry's own totals \u2014 the one field that does not sum back to the\n    parent, unlike ``by_category``.",
         "properties": {
           "by_category": {
             "items": {
               "$ref": "#/components/schemas/CategorySummaryResponse"
             },
             "title": "By Category",
+            "type": "array"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DaySummaryResponse"
+            },
+            "title": "By Day",
             "type": "array"
           },
           "currency": {
@@ -679,7 +686,8 @@
           "income",
           "net",
           "transaction_count",
-          "by_category"
+          "by_category",
+          "by_day"
         ],
         "title": "CurrencySummaryResponse",
         "type": "object"
@@ -699,6 +707,36 @@
           "currencies"
         ],
         "title": "DashboardSummaryResponse",
+        "type": "object"
+      },
+      "DaySummaryResponse": {
+        "description": "Spending and income totals for one calendar day, as returned to the client.\n\nAttributes\n----------\ndate : date\n    The UTC calendar day this entry is for.\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall on this day.",
+        "properties": {
+          "date": {
+            "format": "date",
+            "title": "Date",
+            "type": "string"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "spending",
+          "income",
+          "transaction_count"
+        ],
+        "title": "DaySummaryResponse",
         "type": "object"
       },
       "EventResponse": {

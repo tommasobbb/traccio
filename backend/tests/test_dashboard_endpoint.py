@@ -133,6 +133,14 @@ def test_summary_with_only_personal_transactions() -> None:
                         "transaction_count": 2,
                     }
                 ],
+                "by_day": [
+                    {
+                        "date": "2026-08-15",
+                        "spending": 5000,
+                        "income": 2000,
+                        "transaction_count": 2,
+                    }
+                ],
             }
         ]
     }
@@ -274,6 +282,46 @@ def test_summary_by_category_has_a_null_bucket_for_uncategorized() -> None:
     none_entry = next(e for e in summary["by_category"] if e["category_id"] is None)
     assert none_entry["category_name"] is None
     assert none_entry["spending"] == 1000
+
+
+def test_summary_by_day_buckets_across_multiple_days() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    day_one = datetime(2026, 8, 10, tzinfo=UTC)
+    day_two = datetime(2026, 8, 12, tzinfo=UTC)
+    _seed_tx(engine, user_id=dev_user_id, amount=-1000, stable_key="DAY1", booked_at=day_one)
+    _seed_tx(engine, user_id=dev_user_id, amount=-2500, stable_key="DAY2A", booked_at=day_two)
+    _seed_tx(engine, user_id=dev_user_id, amount=500, stable_key="DAY2B", booked_at=day_two)
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    assert summary["by_day"] == [
+        {"date": "2026-08-10", "spending": 1000, "income": 0, "transaction_count": 1},
+        {"date": "2026-08-12", "spending": 2500, "income": 500, "transaction_count": 2},
+    ]
+
+
+def test_summary_by_day_excludes_a_row_with_no_date_but_keeps_it_in_totals() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        tx = _tx(user_id=dev_user_id, amount=-4000, stable_key="NO_DATE")
+        tx.booked_at = None
+        tx.value_date = None
+        session.add(tx)
+        session.commit()
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    assert summary["spending"] == 4000
+    assert summary["transaction_count"] == 1
+    assert summary["by_day"] == []
 
 
 def test_summary_never_resolves_another_users_category_name() -> None:
