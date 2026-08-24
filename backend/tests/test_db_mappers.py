@@ -16,9 +16,11 @@ from traccio.db.mappers import (
     row_to_category,
     row_to_connection,
     row_to_rule,
+    row_to_sync_run,
     row_to_transaction,
     row_to_user,
     rule_to_row,
+    sync_run_to_row,
     transaction_to_row,
     user_to_row,
 )
@@ -27,9 +29,11 @@ from traccio.domain.enums import (
     ConnectionStatus,
     KeyStrategy,
     RuleMatchKind,
+    SyncRunOutcome,
+    SyncTrigger,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Category, Connection, Rule, Transaction, User
+from traccio.domain.models import Account, Category, Connection, Rule, SyncRun, Transaction, User
 from traccio.domain.money import Money
 
 
@@ -179,3 +183,34 @@ def test_rule_round_trips() -> None:
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert row_to_rule(rule_to_row(rule)) == rule
+
+
+def test_sync_run_round_trips() -> None:
+    sync_run = SyncRun(
+        id=uuid4(),
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        trigger=SyncTrigger.BACKGROUND,
+        outcome=SyncRunOutcome.PROVIDER_FAILED,
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        finished_at=datetime(2026, 1, 1, 0, 0, 5, tzinfo=UTC),
+        accounts_synced=0,
+        transactions_synced=0,
+        error_reason="provider_failed",
+    )
+    assert row_to_sync_run(sync_run_to_row(sync_run)) == sync_run
+
+
+def test_sync_run_round_trips_with_no_error_reason() -> None:
+    sync_run = SyncRun(
+        id=uuid4(),
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        trigger=SyncTrigger.USER_PRESENT,
+        outcome=SyncRunOutcome.SUCCESS,
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        finished_at=datetime(2026, 1, 1, tzinfo=UTC),
+        accounts_synced=2,
+        transactions_synced=17,
+    )
+    assert row_to_sync_run(sync_run_to_row(sync_run)) == sync_run

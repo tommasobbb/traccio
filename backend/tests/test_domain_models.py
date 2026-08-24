@@ -17,6 +17,9 @@ from traccio.domain import (
     ConnectionStatus,
     KeyStrategy,
     Money,
+    SyncRun,
+    SyncRunOutcome,
+    SyncTrigger,
     Transaction,
     TransactionRole,
     TransactionStatus,
@@ -118,3 +121,31 @@ def test_enum_values_are_stable() -> None:
     assert TransactionStatus.REJECTED.value == "rejected"
     assert TransactionRole.REIMBURSEMENT.value == "reimbursement"
     assert KeyStrategy.DERIVED_HASH.value == "derived_hash"
+
+
+def test_sync_run_defaults_and_fields() -> None:
+    """A SyncRun records trigger, outcome, counts, and an optional reason."""
+    sync_run = SyncRun(
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        trigger=SyncTrigger.BACKGROUND,
+        outcome=SyncRunOutcome.SKIPPED_BUDGET,
+        accounts_synced=0,
+        transactions_synced=0,
+    )
+
+    assert sync_run.trigger is SyncTrigger.BACKGROUND
+    assert sync_run.outcome is SyncRunOutcome.SKIPPED_BUDGET
+    assert sync_run.error_reason is None
+    assert sync_run.started_at.tzinfo is not None
+
+
+def test_sync_run_forbids_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        SyncRun(  # type: ignore[call-arg]
+            user_id=uuid4(),
+            connection_id=uuid4(),
+            trigger=SyncTrigger.USER_PRESENT,
+            outcome=SyncRunOutcome.SUCCESS,
+            unexpected="x",
+        )

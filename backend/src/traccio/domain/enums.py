@@ -219,3 +219,53 @@ class ConsentState(StrEnum):
     EXPIRED = "expired"
     REVOKED = "revoked"
     ERROR = "error"
+
+
+class SyncTrigger(StrEnum):
+    """What caused a :class:`~traccio.domain.models.SyncRun` to happen.
+
+    Attributes
+    ----------
+    USER_PRESENT : str
+        The user triggered it from the app and is actively waiting
+        (``POST /connections/{id}/sync``). Not subject to the background
+        fetch budget (``docs/openbanking.md``).
+    BACKGROUND : str
+        The scheduler triggered it with no user waiting
+        (``services/scheduler.py``). Subject to the per-connection daily
+        budget — see :func:`~traccio.domain.sync_schedule.sync_decision`.
+    """
+
+    USER_PRESENT = "user_present"
+    BACKGROUND = "background"
+
+
+class SyncRunOutcome(StrEnum):
+    """What happened to one :class:`~traccio.domain.models.SyncRun`.
+
+    Every attempt is recorded, including a skip — this is what makes the
+    background fetch budget verifiable rather than merely theoretical (see
+    ``docs/domain.md`` §Sync: "records what was attempted, when, and what
+    failed").
+
+    Attributes
+    ----------
+    SUCCESS : str
+        The adapter was called and accounts/transactions were persisted.
+    PROVIDER_FAILED : str
+        The adapter call raised :class:`~traccio.providers.base.ProviderError`.
+    SKIPPED_CONSENT : str
+        Not attempted: the derived consent state had already lapsed.
+    SKIPPED_BUDGET : str
+        Not attempted: this connection already used its background fetch
+        budget for the rolling 24h window.
+    SKIPPED_INTERVAL : str
+        Not attempted: the minimum interval since the last sync (any trigger)
+        has not elapsed yet.
+    """
+
+    SUCCESS = "success"
+    PROVIDER_FAILED = "provider_failed"
+    SKIPPED_CONSENT = "skipped_consent"
+    SKIPPED_BUDGET = "skipped_budget"
+    SKIPPED_INTERVAL = "skipped_interval"

@@ -19,6 +19,7 @@ from traccio.db.models import (
     EventRow,
     ReimbursementRow,
     RuleRow,
+    SyncRunRow,
     TransactionRow,
     TransferRow,
     UserRow,
@@ -32,6 +33,7 @@ from traccio.domain.models import (
     Participant,
     Reimbursement,
     Rule,
+    SyncRun,
     Transaction,
     Transfer,
     User,
@@ -351,4 +353,36 @@ def row_to_rule(row: RuleRow) -> Rule:
         match_kind=row.match_kind,
         pattern=row.pattern,
         created_at=row.created_at,
+    )
+
+
+def sync_run_to_row(sync_run: SyncRun) -> SyncRunRow:
+    """Translate a domain :class:`SyncRun` into a :class:`SyncRunRow`."""
+    return SyncRunRow(
+        id=sync_run.id,
+        user_id=sync_run.user_id,
+        connection_id=sync_run.connection_id,
+        trigger=sync_run.trigger,
+        outcome=sync_run.outcome,
+        started_at=sync_run.started_at,
+        finished_at=sync_run.finished_at,
+        accounts_synced=sync_run.accounts_synced,
+        transactions_synced=sync_run.transactions_synced,
+        error_reason=sync_run.error_reason,
+    )
+
+
+def row_to_sync_run(row: SyncRunRow) -> SyncRun:
+    """Translate a :class:`SyncRunRow` into a domain :class:`SyncRun`."""
+    return SyncRun(
+        id=row.id,
+        user_id=row.user_id,
+        connection_id=row.connection_id,
+        trigger=row.trigger,
+        outcome=row.outcome,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        accounts_synced=row.accounts_synced,
+        transactions_synced=row.transactions_synced,
+        error_reason=row.error_reason,
     )

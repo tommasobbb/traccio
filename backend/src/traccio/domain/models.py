@@ -22,6 +22,8 @@ from traccio.domain.enums import (
     EventStatus,
     KeyStrategy,
     RuleMatchKind,
+    SyncRunOutcome,
+    SyncTrigger,
     TransactionRole,
     TransactionStatus,
 )
@@ -472,3 +474,57 @@ class Rule(BaseModel):
     match_kind: RuleMatchKind
     pattern: str
     created_at: datetime = Field(default_factory=_now)
+
+
+class SyncRun(BaseModel):
+    """A record of one attempt to sync a :class:`Connection`.
+
+    Written for every attempt, including a skip — that is what makes the
+    per-connection background fetch budget verifiable rather than merely
+    theoretical (``docs/domain.md`` §Sync, ADR 0010). Immutable once written:
+    a sync run is a historical record, not a mutable job. Unlike
+    ``Connection.last_synced_at`` (a single display-only stamp),
+    ``sync_runs`` is the full history a budget decision reads from — see
+    :func:`~traccio.domain.sync_schedule.sync_decision`.
+
+    Attributes
+    ----------
+    id : UUID
+        Stable identifier of the run.
+    user_id : UUID
+        Owning user.
+    connection_id : UUID
+        The connection this run attempted to sync.
+    trigger : SyncTrigger
+        Whether a user was waiting or the scheduler ran unattended.
+    outcome : SyncRunOutcome
+        What happened: synced, failed, or skipped (and why).
+    started_at : datetime
+        When the run began (timezone-aware, UTC).
+    finished_at : datetime
+        When the run concluded. Equal to ``started_at`` for a skip, since
+        nothing was attempted.
+    accounts_synced : int
+        How many accounts were listed and upserted. Zero for a failure or a
+        skip.
+    transactions_synced : int
+        How many transactions were fetched and upserted, across all accounts.
+        Zero for a failure or a skip.
+    error_reason : str or None
+        A stable, value-free reason code (see ``.claude/rules/data-safety.md``
+        — never a provider message or response body), set only when
+        ``outcome`` is not ``success``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID = Field(default_factory=uuid4)
+    user_id: UUID
+    connection_id: UUID
+    trigger: SyncTrigger
+    outcome: SyncRunOutcome
+    started_at: datetime = Field(default_factory=_now)
+    finished_at: datetime = Field(default_factory=_now)
+    accounts_synced: int = 0
+    transactions_synced: int = 0
+    error_reason: str | None = None
