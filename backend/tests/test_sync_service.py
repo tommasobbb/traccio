@@ -9,7 +9,7 @@ this. Values are synthetic (``.claude/rules/data-safety.md``).
 """
 
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -55,6 +55,7 @@ class FakeProvider(BankProvider):
     def __init__(self, *, fail_on_fetch: bool = False) -> None:
         self.fail_on_fetch = fail_on_fetch
         self.last_context: SyncContext | None = None
+        self.last_since: datetime | None = None
 
     @property
     def name(self) -> str:
@@ -91,6 +92,7 @@ class FakeProvider(BankProvider):
         until: datetime | None,
         context: SyncContext,
     ) -> list[Transaction]:
+        self.last_since = since
         if self.fail_on_fetch:
             raise ProviderError("provider fetch failed")
         return [
@@ -157,6 +159,7 @@ def test_sync_persists_accounts_and_transactions_and_stamps_last_synced_at() -> 
             connection_id=connection_id,
             context=SyncContext(psu_present=True),
             initial_history_days=730,
+            sync_overlap_days=7,
             consent_warning_window_days=14,
             now=_NOW,
         )
@@ -191,6 +194,7 @@ def test_resync_updates_in_place_rather_than_duplicating() -> None:
             connection_id=connection_id,
             context=SyncContext(psu_present=True),
             initial_history_days=730,
+            sync_overlap_days=7,
             consent_warning_window_days=14,
             now=_NOW,
         )
@@ -204,6 +208,7 @@ def test_resync_updates_in_place_rather_than_duplicating() -> None:
             connection_id=connection_id,
             context=SyncContext(psu_present=True),
             initial_history_days=730,
+            sync_overlap_days=7,
             consent_warning_window_days=14,
             now=_NOW,
         )
@@ -211,6 +216,69 @@ def test_resync_updates_in_place_rather_than_duplicating() -> None:
 
         assert len(session.scalars(select(AccountRow)).all()) == 1
         assert len(session.scalars(select(TransactionRow)).all()) == 1
+
+
+def test_first_sync_uses_the_greedy_initial_history_window() -> None:
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        provider = FakeProvider()
+
+        sync_connection(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+
+        assert provider.last_since == _NOW - timedelta(days=730)
+
+
+def test_later_sync_uses_last_synced_at_minus_the_overlap_not_the_initial_window() -> None:
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        provider = FakeProvider()
+
+        # First sync stamps last_synced_at = _NOW.
+        sync_connection(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        session.commit()
+
+        later = _NOW + timedelta(days=3)
+        sync_connection(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=later,
+        )
+
+        # since = last_synced_at (_NOW) - 7 days, nowhere near the 730-day window.
+        assert provider.last_since == _NOW - timedelta(days=7)
 
 
 def test_unknown_connection_raises_connection_not_found() -> None:
@@ -224,6 +292,7 @@ def test_unknown_connection_raises_connection_not_found() -> None:
             connection_id=uuid4(),
             context=SyncContext(psu_present=True),
             initial_history_days=730,
+            sync_overlap_days=7,
             consent_warning_window_days=14,
             now=_NOW,
         )
@@ -247,6 +316,7 @@ def test_lapsed_consent_raises_consent_expired_before_the_provider_is_called() -
                 connection_id=connection_id,
                 context=SyncContext(psu_present=True),
                 initial_history_days=730,
+                sync_overlap_days=7,
                 consent_warning_window_days=14,
                 now=_NOW,
             )
@@ -277,6 +347,7 @@ def test_pending_connection_has_no_usable_credentials() -> None:
                 connection_id=connection.id,
                 context=SyncContext(psu_present=True),
                 initial_history_days=730,
+                sync_overlap_days=7,
                 consent_warning_window_days=14,
                 now=_NOW,
             )
@@ -297,6 +368,7 @@ def test_provider_error_propagates_unchanged() -> None:
                 connection_id=connection_id,
                 context=SyncContext(psu_present=True),
                 initial_history_days=730,
+                sync_overlap_days=7,
                 consent_warning_window_days=14,
                 now=_NOW,
             )

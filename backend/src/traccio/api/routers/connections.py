@@ -237,6 +237,7 @@ def sync_connection(
             connection_id=connection_id,
             context=context,
             initial_history_days=settings.initial_history_days,
+            sync_overlap_days=settings.sync_overlap_days,
             consent_warning_window_days=settings.consent_warning_window_days,
             now=datetime.now(UTC),
         )

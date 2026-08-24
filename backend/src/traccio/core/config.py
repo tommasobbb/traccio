@@ -57,12 +57,17 @@ class Settings(BaseSettings):
         the redirect registered in the Enable Banking Control Panel and the
         backend callback endpoint (``GET /connections/callback``).
     initial_history_days : int
-        How far back a sync requests transactions. The initial sync after a new
-        connection is the only chance at full history (banks serve it just for
-        the ~1h post-authorization window; ``docs/openbanking.md``), so this is
-        deliberately generous. Deduplication makes re-fetching the same window
-        harmless; incremental, budget-aware windowing lands with the background
-        scheduler.
+        How far back a connection's *first* sync requests transactions. The
+        post-authorization window a bank serves full history for is short and
+        does not come back (``docs/openbanking.md``: "there is no second
+        attempt"), so this is deliberately generous. Every later sync uses
+        :attr:`sync_overlap_days` instead — see ``services/sync.py``.
+    sync_overlap_days : int
+        How far before a connection's ``last_synced_at`` an *incremental*
+        sync (every sync after the first) re-requests transactions, to absorb
+        entries a bank records with a retroactive date. Free to be generous:
+        ``upsert_transaction`` is idempotent on stable identity, so
+        re-fetching the same window duplicates nothing.
     transfer_amount_tolerance_cents : int
         Maximum absolute difference, in minor units, between the two legs of a
         suggested transfer. Absorbs fees on same-currency internal moves (see
@@ -118,6 +123,9 @@ class Settings(BaseSettings):
     # Greedy lookback for the initial history fetch (the ~1h post-auth window is
     # the only shot at full history). Dedup makes re-fetching harmless. ~2 years.
     initial_history_days: int = 730
+    # How far before last_synced_at an incremental (non-first) sync re-requests,
+    # to absorb retroactively dated entries. Free: dedup makes it harmless.
+    sync_overlap_days: int = 7
     # Transfer detection tolerances (suggestions only, never auto-linked). A
     # small amount tolerance absorbs fees; a few days absorbs non-simultaneous
     # settlement. See docs/domain.md and services/transfers.py.

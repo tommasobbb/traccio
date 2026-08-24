@@ -24,7 +24,7 @@ the caller owns the transaction boundary — the router commits after a
 successful call, and so does the scheduler.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -42,6 +42,20 @@ from traccio.domain.consent import consent_state
 from traccio.domain.enums import ConsentState
 from traccio.domain.models import Account
 from traccio.providers.base import BankProvider, SyncContext
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    """Return ``value``, defaulting a naive value to UTC.
+
+    SQLite (used in dev and by the test suite; PostgreSQL is the eventual
+    production target — see ``tasks/backlog.md``) discards timezone info on a
+    ``DateTime(timezone=True)`` column, so a value stored as UTC comes back
+    naive. Every timestamp in this system is UTC (root ``CLAUDE.md``), so
+    treating a naive value as UTC is the correct reading, not a guess — the
+    same guard ``domain/consent.py::_expiry_as_aware_utc`` applies to
+    ``expires_at``.
+    """
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class SyncError(ValueError):
@@ -101,6 +115,7 @@ def sync_connection(
     connection_id: UUID,
     context: SyncContext,
     initial_history_days: int,
+    sync_overlap_days: int,
     consent_warning_window_days: int,
     now: datetime,
 ) -> SyncOutcome:
@@ -108,7 +123,7 @@ def sync_connection(
 
     Reads the encrypted consent secret, decrypts it, lists the accounts the
     consent exposes and upserts each one, then fetches and upserts each
-    account's transactions over a greedy history window. Idempotent on stable
+    account's transactions over a history window. Idempotent on stable
     identity (``upsert_account``/``upsert_transaction``), so a re-sync
     updates rather than duplicates. Scoped to ``user_id``.
 
@@ -116,6 +131,14 @@ def sync_connection(
     not by itself mean the 180-day consent window still holds (see
     ``domain/consent.py``), so this checks the *derived* state first rather
     than letting the provider call fail with an opaque error.
+
+    The transaction window is greedy only on a connection's first sync
+    (``connection.last_synced_at is None``): the post-authorization window a
+    bank serves full history for is short and does not come back
+    (``docs/openbanking.md``: "there is no second attempt"). Every later sync
+    requests only since the last one, minus ``sync_overlap_days`` — banks
+    record some movements with a retroactive date, and the overlap is free
+    since ``upsert_transaction`` is idempotent on stable identity.
 
     Parameters
     ----------
@@ -136,17 +159,23 @@ def sync_connection(
         run (``psu_present=False``, budget-gated by the caller before this
         function is ever called — see ``services/scheduler.py``).
     initial_history_days : int
-        How far back to request transactions
-        (``Settings.initial_history_days``). Passed as a plain value, not a
-        ``Settings`` object, so this module stays decoupled from ``core``'s
-        specific shape (the same reasoning as ``core/logging.py``'s
-        keyword-only, plain-valued ``configure_logging``).
+        How far back the very first sync requests transactions
+        (``Settings.initial_history_days``). Unused on any later sync.
+    sync_overlap_days : int
+        How far before ``connection.last_synced_at`` an incremental sync
+        re-requests, to absorb retroactively dated entries
+        (``Settings.sync_overlap_days``).
     consent_warning_window_days : int
         Passed through to :func:`~traccio.domain.consent.consent_state`
         (``Settings.consent_warning_window_days``).
     now : datetime
         The current time, timezone-aware. Passed in rather than read
         internally so this stays testable with no clock.
+
+    All three ``*_days`` parameters are plain values, not a ``Settings``
+    object, so this module stays decoupled from ``core``'s specific shape —
+    the same reasoning as ``core/logging.py``'s keyword-only, plain-valued
+    ``configure_logging``.
 
     Returns
     -------
@@ -180,7 +209,10 @@ def sync_connection(
         raise CredentialsUnavailableError("unknown or inactive connection")
 
     credentials = cipher.decrypt(encrypted)
-    since = now - timedelta(days=initial_history_days)
+    if connection.last_synced_at is None:
+        since = now - timedelta(days=initial_history_days)
+    else:
+        since = _as_aware_utc(connection.last_synced_at) - timedelta(days=sync_overlap_days)
 
     provider_accounts = provider.list_accounts(credentials=credentials, context=context)
     transactions_synced = 0
