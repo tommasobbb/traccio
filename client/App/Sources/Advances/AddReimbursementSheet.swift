@@ -3,7 +3,8 @@ import TraccioCore
 
 /// "Aggiungi rimborso" — the form presented from `AdvanceSections` to
 /// register a reimbursement against an advance, either a manual cash entry
-/// or a link to an incoming transaction.
+/// or a link to an incoming transaction, and optionally attributed to one
+/// participant (ADR 0012).
 ///
 /// No mockup covers the form itself
 /// (`docs/design/canvas/TransactionDetail.dc.html` only shows the button),
@@ -11,21 +12,29 @@ import TraccioCore
 /// `CreateAdvanceSheet`. `candidates` is best-effort
 /// (`TransactionDetailViewModel.loadReimbursementCandidatesIfNeeded()`): an
 /// empty list still lets the sheet work, just as a cash-only entry.
+/// `participants` comes straight from the advance already held by the
+/// caller — no extra fetch, and never stale relative to what the "Partecipanti"
+/// card on `AdvanceSections` shows.
 struct AddReimbursementSheet: View {
     /// Transactions eligible to be linked (already filtered to `personal`,
     /// incoming, the advance's currency).
     let candidates: [TransactionResponse]
+    /// The advance's participants, for the "who does this belong to" picker
+    /// (ADR 0012). Empty when the advance has none, or when the lookup
+    /// hasn't resolved — the card simply doesn't appear (same degrade as
+    /// `linkCard` for an empty `candidates`).
+    let participants: [ParticipantResponse]
     var isCreating: Bool
     /// A generic failure message to show, or `nil` when there is none.
     var failureMessage: String?
-    /// Called with the parsed amount (cents), the linked transaction id (if
-    /// any was chosen), and a trimmed note (`nil` if left blank).
-    let onCreate: (Int, UUID?, String?) -> Void
+    /// Called with the completed draft on submit.
+    let onCreate: (ReimbursementDraft) -> Void
     let onCancel: () -> Void
 
     @State private var amountText = ""
     @State private var noteText = ""
     @State private var selectedTransactionID: UUID?
+    @State private var selectedParticipantID: UUID?
 
     var body: some View {
         NavigationStack {
@@ -35,6 +44,9 @@ struct AddReimbursementSheet: View {
                         Banner(message: failureMessage)
                     }
                     amountCard
+                    if !participants.isEmpty {
+                        participantCard
+                    }
                     if !candidates.isEmpty {
                         linkCard
                     }
@@ -67,6 +79,32 @@ struct AddReimbursementSheet: View {
                 #endif
                 .font(Typography.statFigure)
                 .foregroundStyle(Palette.ink)
+        }
+    }
+
+    // MARK: Participant
+
+    private var participantCard: some View {
+        Card {
+            EyebrowLabel(text: "Partecipante")
+            Button {
+                selectedParticipantID = nil
+            } label: {
+                candidateRow(title: "Non specificato", isSelected: selectedParticipantID == nil)
+            }
+            .buttonStyle(.plain)
+            ForEach(participants) { participant in
+                Divider().overlay(Palette.separator)
+                Button {
+                    selectedParticipantID = participant.id
+                } label: {
+                    candidateRow(
+                        title: participant.name,
+                        isSelected: selectedParticipantID == participant.id
+                    )
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -133,6 +171,13 @@ struct AddReimbursementSheet: View {
     private func submit() {
         guard let amount = parsedAmount else { return }
         let trimmedNote = noteText.trimmingCharacters(in: .whitespaces)
-        onCreate(amount, selectedTransactionID, trimmedNote.isEmpty ? nil : trimmedNote)
+        onCreate(
+            ReimbursementDraft(
+                amount: amount,
+                participantID: selectedParticipantID,
+                transactionID: selectedTransactionID,
+                note: trimmedNote.isEmpty ? nil : trimmedNote
+            )
+        )
     }
 }

@@ -4,11 +4,20 @@ Pure unit tests: no database, no network. Fixtures use synthetic values only
 (round amounts) — see ``.claude/rules/data-safety.md``.
 """
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
-from traccio.domain import KeyStrategy, Money, Transaction, TransactionRole, TransactionStatus
+from traccio.domain import (
+    KeyStrategy,
+    Money,
+    Participant,
+    ParticipantStatus,
+    Reimbursement,
+    Transaction,
+    TransactionRole,
+    TransactionStatus,
+)
 from traccio.domain.advances import (
     REASON_CURRENCY_MISMATCH,
     REASON_NONPOSITIVE_AMOUNT,
@@ -17,6 +26,8 @@ from traccio.domain.advances import (
     REASON_REJECTED,
     ReimbursementError,
     derive_advance,
+    derive_participant_states,
+    group_reimbursements_by_participant,
     validate_reimbursement,
 )
 from traccio.domain.enums import AdvanceStatus
@@ -157,3 +168,80 @@ def test_validate_rejects_rejected_linked_transaction() -> None:
             _eur(1000), "EUR", transaction=_tx(amount=2000, status=TransactionStatus.REJECTED)
         )
     assert exc.value.reason == REASON_REJECTED
+
+
+# --- group_reimbursements_by_participant / derive_participant_states (ADR 0012) -
+
+
+def _participant(*, expected_amount: int = 4000) -> Participant:
+    return Participant(name="TEST FRIEND 01", expected_amount=_eur(expected_amount))
+
+
+def _reimbursement(*, participant_id: UUID | None, amount: int = 1000) -> Reimbursement:
+    return Reimbursement(
+        user_id=uuid4(),
+        advance_id=uuid4(),
+        amount=_eur(amount),
+        participant_id=participant_id,
+    )
+
+
+def test_group_reimbursements_sums_per_participant_and_ignores_unattributed() -> None:
+    alice = uuid4()
+    bob = uuid4()
+    totals = group_reimbursements_by_participant(
+        [
+            _reimbursement(participant_id=alice, amount=1000),
+            _reimbursement(participant_id=alice, amount=500),
+            _reimbursement(participant_id=bob, amount=2000),
+            _reimbursement(participant_id=None, amount=9999),
+        ]
+    )
+    assert totals == {alice: _eur(1500), bob: _eur(2000)}
+
+
+def test_group_reimbursements_of_an_empty_list_is_empty() -> None:
+    assert group_reimbursements_by_participant([]) == {}
+
+
+def test_derive_participant_states_outstanding_when_nothing_reimbursed() -> None:
+    participant = _participant(expected_amount=4000)
+    [state] = derive_participant_states([participant], {}, currency="EUR")
+    assert state.participant.id == participant.id
+    assert state.reimbursed == _eur(0)
+    assert state.outstanding == _eur(4000)
+    assert state.excess == _eur(0)
+    assert state.status is ParticipantStatus.OUTSTANDING
+
+
+def test_derive_participant_states_settled_on_exact_match() -> None:
+    participant = _participant(expected_amount=4000)
+    [state] = derive_participant_states([participant], {participant.id: _eur(4000)}, currency="EUR")
+    assert state.outstanding == _eur(0)
+    assert state.excess == _eur(0)
+    assert state.status is ParticipantStatus.SETTLED
+
+
+def test_derive_participant_states_settled_and_flags_excess_on_overpayment() -> None:
+    participant = _participant(expected_amount=4000)
+    [state] = derive_participant_states([participant], {participant.id: _eur(4500)}, currency="EUR")
+    assert state.outstanding == _eur(0)
+    assert state.excess == _eur(500)
+    assert state.status is ParticipantStatus.SETTLED
+
+
+def test_derive_participant_states_partial_reimbursement_stays_outstanding() -> None:
+    participant = _participant(expected_amount=4000)
+    [state] = derive_participant_states([participant], {participant.id: _eur(1500)}, currency="EUR")
+    assert state.outstanding == _eur(2500)
+    assert state.excess == _eur(0)
+    assert state.status is ParticipantStatus.OUTSTANDING
+
+
+def test_derive_participant_states_preserves_input_order_for_multiple_participants() -> None:
+    alice = _participant(expected_amount=1000)
+    bob = _participant(expected_amount=2000)
+    states = derive_participant_states([alice, bob], {alice.id: _eur(1000)}, currency="EUR")
+    assert [s.participant.id for s in states] == [alice.id, bob.id]
+    assert states[0].status is ParticipantStatus.SETTLED
+    assert states[1].status is ParticipantStatus.OUTSTANDING

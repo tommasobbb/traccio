@@ -7,8 +7,10 @@ changing anything here — the onboarding procedure, credential handling, and
 operational constraints (consent lifetime, background fetch budget, PSU headers)
 shape the design.
 
-Slice 1 provides only the authentication foundation: minting the short-lived
-RS256 bearer JWT from the application private key (:mod:`.auth`) and a thin
-authenticated HTTP client (:mod:`.client`). The consent handshake, account and
-transaction retrieval land in later slices (see ``tasks/backlog.md`` M1).
+Implements the full :class:`~traccio.providers.base.BankProvider` contract:
+minting the short-lived RS256 bearer JWT from the application private key
+(:mod:`.auth`), a thin authenticated HTTP client (:mod:`.client`), the
+consent handshake (:mod:`.provider`'s ``start_authorization``/
+``complete_authorization``), and account/transaction retrieval
+(``list_accounts``/``fetch_transactions``).
 """

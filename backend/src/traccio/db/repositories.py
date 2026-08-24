@@ -1238,6 +1238,44 @@ def sum_reimbursements_by_advance(session: Session, user_id: UUID) -> dict[UUID,
     }
 
 
+def sum_reimbursements_by_participant(session: Session, user_id: UUID) -> dict[UUID, Money]:
+    """Return the total reimbursed per participant for a user, as ``Money``.
+
+    The per-participant sibling of :func:`sum_reimbursements_by_advance` (ADR
+    0012), same shape and same reason: one aggregate query for a whole page of
+    advances, never one per participant. A reimbursement with no
+    ``participant_id`` is excluded — it counts toward the advance's own total
+    but toward no participant's.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose reimbursements to sum; the query is scoped to it.
+
+    Returns
+    -------
+    dict[UUID, Money]
+        Participant id to the sum reimbursed (positive magnitude).
+        Participants with no attributed reimbursement are absent from the map.
+    """
+    rows = session.execute(
+        select(
+            ReimbursementRow.participant_id,
+            ReimbursementRow.currency,
+            func.sum(ReimbursementRow.amount),
+        )
+        .where(ReimbursementRow.user_id == user_id, ReimbursementRow.participant_id.is_not(None))
+        .group_by(ReimbursementRow.participant_id, ReimbursementRow.currency)
+    ).all()
+    return {
+        participant_id: Money(amount=int(total), currency=currency)
+        for participant_id, currency, total in rows
+        if participant_id is not None
+    }
+
+
 def create_event(session: Session, *, event: Event) -> Event:
     """Persist a new event.
 

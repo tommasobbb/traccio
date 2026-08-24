@@ -472,6 +472,12 @@ class ReimbursementRow(Base):
         ISO 4217 code of ``amount`` (matches the advance currency).
     transaction_id : UUID or None
         The linked incoming transaction, or ``None`` for a manual cash entry.
+    participant_id : UUID or None
+        The participant this reimbursement is explicitly attributed to, or
+        ``None`` for an unattributed one (ADR 0012). A single reimbursement
+        attributes to at most one participant — see
+        :class:`~traccio.domain.models.Reimbursement`'s own docstring for why
+        a real split is two rows, not a join table.
     note : str or None
         Optional free-text note.
     created_at : datetime
@@ -487,6 +493,9 @@ class ReimbursementRow(Base):
     currency: Mapped[str] = mapped_column(String(3))
     transaction_id: Mapped[UUID | None] = mapped_column(
         Uuid(), ForeignKey("transactions.id"), nullable=True
+    )
+    participant_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("advance_participants.id"), nullable=True, index=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

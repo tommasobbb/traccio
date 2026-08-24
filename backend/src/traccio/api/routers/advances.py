@@ -48,12 +48,16 @@ from traccio.db.repositories import (
     set_advance_status,
     set_transaction_role,
     sum_reimbursements_by_advance,
+    sum_reimbursements_by_participant,
 )
 from traccio.db.session import get_session
 from traccio.domain.advances import (
     AdvanceError,
+    ParticipantState,
     ReimbursementError,
     derive_advance,
+    derive_participant_states,
+    group_reimbursements_by_participant,
     validate_advance,
     validate_reimbursement,
 )
@@ -78,18 +82,41 @@ def _load_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) 
     return transaction
 
 
-def _reimbursed_for(session: Session, *, user_id: UUID, advance: Advance) -> Money:
-    """Return the total reimbursed against one advance, in its currency.
+def _reimbursement_derivations(
+    session: Session, *, user_id: UUID, advance: Advance
+) -> tuple[Money, list[ParticipantState]]:
+    """Derive an advance's reimbursed total and each participant's state.
 
-    Sums the advance's reimbursements; a zero magnitude in the advance's currency
-    when there are none.
+    Loads the advance's reimbursements **once** and derives both from that
+    same list — never two queries for one request, the exact discipline ADR
+    0004 already requires for the total and ADR 0012 extends to the
+    per-participant breakdown. A zero total and every participant
+    ``outstanding`` when there are none.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the advance; the query is scoped to it.
+    advance : Advance
+        The advance whose reimbursements to load and derive over.
+
+    Returns
+    -------
+    tuple[Money, list[ParticipantState]]
+        The reimbursed total, and each participant's derived state, in the
+        same order as ``advance.participants``.
     """
     currency = advance.own_share.currency
-    total = sum(
-        r.amount.amount
-        for r in list_reimbursements(session, user_id=user_id, advance_id=advance.id)
+    rows = list_reimbursements(session, user_id=user_id, advance_id=advance.id)
+    reimbursed = Money(amount=sum(r.amount.amount for r in rows), currency=currency)
+    participant_states = derive_participant_states(
+        advance.participants,
+        group_reimbursements_by_participant(rows),
+        currency=currency,
     )
-    return Money(amount=total, currency=currency)
+    return reimbursed, participant_states
 
 
 @router.post("/advances", response_model=AdvanceResponse, status_code=status.HTTP_201_CREATED)
@@ -152,7 +179,10 @@ def create_advance_endpoint(
     session.commit()
 
     logger.info("advances.create", advance_id=str(created.id))
-    return AdvanceResponse.from_domain(created, transaction)
+    # No reimbursements exist yet — every participant comes back `outstanding`
+    # from an empty map, the same derivation a real reimbursement later feeds.
+    participant_states = derive_participant_states(created.participants, {}, currency=currency)
+    return AdvanceResponse.from_domain(created, transaction, participant_states=participant_states)
 
 
 @router.get("/advances", response_model=AdvancesResponse)
@@ -178,12 +208,20 @@ def advances(
         The user's advances, oldest first (empty if none).
     """
     found = list_advances(session, user_id)
+    # Both aggregates are one query for the whole page, never one per advance
+    # or one per participant (ADR 0004 / ADR 0012).
     reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
+    reimbursed_by_participant = sum_reimbursements_by_participant(session, user_id)
     responses = [
         AdvanceResponse.from_domain(
             advance,
             _load_transaction(session, user_id=user_id, transaction_id=advance.transaction_id),
             reimbursed_by_advance.get(advance.id),
+            participant_states=derive_participant_states(
+                advance.participants,
+                reimbursed_by_participant,
+                currency=advance.own_share.currency,
+            ),
         )
         for advance in found
     ]
@@ -220,8 +258,12 @@ def advance(
     if found is None:
         raise HTTPException(status_code=404, detail="unknown advance")
     transaction = _load_transaction(session, user_id=user_id, transaction_id=found.transaction_id)
-    reimbursed = _reimbursed_for(session, user_id=user_id, advance=found)
-    return AdvanceResponse.from_domain(found, transaction, reimbursed)
+    reimbursed, participant_states = _reimbursement_derivations(
+        session, user_id=user_id, advance=found
+    )
+    return AdvanceResponse.from_domain(
+        found, transaction, reimbursed, participant_states=participant_states
+    )
 
 
 @router.delete("/advances/{advance_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -268,10 +310,15 @@ def _load_advance(session: Session, *, user_id: UUID, advance_id: UUID) -> Advan
 
 
 def _advance_response(session: Session, *, user_id: UUID, advance: Advance) -> AdvanceResponse:
-    """Project an advance with its transaction and reimbursed total threaded in."""
+    """Project an advance with its transaction, reimbursed total, and
+    per-participant states threaded in."""
     transaction = _load_transaction(session, user_id=user_id, transaction_id=advance.transaction_id)
-    reimbursed = _reimbursed_for(session, user_id=user_id, advance=advance)
-    return AdvanceResponse.from_domain(advance, transaction, reimbursed)
+    reimbursed, participant_states = _reimbursement_derivations(
+        session, user_id=user_id, advance=advance
+    )
+    return AdvanceResponse.from_domain(
+        advance, transaction, reimbursed, participant_states=participant_states
+    )
 
 
 @router.post(
@@ -298,7 +345,8 @@ def create_reimbursement_endpoint(
     advance_id : UUID
         The advance being paid back.
     body : CreateReimbursementRequest
-        The amount, optional linked transaction, and optional note.
+        The amount, optional linked transaction, optional participant
+        attribution, and optional note.
     session : Session
         Request-scoped database session.
     user_id : UUID
@@ -319,6 +367,13 @@ def create_reimbursement_endpoint(
     if body.transaction_id is not None:
         linked = _load_transaction(session, user_id=user_id, transaction_id=body.transaction_id)
 
+    # advance.participants is already in memory (loaded by _load_advance) — no
+    # extra query, same treatment _load_transaction gives a 404.
+    if body.participant_id is not None and not any(
+        p.id == body.participant_id for p in advance.participants
+    ):
+        raise HTTPException(status_code=404, detail="unknown_participant")
+
     try:
         validate_reimbursement(amount, currency, transaction=linked)
     except ReimbursementError as exc:
@@ -330,6 +385,7 @@ def create_reimbursement_endpoint(
         advance_id=advance.id,
         amount=amount,
         transaction_id=body.transaction_id,
+        participant_id=body.participant_id,
         note=body.note,
     )
     created = create_reimbursement(session, reimbursement=reimbursement)
@@ -459,7 +515,9 @@ def write_off_advance(
     """
     advance = _load_advance(session, user_id=user_id, advance_id=advance_id)
     transaction = _load_transaction(session, user_id=user_id, transaction_id=advance.transaction_id)
-    reimbursed = _reimbursed_for(session, user_id=user_id, advance=advance)
+    reimbursed, _participant_states = _reimbursement_derivations(
+        session, user_id=user_id, advance=advance
+    )
     state = derive_advance(transaction, advance.own_share, reimbursed, written_off=False)
     if state.outstanding.amount <= 0:
         raise HTTPException(status_code=422, detail="nothing_outstanding")

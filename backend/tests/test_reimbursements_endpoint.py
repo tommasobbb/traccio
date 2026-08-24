@@ -270,3 +270,157 @@ def test_reimbursement_on_another_users_advance_is_404() -> None:
     # An advance the current user does not own is invisible: "not found".
     response = client.post(f"/advances/{uuid4()}/reimbursements", json={"amount": 1000})
     assert response.status_code == 404
+
+
+# --- participant attribution (ADR 0012) --------------------------------------
+
+
+def test_reimbursement_attributed_to_a_participant_settles_only_them() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_tx(engine, user_id=dev_user_id, amount=-9000, stable_key="TX-01")
+    client = _client(engine)
+
+    created = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [
+                {"name": "TEST FRIEND 01", "expected_amount": 4000},
+                {"name": "TEST FRIEND 02", "expected_amount": 4000},
+            ],
+        },
+    ).json()
+    advance_id = created["id"]
+    friend_one_id, friend_two_id = (p["id"] for p in created["participants"])
+
+    response = client.post(
+        f"/advances/{advance_id}/reimbursements",
+        json={"amount": 4000, "participant_id": friend_one_id},
+    )
+    assert response.status_code == 201
+    assert response.json()["participant_id"] == friend_one_id
+
+    body = client.get(f"/advances/{advance_id}").json()
+    # The advance-level total is unaffected by attribution — same aggregate
+    # math as an unattributed reimbursement.
+    assert body["reimbursed"] == 4000
+    by_id = {p["id"]: p for p in body["participants"]}
+    assert by_id[friend_one_id]["status"] == "settled"
+    assert by_id[friend_one_id]["reimbursed"] == 4000
+    assert by_id[friend_two_id]["status"] == "outstanding"
+    assert by_id[friend_two_id]["reimbursed"] == 0
+
+    # The list endpoint must show the exact same per-participant states —
+    # it derives them from a separate aggregate query (never one per advance).
+    [listed] = client.get("/advances").json()["advances"]
+    listed_by_id = {p["id"]: p for p in listed["participants"]}
+    assert listed_by_id[friend_one_id]["status"] == "settled"
+    assert listed_by_id[friend_two_id]["status"] == "outstanding"
+
+
+def test_reimbursement_with_unknown_participant_id_is_404() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-01")
+    client = _client(engine)
+
+    advance_id = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    ).json()["id"]
+
+    response = client.post(
+        f"/advances/{advance_id}/reimbursements",
+        json={"amount": 1000, "participant_id": str(uuid4())},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "unknown_participant"
+
+
+def test_reimbursement_with_a_participant_from_another_advance_is_404() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_a = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-A")
+    tx_b = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-B")
+    client = _client(engine)
+
+    advance_a = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_a,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    ).json()
+    advance_b_id = client.post(
+        "/advances", json={"transaction_id": tx_b, "own_share": 1000}
+    ).json()["id"]
+    other_advances_participant_id = advance_a["participants"][0]["id"]
+
+    response = client.post(
+        f"/advances/{advance_b_id}/reimbursements",
+        json={"amount": 1000, "participant_id": other_advances_participant_id},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "unknown_participant"
+
+
+def test_reimbursement_without_participant_id_stays_unattributed() -> None:
+    """Retro-compatibility: omitting participant_id behaves exactly as before
+    ADR 0012 — every participant simply stays outstanding."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-01")
+    client = _client(engine)
+
+    advance_id = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    ).json()["id"]
+
+    response = client.post(f"/advances/{advance_id}/reimbursements", json={"amount": 1000})
+    assert response.status_code == 201
+    assert response.json()["participant_id"] is None
+
+    [participant] = client.get(f"/advances/{advance_id}").json()["participants"]
+    assert participant["status"] == "outstanding"
+    assert participant["reimbursed"] == 0
+
+
+def test_participant_id_round_trips_stably_across_create_and_read() -> None:
+    """A participant's id must be stable between the create response and every
+    later read — it did not exist at all before ADR 0012 gave Participant a
+    real identity."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-01")
+    client = _client(engine)
+
+    created = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    ).json()
+    [created_participant] = created["participants"]
+    UUID(created_participant["id"])  # a real UUID, not an empty/placeholder value
+
+    fetched = client.get(f"/advances/{created['id']}").json()
+    [fetched_participant] = fetched["participants"]
+    assert fetched_participant["id"] == created_participant["id"]
+
+    [listed] = client.get("/advances").json()["advances"]
+    [listed_participant] = listed["participants"]
+    assert listed_participant["id"] == created_participant["id"]

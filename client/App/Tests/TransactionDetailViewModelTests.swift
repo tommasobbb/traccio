@@ -483,7 +483,8 @@ struct TransactionDetailViewModelTests {
         let client = FakeAPIClient()
         let createdReimbursement = ReimbursementResponse(
             id: UUID(), advanceID: Self.advanceID, amount: 1000, currency: "EUR",
-            transactionID: nil, note: nil, createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+            transactionID: nil, participantID: nil, note: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
         await client.setCreateReimbursementResult(createdReimbursement)
         let refreshedAdvance = Self.makeAdvance()
@@ -497,7 +498,9 @@ struct TransactionDetailViewModelTests {
             onAdvanceChange: { _ in advanceChangeCallCount += 1 }
         )
 
-        await model.createReimbursement(amount: 1000, transactionID: nil, note: "Contanti")
+        await model.createReimbursement(
+            amount: 1000, transactionID: nil, participantID: nil, note: "Contanti"
+        )
 
         #expect(model.advance?.id == refreshedAdvance.id)
         #expect(model.actionFailure == nil)
@@ -512,7 +515,8 @@ struct TransactionDetailViewModelTests {
         let linkedID = Self.counterpartID
         let createdReimbursement = ReimbursementResponse(
             id: UUID(), advanceID: Self.advanceID, amount: 1000, currency: "EUR",
-            transactionID: linkedID, note: nil, createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+            transactionID: linkedID, participantID: nil, note: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
         await client.setCreateReimbursementResult(createdReimbursement)
         await client.setAdvance(Self.makeAdvance())
@@ -525,7 +529,9 @@ struct TransactionDetailViewModelTests {
             client: client, onUpdate: { updatedTransaction = $0 }
         )
 
-        await model.createReimbursement(amount: 1000, transactionID: linkedID, note: nil)
+        await model.createReimbursement(
+            amount: 1000, transactionID: linkedID, participantID: nil, note: nil
+        )
 
         #expect(model.actionFailure == nil)
         #expect(updatedTransaction?.id == linkedID)
@@ -542,7 +548,9 @@ struct TransactionDetailViewModelTests {
             client: client, onUpdate: { _ in updateCallCount += 1 }
         )
 
-        await model.createReimbursement(amount: 1000, transactionID: nil, note: nil)
+        await model.createReimbursement(
+            amount: 1000, transactionID: nil, participantID: nil, note: nil
+        )
 
         #expect(model.actionFailure == .generic)
         #expect(updateCallCount == 0)
@@ -552,10 +560,32 @@ struct TransactionDetailViewModelTests {
         let client = FakeAPIClient()
         let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
 
-        await model.createReimbursement(amount: 1000, transactionID: nil, note: nil)
+        await model.createReimbursement(
+            amount: 1000, transactionID: nil, participantID: nil, note: nil
+        )
 
         #expect(model.actionFailure == nil)
         let recorded = await client.createdReimbursementRequests
         #expect(recorded.isEmpty)
+    }
+
+    @Test func createReimbursementForwardsTheParticipantID() async throws {
+        // ADR 0012: attribution is an explicit choice threaded straight
+        // through to the request body, never inferred client-side.
+        let client = FakeAPIClient()
+        await client.setAdvance(Self.makeAdvance())
+        let participantID = UUID()
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(),
+            client: client
+        )
+
+        await model.createReimbursement(
+            amount: 1000, transactionID: nil, participantID: participantID, note: nil
+        )
+
+        let recorded = await client.createdReimbursementRequests
+        #expect(recorded.count == 1)
+        #expect(recorded.first?.participantID == participantID)
     }
 }

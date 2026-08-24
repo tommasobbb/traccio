@@ -8,7 +8,7 @@ domain carries as one value object and the schema stores as two columns
 """
 
 from collections.abc import Sequence
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from traccio.db.models import (
     AccountRow,
@@ -190,10 +190,13 @@ def participant_to_row(
     """Translate a domain :class:`Participant` into an :class:`AdvanceParticipantRow`.
 
     The ``user_id`` and ``advance_id`` are supplied by the caller (they live on
-    the parent :class:`Advance`, not on the value object).
+    the parent :class:`Advance`, not on the value object). Uses
+    ``participant.id`` rather than minting a fresh one — the domain model now
+    carries a stable id (ADR 0012, previously discarded on every read), so
+    round-tripping through this mapper must preserve it, not replace it.
     """
     return AdvanceParticipantRow(
-        id=uuid4(),
+        id=participant.id,
         user_id=user_id,
         advance_id=advance_id,
         name=participant.name,
@@ -205,6 +208,7 @@ def participant_to_row(
 def row_to_participant(row: AdvanceParticipantRow) -> Participant:
     """Translate an :class:`AdvanceParticipantRow` into a domain :class:`Participant`."""
     return Participant(
+        id=row.id,
         name=row.name,
         expected_amount=Money(amount=row.expected_amount, currency=row.expected_currency),
     )
@@ -261,6 +265,7 @@ def reimbursement_to_row(reimbursement: Reimbursement) -> ReimbursementRow:
         amount=reimbursement.amount.amount,
         currency=reimbursement.amount.currency,
         transaction_id=reimbursement.transaction_id,
+        participant_id=reimbursement.participant_id,
         note=reimbursement.note,
         created_at=reimbursement.created_at,
     )
@@ -277,6 +282,7 @@ def row_to_reimbursement(row: ReimbursementRow) -> Reimbursement:
         advance_id=row.advance_id,
         amount=Money(amount=row.amount, currency=row.currency),
         transaction_id=row.transaction_id,
+        participant_id=row.participant_id,
         note=row.note,
         created_at=row.created_at,
     )

@@ -13,10 +13,18 @@ share; :func:`advance_spending_share` does that single conversion, matching the
 transaction's sign.
 """
 
+from collections.abc import Mapping, Sequence
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict
 
-from traccio.domain.enums import AdvanceStatus, TransactionRole, TransactionStatus
-from traccio.domain.models import Transaction
+from traccio.domain.enums import (
+    AdvanceStatus,
+    ParticipantStatus,
+    TransactionRole,
+    TransactionStatus,
+)
+from traccio.domain.models import Participant, Reimbursement, Transaction
 from traccio.domain.money import Money
 
 # Stable, value-free reason codes for an invalid advance. Exposed so the API
@@ -254,6 +262,138 @@ def derive_advance(
         status=status,
         spending_share=advance_spending_share(transaction, spending_magnitude),
     )
+
+
+class ParticipantState(BaseModel):
+    """The fully derived reimbursement state of one participant (ADR 0012).
+
+    Everything here is a pure function of the participant's ``expected_amount``
+    and the sum of reimbursements explicitly attributed to them — nothing is
+    stored (mirrors :class:`AdvanceState`'s own discipline, one level down).
+    An unattributed reimbursement (``participant_id`` is ``None``) counts
+    toward the advance's own ``AdvanceState`` but never toward any
+    ``ParticipantState``.
+
+    Attributes
+    ----------
+    participant : Participant
+        The participant this state is about.
+    reimbursed : Money
+        The sum of reimbursements attributed to this participant (the input,
+        echoed for the caller).
+    outstanding : Money
+        What this participant still owes, clamped at zero:
+        ``max(0, expected_amount - reimbursed)``.
+    excess : Money
+        Over-reimbursement for this participant specifically,
+        ``max(0, reimbursed - expected_amount)`` — flagged, not absorbed, same
+        as :class:`AdvanceState.excess`.
+    status : ParticipantStatus
+        ``settled`` once this participant's reimbursements cover their
+        ``expected_amount``, else ``outstanding``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    participant: Participant
+    reimbursed: Money
+    outstanding: Money
+    excess: Money
+    status: ParticipantStatus
+
+
+def group_reimbursements_by_participant(
+    reimbursements: Sequence[Reimbursement],
+) -> dict[UUID, Money]:
+    """Sum reimbursement amounts per participant, ignoring unattributed ones.
+
+    Pure grouping over an already-loaded list — the caller decides how that
+    list was obtained (a single advance's full reimbursement list in memory,
+    or a page's worth); this function never touches the database. An empty
+    input returns an empty map.
+
+    Parameters
+    ----------
+    reimbursements : Sequence[Reimbursement]
+        The reimbursements to group. Every one is assumed to share the same
+        currency (the advance's), matching :func:`validate_reimbursement`'s
+        own invariant — this function does not re-check it.
+
+    Returns
+    -------
+    dict[UUID, Money]
+        Participant id -> summed reimbursed amount. A reimbursement with
+        ``participant_id is None`` contributes to no entry.
+    """
+    totals: dict[UUID, int] = {}
+    currency: str | None = None
+    for reimbursement in reimbursements:
+        if reimbursement.participant_id is None:
+            continue
+        currency = reimbursement.amount.currency
+        totals[reimbursement.participant_id] = (
+            totals.get(reimbursement.participant_id, 0) + reimbursement.amount.amount
+        )
+    if currency is None:
+        return {}
+    return {
+        participant_id: Money(amount=total, currency=currency)
+        for participant_id, total in totals.items()
+    }
+
+
+def derive_participant_states(
+    participants: Sequence[Participant],
+    reimbursed_by_participant: Mapping[UUID, Money],
+    *,
+    currency: str,
+) -> list[ParticipantState]:
+    """Derive each participant's reimbursement state from their attributed total.
+
+    Takes an already-aggregated map rather than the raw reimbursement list, so
+    the same function serves both a single advance (aggregated in Python from
+    its full reimbursement list, already loaded for :func:`derive_advance`'s
+    own total) and a whole page of advances (aggregated by one grouped query
+    for the page, never one query per row — see ADR 0004's "one aggregate
+    query, not per row" and ADR 0012).
+
+    Parameters
+    ----------
+    participants : Sequence[Participant]
+        The advance's participants, in order.
+    reimbursed_by_participant : Mapping[UUID, Money]
+        Participant id -> summed reimbursed amount (see
+        :func:`group_reimbursements_by_participant`). A participant with no
+        entry is treated as having received nothing.
+    currency : str
+        The advance's currency — every participant's ``expected_amount`` and
+        every entry in ``reimbursed_by_participant`` is assumed to already be
+        in it (not re-validated here, same as :func:`derive_advance`).
+
+    Returns
+    -------
+    list[ParticipantState]
+        One state per input participant, in the same order.
+    """
+    states = []
+    for participant in participants:
+        reimbursed = reimbursed_by_participant.get(
+            participant.id, Money(amount=0, currency=currency)
+        )
+        remaining = participant.expected_amount.amount - reimbursed.amount
+        outstanding_amount = Money(amount=max(0, remaining), currency=currency)
+        excess_amount = Money(amount=max(0, -remaining), currency=currency)
+        status = ParticipantStatus.SETTLED if remaining <= 0 else ParticipantStatus.OUTSTANDING
+        states.append(
+            ParticipantState(
+                participant=participant,
+                reimbursed=reimbursed,
+                outstanding=outstanding_amount,
+                excess=excess_amount,
+                status=status,
+            )
+        )
+    return states
 
 
 def validate_advance(transaction: Transaction, own_share: Money) -> None:

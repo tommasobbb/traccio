@@ -27,12 +27,18 @@ class CreateReimbursementRequest(BaseModel):
     transaction_id : UUID or None
         The incoming transaction to link (the caller's, a ``personal``
         non-``rejected`` credit). Omit for a manual cash reimbursement.
+    participant_id : UUID or None
+        The participant this reimbursement is attributed to (ADR 0012). Must
+        be one of the advance's own participants, or the router rejects it
+        with a ``404 unknown_participant``. Omit to leave it unattributed —
+        the only option before ADR 0012, still fully supported.
     note : str or None
         Optional free-text note.
     """
 
     amount: int
     transaction_id: UUID | None = None
+    participant_id: UUID | None = None
     note: str | None = None
 
 
@@ -54,6 +60,9 @@ class ReimbursementResponse(BaseModel):
         ISO 4217 code of ``amount`` (the advance's currency).
     transaction_id : UUID or None
         The linked incoming transaction, or ``None`` for a manual cash entry.
+    participant_id : UUID or None
+        The participant this reimbursement is attributed to (ADR 0012), or
+        ``None`` for an unattributed one.
     note : str or None
         Optional free-text note.
     created_at : datetime
@@ -65,6 +74,7 @@ class ReimbursementResponse(BaseModel):
     amount: int
     currency: str
     transaction_id: UUID | None
+    participant_id: UUID | None
     note: str | None
     created_at: datetime
 
@@ -77,6 +87,7 @@ class ReimbursementResponse(BaseModel):
             amount=reimbursement.amount.amount,
             currency=reimbursement.amount.currency,
             transaction_id=reimbursement.transaction_id,
+            participant_id=reimbursement.participant_id,
             note=reimbursement.note,
             created_at=reimbursement.created_at,
         )

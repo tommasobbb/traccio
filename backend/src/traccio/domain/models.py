@@ -264,6 +264,11 @@ class Participant(BaseModel):
 
     Attributes
     ----------
+    id : UUID
+        Stable identifier of the participant within Traccio — what a
+        :class:`Reimbursement` attributes itself to via
+        ``participant_id`` (see ADR 0012). Minted on creation like every
+        other entity's ``id``; preserved on every read.
     name : str
         The participant's plain name.
     expected_amount : Money
@@ -272,6 +277,7 @@ class Participant(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    id: UUID = Field(default_factory=uuid4)
     name: str
     expected_amount: Money
 
@@ -334,6 +340,15 @@ class Reimbursement(BaseModel):
     ``outstanding`` and derived ``status`` follow from the sum of these — nothing
     is stored on the advance itself (see :mod:`traccio.domain.advances`).
 
+    ``participant_id`` is an optional, explicit attribution to one
+    :class:`Participant` of the same advance (ADR 0012) — the user's own
+    action at entry time, never inferred. A single reimbursement attributes to
+    **at most one** participant; a real payment covering two people's shares
+    is recorded as two separate reimbursements, one per person (see
+    ``docs/domain.md`` §Reimbursement). Like ``amount``, it is never validated
+    against that participant's ``expected_amount`` — a participant can be
+    over- or under-reimbursed, same as the advance as a whole.
+
     Attributes
     ----------
     id : UUID
@@ -346,6 +361,9 @@ class Reimbursement(BaseModel):
         The amount paid back, a positive magnitude in the advance's currency.
     transaction_id : UUID or None
         The linked incoming transaction, or ``None`` for a manual cash entry.
+    participant_id : UUID or None
+        The participant this reimbursement is attributed to, or ``None`` for
+        an unattributed one (the default, and the only option before ADR 0012).
     note : str or None
         Optional free-text note (e.g. "cash, split dinner"). Never validated.
     created_at : datetime
@@ -359,6 +377,7 @@ class Reimbursement(BaseModel):
     advance_id: UUID
     amount: Money
     transaction_id: UUID | None = None
+    participant_id: UUID | None = None
     note: str | None = None
     created_at: datetime = Field(default_factory=_now)
 

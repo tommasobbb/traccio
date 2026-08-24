@@ -96,7 +96,16 @@ def test_create_sets_role_and_zeroes_down_effective_amount() -> None:
     assert body["receivable"] == 4000
     assert body["outstanding"] == 4000  # no reimbursements yet
     assert body["status"] == "open"
-    assert body["participants"] == [{"name": "TEST FRIEND 01", "expected_amount": 4000}]
+    # A stable id and the derived reimbursement state ride along even for a
+    # brand-new advance with no reimbursements yet (ADR 0012).
+    [participant] = body["participants"]
+    assert participant["name"] == "TEST FRIEND 01"
+    assert participant["expected_amount"] == 4000
+    assert participant["reimbursed"] == 0
+    assert participant["outstanding"] == 4000
+    assert participant["excess"] == 0
+    assert participant["status"] == "outstanding"
+    assert UUID(participant["id"])  # stable, non-empty identifier
 
     # The transaction now counts only the user's share as spending (signed).
     [tx] = client.get("/transactions").json()["transactions"]

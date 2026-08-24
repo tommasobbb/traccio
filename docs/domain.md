@@ -333,6 +333,13 @@ Fields:
   me" without building a social graph.
 - `status`: `open` | `settled` | `written_off`
 
+**Participant identity (implementation note, ADR 0012).** Each `Participant`
+carries a stable `id`, minted once at creation and preserved on every read —
+what a `Reimbursement` attributes itself to (see §Reimbursement). Before ADR
+0012 this `id` was minted fresh on every database read and thrown away, so
+nothing could reference "this specific participant" across a request
+boundary; it is otherwise still a free-text name, not a `User` record.
+
 `own_share` is declared by the user, not inferred. The app cannot know
 whether the user paid for four people or five.
 
@@ -374,6 +381,19 @@ people's shares, or arrive rounded, or be split across two payments weeks
 apart. Reimbursement amounts are therefore free: they are not validated
 against a participant's expected share, only summed against `outstanding`.
 
+**Participant attribution (ADR 0012)** is a separate, optional dimension: the
+user may explicitly attribute one `Reimbursement` to one `Participant` at
+entry time, which derives that participant's own reimbursed/outstanding/
+status the same way the advance's own totals are derived — never validated
+against that participant's expected share either, same looseness as the
+advance-level amount. A `Reimbursement` attributes to **at most one**
+participant: a single transfer that really did cover two people's shares is
+recorded as two separate reimbursements, one per person, not modeled as a
+join table — deliberately, to keep the common case (one payment, one person,
+or unattributed cash) simple. An unattributed reimbursement (the only option
+before ADR 0012, still fully supported) counts toward the advance's total but
+toward no participant's.
+
 Over-reimbursement is possible and must not crash anything: if the sum
 exceeds `receivable`, the excess is flagged for the user rather than
 silently absorbed.
@@ -389,7 +409,8 @@ to record one manually against an `Advance`.
 **Storage and derivation (implementation note).** A `Reimbursement` stores its
 `amount` as a positive magnitude (split into `amount` + `currency` like every
 `Money`), an optional `transaction_id` (set for a linked incoming transaction,
-`NULL` for a cash entry), and an optional free-text `note` — nothing else. The
+`NULL` for a cash entry), an optional `participant_id` (ADR 0012, see above —
+`NULL` for an unattributed one), and an optional free-text `note`. The
 advance's `outstanding`, `excess` (over-reimbursement) and its `settled` state
 are **derived**, never stored: a single pure function
 (`domain/advances.py::derive_advance`) folds `(receivable, Σ reimbursed,
@@ -399,8 +420,12 @@ max(0, Σ reimbursed − receivable)`, the derived `status`, and the signed
 advance; `settled` is derived, so deleting a reimbursement reopens the advance
 automatically. Linking a transaction sets its `role` to `reimbursement` (so its
 `effective_amount` is zero); deleting the link reverts it to `personal`.
-Automatic SEPA matching is a separate later slice that only suggests. See
-ADR 0004.
+Each participant's own `reimbursed`/`outstanding`/`excess`/`status` is derived
+the same way, one level down, by the sibling pure function
+`domain/advances.py::derive_participant_states` — grouping reimbursements by
+`participant_id` first (`group_reimbursements_by_participant`), never touching
+the advance-level arithmetic above. Automatic SEPA matching is a separate
+later slice that only suggests. See ADR 0004 and ADR 0012.
 
 ---
 

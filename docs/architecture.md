@@ -114,8 +114,13 @@ It builds and tests from the command line with no Xcode, which is what makes
 it verifiable by an agent. The app target holds views, navigation and
 platform wiring only.
 
-Models are generated from `docs/api/openapi.json` (`make openapi`), so a
-backend field rename becomes a compile error rather than a runtime surprise.
+Models are hand-written against `docs/api/openapi.json` (`make openapi`), one
+per response shape, each with a decoding test covering the negative cases
+(unknown enum value, malformed timestamp) — a backend field rename fails a
+test rather than surfacing as a runtime surprise. A real generator
+(`swift-openapi-generator` or similar) is a top-level dependency and a
+build-plugin step, deliberately not added while there are few enough models
+per slice to hand-maintain (`client/CLAUDE.md`).
 
 **Local storage is a read cache, not a source of truth.** The client
 persists what it fetched so the app opens instantly and reads offline. It

@@ -165,13 +165,15 @@ struct TransactionDetailView: View {
         .sheet(isPresented: $isPresentingAddReimbursementSheet) {
             AddReimbursementSheet(
                 candidates: model.reimbursementCandidates,
+                participants: model.advance?.participants ?? [],
                 isCreating: model.isUpdating,
                 failureMessage: model.actionFailure != nil
                     ? "Non è stato possibile registrare il rimborso. Riprova." : nil,
-                onCreate: { amount, transactionID, note in
+                onCreate: { draft in
                     Task {
                         await model.createReimbursement(
-                            amount: amount, transactionID: transactionID, note: note
+                            amount: draft.amount, transactionID: draft.transactionID,
+                            participantID: draft.participantID, note: draft.note
                         )
                         if model.actionFailure == nil {
                             isPresentingAddReimbursementSheet = false

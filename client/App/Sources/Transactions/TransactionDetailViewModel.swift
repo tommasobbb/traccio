@@ -339,9 +339,14 @@ final class TransactionDetailViewModel {
     ///     currency.
     /// transactionID:
     ///     The incoming transaction to link, or `nil` for cash.
+    /// participantID:
+    ///     The participant to attribute this reimbursement to (ADR 0012), or
+    ///     `nil` to leave it unattributed.
     /// note:
     ///     Optional free-text note.
-    func createReimbursement(amount: Int, transactionID: UUID?, note: String?) async {
+    func createReimbursement(
+        amount: Int, transactionID: UUID?, participantID: UUID?, note: String?
+    ) async {
         guard let advance, !isUpdating else { return }
         isUpdating = true
         defer { isUpdating = false }
@@ -350,7 +355,10 @@ final class TransactionDetailViewModel {
         do {
             _ = try await client.createReimbursement(
                 advanceID: advance.id,
-                CreateReimbursementRequest(amount: amount, transactionID: transactionID, note: note)
+                CreateReimbursementRequest(
+                    amount: amount, transactionID: transactionID, participantID: participantID,
+                    note: note
+                )
             )
             let refreshedAdvance = try await client.advance(id: advance.id)
             self.advance = refreshedAdvance

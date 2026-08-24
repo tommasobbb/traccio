@@ -13,11 +13,13 @@ import TraccioCore
 /// write-off) and calls back up to `TransactionDetailViewModel` through
 /// plain closures, same shape as `TransferSection.onUnlink`.
 ///
-/// Follows `docs/design/canvas/TransactionDetail.dc.html`, minus two elements
-/// the real data can't honestly support today (`tasks/backlog.md`): the
-/// event chip (no endpoint resolves "which event is this transaction in")
-/// and per-participant reimbursement status (a `Reimbursement` links only to
-/// the advance as a whole, never to a specific `Participant`).
+/// Follows `docs/design/canvas/TransactionDetail.dc.html`. The event chip it
+/// also shows now lives one level up, on `TransactionDetailView`'s own body
+/// (it applies to any transaction, not just an advance one). Per-participant
+/// reimbursement status ("Marco — Rimborsato" / "Giulia — In attesa") is
+/// built from `ParticipantResponse.status` (ADR 0012) — the mockup element
+/// this file used to be unable to support honestly, now that a
+/// `Reimbursement` can attribute itself to one `Participant`.
 struct AdvanceSections: View {
     let transaction: TransactionResponse
     let advance: AdvanceResponse
@@ -98,33 +100,64 @@ struct AdvanceSections: View {
             EyebrowLabel(text: "Partecipanti")
             participantRow(
                 name: "Tu", amount: advance.ownShare,
-                caption: "Quota propria — nessun rimborso dovuto"
+                caption: .own("Quota propria — nessun rimborso dovuto")
             )
-            ForEach(Array(advance.participants.enumerated()), id: \.offset) { _, participant in
+            ForEach(advance.participants) { participant in
                 Divider().overlay(Palette.separator)
-                participantRow(name: participant.name, amount: participant.expectedAmount, caption: nil)
+                participantRow(
+                    name: participant.name, amount: participant.expectedAmount,
+                    caption: .status(participant.status)
+                )
             }
         }
     }
 
-    private func participantRow(name: String, amount: Int, caption: String?) -> some View {
+    /// A participant row's caption: either the fixed neutral note on the
+    /// "Tu" row, or a real participant's derived reimbursement status
+    /// (ADR 0012) — two different things that happen to occupy the same
+    /// slot, not variants of one concept.
+    private enum ParticipantCaption {
+        case own(String)
+        case status(ParticipantStatus)
+    }
+
+    private func participantRow(name: String, amount: Int, caption: ParticipantCaption) -> some View {
         HStack(spacing: 12) {
             avatar(for: name)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(Typography.body.weight(.semibold))
                     .foregroundStyle(Palette.ink)
-                if let caption {
-                    Text(caption)
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                }
+                participantCaption(caption)
             }
             Spacer()
             Text(TraccioCore.formatMoney(amount: amount, currencyCode: advance.currency))
                 .font(Typography.body.weight(.bold))
                 .foregroundStyle(Palette.ink)
                 .monospacedDigit()
+        }
+    }
+
+    /// Renders `docs/design/canvas/TransactionDetail.dc.html`'s
+    /// `.p-status.done`/`.p-status.pending` — a small icon plus label, tinted
+    /// with the exact colors the mockup uses (`SummaryTint.income`/
+    /// `.warning`, already the palette's own semantic tones, not new ones).
+    @ViewBuilder
+    private func participantCaption(_ caption: ParticipantCaption) -> some View {
+        switch caption {
+        case .own(let text):
+            Text(text)
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+        case .status(let status):
+            HStack(spacing: 4) {
+                Image(systemName: status == .settled ? "checkmark" : "clock")
+                    .font(.system(size: 10, weight: .semibold))
+                    .accessibilityHidden(true)
+                Text(status == .settled ? "Rimborsato" : "In attesa")
+                    .font(Typography.caption)
+            }
+            .foregroundStyle(color(for: status == .settled ? .income : .warning))
         }
     }
 

@@ -19,6 +19,9 @@ public struct ReimbursementResponse: Codable, Sendable, Identifiable, Equatable 
     public let currency: String
     /// The linked incoming transaction, or `nil` for a manual cash entry.
     public let transactionID: UUID?
+    /// The participant this reimbursement is attributed to (ADR 0012), or
+    /// `nil` for an unattributed one.
+    public let participantID: UUID?
     /// Optional free-text note.
     public let note: String?
     /// When the reimbursement was recorded.
@@ -30,6 +33,7 @@ public struct ReimbursementResponse: Codable, Sendable, Identifiable, Equatable 
         case amount
         case currency
         case transactionID = "transaction_id"
+        case participantID = "participant_id"
         case note
         case createdAt = "created_at"
     }
@@ -40,6 +44,7 @@ public struct ReimbursementResponse: Codable, Sendable, Identifiable, Equatable 
         amount: Int,
         currency: String,
         transactionID: UUID?,
+        participantID: UUID?,
         note: String?,
         createdAt: Date
     ) {
@@ -48,6 +53,7 @@ public struct ReimbursementResponse: Codable, Sendable, Identifiable, Equatable 
         self.amount = amount
         self.currency = currency
         self.transactionID = transactionID
+        self.participantID = participantID
         self.note = note
         self.createdAt = createdAt
     }

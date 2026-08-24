@@ -122,6 +122,30 @@ class AdvanceStatus(StrEnum):
     WRITTEN_OFF = "written_off"
 
 
+class ParticipantStatus(StrEnum):
+    """Derived reimbursement status of one :class:`~traccio.domain.models.Participant`.
+
+    Never stored — derived fresh from that participant's attributed
+    reimbursements vs. their ``expected_amount`` (see
+    :func:`traccio.domain.advances.derive_participant_states`, ADR 0012), the
+    same discipline :class:`AdvanceStatus`'s own ``settled`` follows for the
+    advance as a whole.
+
+    Attributes
+    ----------
+    OUTSTANDING : str
+        The participant has been reimbursed less than their expected share
+        (or not attributed any reimbursement at all).
+    SETTLED : str
+        Reimbursed at least their expected share — an exact match or an
+        overpayment both count, mirroring :class:`AdvanceStatus.SETTLED`'s own
+        ``remaining <= 0`` boundary.
+    """
+
+    OUTSTANDING = "outstanding"
+    SETTLED = "settled"
+
+
 class EventStatus(StrEnum):
     """Lifecycle state of an :class:`~traccio.domain.models.Event`.
 
