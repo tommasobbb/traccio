@@ -23,8 +23,10 @@ from traccio.api.schemas.transactions import (
 from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
+    event_ids_for_transactions,
     get_category,
     get_transaction,
+    get_transaction_event_id,
     list_advances,
     list_transactions,
     prune_stale_pending_transactions,
@@ -46,16 +48,18 @@ def transactions(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
     account_id: Annotated[UUID | None, Query()] = None,
+    event_id: Annotated[UUID | None, Query()] = None,
+    category_id: Annotated[UUID | None, Query()] = None,
+    uncategorized: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionsResponse:
     """List the current user's transactions, most recent first.
 
     Scoped to the current user (see :func:`~traccio.api.deps.current_user_id`);
-    the underlying query is already ``scoped by user_id``. The optional
-    ``account_id`` narrows the result to one account but is always combined with
-    ``user_id``, so it cannot reach another user's rows. ``limit``/``offset``
-    page the result.
+    the underlying query is already ``scoped by user_id``. Every optional
+    filter is always combined with ``user_id``, so none can reach another
+    user's rows. ``limit``/``offset`` page the result.
 
     Parameters
     ----------
@@ -65,6 +69,15 @@ def transactions(
         The user whose transactions to return.
     account_id : UUID or None, optional
         When given, restrict to this account.
+    event_id : UUID or None, optional
+        When given, restrict to transactions grouped under this event.
+    category_id : UUID or None, optional
+        When given, restrict to transactions whose effective category is this
+        one. Mutually exclusive with ``uncategorized`` — combining both is a
+        ``422``.
+    uncategorized : bool, optional
+        When true, restrict to transactions with no effective category.
+        Mutually exclusive with ``category_id``.
     limit : int, optional
         Page size, between 1 and 200 (default 50).
     offset : int, optional
@@ -75,7 +88,18 @@ def transactions(
     TransactionsResponse
         The requested page of the user's transactions, most recent first.
     """
-    found = list_transactions(session, user_id, account_id=account_id, limit=limit, offset=offset)
+    if category_id is not None and uncategorized:
+        raise HTTPException(status_code=422, detail="conflicting_category_filter")
+    found = list_transactions(
+        session,
+        user_id,
+        account_id=account_id,
+        event_id=event_id,
+        category_id=category_id,
+        uncategorized=uncategorized,
+        limit=limit,
+        offset=offset,
+    )
     # An advance transaction's effective_amount is its derived spending share,
     # which depends on the declared own_share, the reimbursements received, and
     # whether the advance was written off (a write-off moves the outstanding
@@ -87,9 +111,16 @@ def transactions(
     }
     reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
     shares = spending_shares(found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance)
+    event_by_tx = event_ids_for_transactions(
+        session, user_id=user_id, transaction_ids=[transaction.id for transaction in found]
+    )
 
     responses = [
-        TransactionResponse.from_domain(transaction, advance_own_share=shares.get(transaction.id))
+        TransactionResponse.from_domain(
+            transaction,
+            advance_own_share=shares.get(transaction.id),
+            event_id=event_by_tx.get(transaction.id),
+        )
         for transaction in found
     ]
 
@@ -144,9 +175,12 @@ def transaction(
             [found], advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance
         )
         advance_own_share = shares.get(found.id)
+    event_id = get_transaction_event_id(session, user_id=user_id, transaction_id=found.id)
 
     logger.info("transactions.get", transaction_id=str(transaction_id))
-    return TransactionResponse.from_domain(found, advance_own_share=advance_own_share)
+    return TransactionResponse.from_domain(
+        found, advance_own_share=advance_own_share, event_id=event_id
+    )
 
 
 @router.post("/transactions/{transaction_id}/category", status_code=status.HTTP_204_NO_CONTENT)

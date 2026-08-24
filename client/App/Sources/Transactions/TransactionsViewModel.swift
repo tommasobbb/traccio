@@ -49,6 +49,16 @@ final class TransactionsViewModel {
     /// `TransactionDetailView`'s "Trasferimento" card, via `TransactionRow`.
     /// Best-effort, same reasoning as `categoryNames`.
     private(set) var transfersByTransactionID: [UUID: TransferResponse] = [:]
+    /// The caller's events, for `TransactionDetailView`'s event chip — a
+    /// transaction's `eventID` resolves against this to both a display name
+    /// and (unlike a category) a full `EventResponse` to navigate to.
+    /// Best-effort, same reasoning as `categories`.
+    private(set) var events: [EventResponse] = []
+    /// The account/category filter currently applied to the list. Always
+    /// enforced server-side (see `TransactionFilter`) — the client never
+    /// filters an already-fetched page. Set via `applyFilter(_:)`, never
+    /// directly, so a change always resets pagination.
+    private(set) var filter: TransactionFilter = .none
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -98,9 +108,10 @@ final class TransactionsViewModel {
         async let accountsResult = client.accounts()
         async let transferSuggestionsResult = client.transferSuggestions()
         async let transfersResult = client.transfers()
+        async let eventsResult = client.events()
 
         do {
-            let page = try await client.transactions(accountID: nil, limit: pageSize, offset: 0)
+            let page = try await client.transactions(filter: filter, limit: pageSize, offset: 0)
             state = .loaded(page)
             offset = page.count
             reachedEnd = page.count < pageSize
@@ -131,6 +142,9 @@ final class TransactionsViewModel {
                 }
             )
         }
+        if let fetchedEvents = try? await eventsResult {
+            events = fetchedEvents
+        }
     }
 
     /// Fetch the next page and append it, if there is one.
@@ -145,7 +159,7 @@ final class TransactionsViewModel {
         defer { isLoadingMore = false }
 
         do {
-            let page = try await client.transactions(accountID: nil, limit: pageSize, offset: offset)
+            let page = try await client.transactions(filter: filter, limit: pageSize, offset: offset)
             state = .loaded(current + page)
             offset += page.count
             reachedEnd = page.count < pageSize
@@ -177,6 +191,22 @@ final class TransactionsViewModel {
         var next = current
         next[index] = updated
         state = .loaded(next)
+    }
+
+    /// Change the active filter and reload from the first page.
+    ///
+    /// Always resets `offset`/`reachedEnd` — a different filter means a
+    /// different result set, so any already-loaded page is stale. `load()`
+    /// itself does the same reset; this just also updates `filter` first, so
+    /// both entry points share one reload path.
+    ///
+    /// Parameters
+    /// ----------
+    /// newFilter:
+    ///     The filter to apply from now on, including to `loadMore()`.
+    func applyFilter(_ newFilter: TransactionFilter) async {
+        filter = newFilter
+        await load()
     }
 
     /// Set or clear `advancesByTransactionID`'s entry for one transaction.

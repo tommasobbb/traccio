@@ -24,7 +24,9 @@ struct EventDetailViewModelTests {
         )
     }
 
-    private static func makeTransaction(id: UUID, amount: Int, currency: String = "EUR") -> TransactionResponse {
+    private static func makeTransaction(
+        id: UUID, amount: Int, currency: String = "EUR", eventID: UUID? = nil
+    ) -> TransactionResponse {
         TransactionResponse(
             id: id,
             accountID: UUID(),
@@ -39,7 +41,8 @@ struct EventDetailViewModelTests {
             role: .personal,
             suggestedCategoryID: nil,
             confirmedCategoryID: nil,
-            effectiveCategoryID: nil
+            effectiveCategoryID: nil,
+            eventID: eventID
         )
     }
 
@@ -73,6 +76,35 @@ struct EventDetailViewModelTests {
         ])
         let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
         await model.loadMembers()
+
+        await model.loadCandidatesIfNeeded()
+
+        #expect(model.availableCandidates.map(\.id) == [Self.candidateID])
+    }
+
+    @Test func availableCandidatesExcludesTransactionsAlreadyInAnotherEvent() async throws {
+        let otherEventID = UUID()
+        let client = FakeAPIClient()
+        await client.setTransactions([
+            Self.makeTransaction(id: Self.candidateID, amount: -2000),
+            Self.makeTransaction(id: UUID(), amount: -3000, eventID: otherEventID),
+        ])
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.loadCandidatesIfNeeded()
+
+        #expect(model.availableCandidates.map(\.id) == [Self.candidateID])
+    }
+
+    @Test func availableCandidatesIncludesATransactionAlreadyInThisEvent() async throws {
+        // A candidate whose eventID already matches this event (e.g. loaded
+        // right after assignment) must not be excluded by the
+        // another-event check — only `memberIDs` decides that.
+        let client = FakeAPIClient()
+        await client.setTransactions([
+            Self.makeTransaction(id: Self.candidateID, amount: -2000, eventID: Self.eventID)
+        ])
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
 
         await model.loadCandidatesIfNeeded()
 

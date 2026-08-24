@@ -36,7 +36,8 @@ struct TransactionDetailViewModelTests {
             role: role,
             suggestedCategoryID: nil,
             confirmedCategoryID: confirmedCategoryID,
-            effectiveCategoryID: confirmedCategoryID
+            effectiveCategoryID: confirmedCategoryID,
+            eventID: nil
         )
     }
 

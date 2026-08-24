@@ -89,14 +89,20 @@ final class EventDetailViewModel {
     }
 
     /// Transactions available to assign: `candidates` minus whatever is
-    /// already a member, and — once the event has a currency — narrowed to
-    /// that currency, so the sheet doesn't offer a candidate the backend
-    /// would refuse with `mixed_currency`. A UX convenience only: the
-    /// backend stays the authority (see `ActionFailure.mixedCurrency`).
+    /// already a member, minus whatever already belongs to a *different*
+    /// event (now that `TransactionResponse.eventID` makes that visible —
+    /// previously the sheet could only discover this via the backend's
+    /// `409`, which is now the fallback rather than the normal path), and —
+    /// once the event has a currency — narrowed to that currency, so the
+    /// sheet doesn't offer a candidate the backend would refuse with
+    /// `mixed_currency`. A UX convenience only: the backend stays the
+    /// authority (see `ActionFailure.mixedCurrency` and
+    /// `.transactionInAnotherEvent`).
     var availableCandidates: [TransactionResponse] {
         let memberIDs = Set(members.map(\.id))
         return candidates.filter { candidate in
             guard !memberIDs.contains(candidate.id) else { return false }
+            if let candidateEventID = candidate.eventID, candidateEventID != event.id { return false }
             guard let currency = event.currency else { return true }
             return candidate.currency == currency
         }
@@ -119,7 +125,7 @@ final class EventDetailViewModel {
     /// A no-op when `candidates` is already non-empty.
     func loadCandidatesIfNeeded() async {
         guard candidates.isEmpty else { return }
-        if let fetched = try? await client.transactions(accountID: nil, limit: 100, offset: 0) {
+        if let fetched = try? await client.transactions(filter: .none, limit: 100, offset: 0) {
             candidates = fetched
         }
     }

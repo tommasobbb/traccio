@@ -185,15 +185,20 @@ struct APIClientTests {
             return (response, Data(Self.transactionsEnvelope.utf8))
         }
 
-        let transactions = try await client.transactions(accountID: accountID, limit: 25, offset: 50)
+        let transactions = try await client.transactions(
+            filter: TransactionFilter(accountID: accountID), limit: 25, offset: 50
+        )
         #expect(transactions.count == 1)
         #expect(transactions[0].amount == -1230)
     }
 
-    @Test func transactionsOmitsAccountIDWhenNil() async throws {
+    @Test func transactionsOmitsEveryFilterParamWhenFilterIsNone() async throws {
         let client = Self.makeClient { request in
             let query = request.url?.query ?? ""
             #expect(!query.contains("account_id"))
+            #expect(!query.contains("event_id"))
+            #expect(!query.contains("category_id"))
+            #expect(!query.contains("uncategorized"))
             #expect(query.contains("limit=50"))
             #expect(query.contains("offset=0"))
             let response = HTTPURLResponse(
@@ -203,6 +208,49 @@ struct APIClientTests {
         }
 
         _ = try await client.transactions()
+    }
+
+    @Test func transactionsEncodesEventID() async throws {
+        let eventID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(query.contains("event_id=\(eventID.uuidString)"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transactionsEnvelope.utf8))
+        }
+
+        _ = try await client.transactions(filter: TransactionFilter(eventID: eventID))
+    }
+
+    @Test func transactionsEncodesCategoryID() async throws {
+        let categoryID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(query.contains("category_id=\(categoryID.uuidString)"))
+            #expect(!query.contains("uncategorized"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transactionsEnvelope.utf8))
+        }
+
+        _ = try await client.transactions(filter: TransactionFilter(category: .some(categoryID)))
+    }
+
+    @Test func transactionsEncodesUncategorized() async throws {
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(query.contains("uncategorized=true"))
+            #expect(!query.contains("category_id"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.transactionsEnvelope.utf8))
+        }
+
+        _ = try await client.transactions(filter: TransactionFilter(category: .uncategorized))
     }
 
     @Test func transactionFetchesOneRowByID() async throws {

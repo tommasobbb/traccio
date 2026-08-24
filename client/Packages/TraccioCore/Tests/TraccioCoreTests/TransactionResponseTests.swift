@@ -30,7 +30,8 @@ struct TransactionResponseTests {
               "role": "personal",
               "suggested_category_id": "33333333-3333-3333-3333-333333333333",
               "confirmed_category_id": null,
-              "effective_category_id": "33333333-3333-3333-3333-333333333333"
+              "effective_category_id": "33333333-3333-3333-3333-333333333333",
+              "event_id": "66666666-6666-6666-6666-666666666666"
             },
             {
               "id": "44444444-4444-4444-4444-444444444444",
@@ -46,7 +47,8 @@ struct TransactionResponseTests {
               "role": "advance",
               "suggested_category_id": null,
               "confirmed_category_id": "55555555-5555-5555-5555-555555555555",
-              "effective_category_id": "55555555-5555-5555-5555-555555555555"
+              "effective_category_id": "55555555-5555-5555-5555-555555555555",
+              "event_id": null
             }
           ]
         }
@@ -74,6 +76,7 @@ struct TransactionResponseTests {
         #expect(personal.suggestedCategoryID != nil)
         #expect(personal.confirmedCategoryID == nil)
         #expect(personal.effectiveCategoryID == personal.suggestedCategoryID)
+        #expect(personal.eventID == UUID(uuidString: "66666666-6666-6666-6666-666666666666"))
 
         let advance = response.transactions[1]
         #expect(advance.bookedAt == nil)
@@ -88,6 +91,59 @@ struct TransactionResponseTests {
         #expect(advance.suggestedCategoryID == nil)
         #expect(advance.confirmedCategoryID != nil)
         #expect(advance.effectiveCategoryID == advance.confirmedCategoryID)
+        #expect(advance.eventID == nil)
+    }
+
+    @Test func decodesWhenEventIDKeyIsAbsentEntirely() throws {
+        // The backend always emits `event_id` (nullable, never omitted), but
+        // the field stays `decodeIfPresent`-safe against a missing key too.
+        let json = """
+            { "transactions": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "account_id": "22222222-2222-2222-2222-222222222222",
+              "amount": -100,
+              "effective_amount": -100,
+              "currency": "EUR",
+              "booked_at": null,
+              "value_date": null,
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "status": "booked",
+              "role": "personal",
+              "suggested_category_id": null,
+              "confirmed_category_id": null,
+              "effective_category_id": null
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            TransactionsResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.transactions[0].eventID == nil)
+    }
+
+    @Test func rejectsMalformedEventID() {
+        let json = """
+            { "transactions": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "account_id": "22222222-2222-2222-2222-222222222222",
+              "amount": -100,
+              "effective_amount": -100,
+              "currency": "EUR",
+              "booked_at": null,
+              "value_date": null,
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "status": "booked",
+              "role": "personal",
+              "suggested_category_id": null,
+              "confirmed_category_id": null,
+              "effective_category_id": null,
+              "event_id": "not-a-uuid"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(TransactionsResponse.self, from: Data(json.utf8))
+        }
     }
 
     @Test func rejectsUnknownRole() {

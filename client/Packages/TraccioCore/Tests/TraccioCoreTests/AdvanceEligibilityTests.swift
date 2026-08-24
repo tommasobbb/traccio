@@ -25,7 +25,8 @@ struct AdvanceEligibilityTests {
             role: role,
             suggestedCategoryID: nil,
             confirmedCategoryID: nil,
-            effectiveCategoryID: nil
+            effectiveCategoryID: nil,
+            eventID: nil
         )
     }
 

@@ -224,7 +224,9 @@ def event_transactions(
     members = list_event_members(session, user_id=user_id, event_id=event_id)
     shares = _advance_spending_shares(session, user_id=user_id, transactions=members)
     responses = [
-        TransactionResponse.from_domain(transaction, advance_own_share=shares.get(transaction.id))
+        TransactionResponse.from_domain(
+            transaction, advance_own_share=shares.get(transaction.id), event_id=event_id
+        )
         for transaction in members
     ]
     logger.info("events.transactions.list", event_id=str(event_id), count=len(responses))

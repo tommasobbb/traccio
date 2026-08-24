@@ -85,6 +85,14 @@ class TransactionResponse(BaseModel):
         ``suggested``, else ``None`` (see
         :func:`~traccio.domain.categories.effective_category`). The client
         renders this and never re-implements the fallback.
+    event_id : UUID or None
+        The event this transaction is currently grouped under, or ``None``.
+        A display join, not a domain derivation: ``event_id`` lives only on
+        the DB row (``db/models.py::TransactionRow``), deliberately absent
+        from the domain ``Transaction`` (see ``docs/domain.md`` §Event), so
+        the caller (``api/routers/transactions.py``) resolves it separately
+        and passes it in — the same pattern the dashboard category breakdown
+        uses to resolve a category name.
     """
 
     id: UUID
@@ -101,10 +109,15 @@ class TransactionResponse(BaseModel):
     suggested_category_id: UUID | None
     confirmed_category_id: UUID | None
     effective_category_id: UUID | None
+    event_id: UUID | None = None
 
     @classmethod
     def from_domain(
-        cls, transaction: Transaction, *, advance_own_share: Money | None = None
+        cls,
+        transaction: Transaction,
+        *,
+        advance_own_share: Money | None = None,
+        event_id: UUID | None = None,
     ) -> "TransactionResponse":
         """Project a domain :class:`~traccio.domain.models.Transaction`.
 
@@ -121,6 +134,11 @@ class TransactionResponse(BaseModel):
             :func:`~traccio.domain.advances.advance_spending_share`). Required
             only when ``transaction.role`` is ``advance``; the caller supplies it
             from the transaction's :class:`~traccio.domain.models.Advance`.
+        event_id : UUID or None, optional
+            The transaction's current event membership, if any. Not derived
+            here — it isn't on the domain model — the caller resolves it
+            (``db/repositories.py::get_transaction_event_id`` or
+            ``event_ids_for_transactions``) and passes it in.
 
         Returns
         -------
@@ -144,6 +162,7 @@ class TransactionResponse(BaseModel):
             suggested_category_id=transaction.suggested_category_id,
             confirmed_category_id=transaction.confirmed_category_id,
             effective_category_id=effective_category(transaction),
+            event_id=event_id,
         )
 
 

@@ -34,6 +34,16 @@ struct TransactionDetailView: View {
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
     private let account: AccountResponse?
+    /// The caller's events, for resolving `transaction.eventID` to a display
+    /// name and, when it resolves, a `NavigationLink` to `EventDetailView`.
+    /// Best-effort: an unresolved `eventID` (event not in this list, e.g. a
+    /// stale local page) still shows the chip, just as a non-navigable row —
+    /// same degradation `AdvanceEligibility`'s row already uses elsewhere.
+    private let events: [EventResponse]
+    /// The client `EventDetailView` reaches the backend through, so
+    /// navigating to it shares this screen's connection rather than
+    /// defaulting a second one.
+    private let client: any APIClientProtocol
 
     /// Create the screen.
     ///
@@ -52,6 +62,10 @@ struct TransactionDetailView: View {
     ///     the lookup resolved.
     /// account:
     ///     This transaction's account, for the header.
+    /// events:
+    ///     Events already fetched by the caller (`TransactionsViewModel`), to
+    ///     resolve `transaction.eventID`'s name and navigation target.
+    ///     Defaults to empty, which degrades the chip to non-navigable.
     /// client:
     ///     The API client to reach the backend through. Defaults to a client
     ///     pointed at the local dev backend.
@@ -72,6 +86,7 @@ struct TransactionDetailView: View {
         advance: AdvanceResponse?,
         transfer: TransferResponse? = nil,
         account: AccountResponse?,
+        events: [EventResponse] = [],
         client: any APIClientProtocol = APIClient.devDefault,
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
@@ -85,6 +100,8 @@ struct TransactionDetailView: View {
             )
         )
         self.account = account
+        self.events = events
+        self.client = client
     }
 
     var body: some View {
@@ -95,6 +112,7 @@ struct TransactionDetailView: View {
                     Banner(message: "Non è stato possibile completare l'operazione. Riprova.")
                 }
                 categoryCard
+                eventCard
                 if let advance = model.advance {
                     AdvanceSections(
                         transaction: model.transaction,
@@ -310,5 +328,54 @@ struct TransactionDetailView: View {
         }
         .buttonStyle(.plain)
         .disabled(model.isUpdating)
+    }
+
+    // MARK: Event
+
+    /// A chip naming the event this transaction belongs to, if any — closes
+    /// the "event chip" gap left open when the advance cards were still a
+    /// dedicated `AdvanceDetailView` (see `tasks/backlog.md`); they are now
+    /// `AdvanceSections` embedded right here, so one chip at this level
+    /// covers an advance transaction's event too, not just a plain one.
+    ///
+    /// A `NavigationLink` to `EventDetailView` when the event resolved
+    /// against `events` (the caller's already-fetched list); otherwise a
+    /// non-navigable row showing a generic label, the same degrade
+    /// `TransactionRow`'s advance lookup already uses — the backend, not a
+    /// stale local list, stays the authority on whether the event still
+    /// exists.
+    @ViewBuilder
+    private var eventCard: some View {
+        if let eventID = model.transaction.eventID {
+            Card {
+                EyebrowLabel(text: "Evento")
+                if let event = events.first(where: { $0.id == eventID }) {
+                    NavigationLink {
+                        EventDetailView(event: event, client: client)
+                    } label: {
+                        eventRow(name: event.name, isNavigable: true)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    eventRow(name: "Evento", isNavigable: false)
+                }
+            }
+        }
+    }
+
+    private func eventRow(name: String, isNavigable: Bool) -> some View {
+        HStack {
+            Text(name)
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(isNavigable ? Palette.ink : Palette.inkSecondary)
+            Spacer()
+            if isNavigable {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
     }
 }

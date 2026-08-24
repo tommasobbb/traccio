@@ -23,7 +23,8 @@ struct TransferSuggestionPairTests {
             role: .personal,
             suggestedCategoryID: nil,
             confirmedCategoryID: nil,
-            effectiveCategoryID: nil
+            effectiveCategoryID: nil,
+            eventID: nil
         )
     }
 

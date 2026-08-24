@@ -314,7 +314,7 @@ final class TransactionDetailViewModel {
     /// entry.
     func loadReimbursementCandidatesIfNeeded() async {
         guard reimbursementCandidates.isEmpty else { return }
-        guard let fetched = try? await client.transactions(accountID: nil, limit: 100, offset: 0)
+        guard let fetched = try? await client.transactions(filter: .none, limit: 100, offset: 0)
         else { return }
         reimbursementCandidates = fetched.filter {
             $0.role == .personal && $0.amount > 0 && $0.currency == transaction.currency

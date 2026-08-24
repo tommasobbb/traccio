@@ -28,7 +28,8 @@ struct TransactionsViewModelTests {
             role: .personal,
             suggestedCategoryID: nil,
             confirmedCategoryID: confirmedCategoryID,
-            effectiveCategoryID: confirmedCategoryID
+            effectiveCategoryID: confirmedCategoryID,
+            eventID: nil
         )
     }
 
@@ -138,5 +139,62 @@ struct TransactionsViewModelTests {
         model.updateAdvance(nil, for: transaction.id)
 
         #expect(model.advancesByTransactionID[transaction.id] == nil)
+    }
+
+    @Test func loadPublishesEvents() async throws {
+        let event = EventResponse(
+            id: UUID(), name: "TEST TRIP", startDate: nil, endDate: nil, status: .active,
+            memberCount: 0, total: 0, currency: nil, createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        let client = FakeAPIClient()
+        await client.setEvents([event])
+
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        #expect(model.events.map(\.id) == [event.id])
+    }
+
+    // MARK: applyFilter
+
+    @Test func loadSendsTheDefaultNoneFilterOnTheFirstPage() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        await model.load()
+
+        #expect(await client.receivedTransactionsFilters == [.none])
+        #expect(await client.receivedTransactionsOffsets == [0])
+    }
+
+    @Test func applyFilterSendsTheNewFilterAndResetsToTheFirstPage() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let accountID = UUID()
+        await model.applyFilter(TransactionFilter(accountID: accountID))
+
+        #expect(model.filter == TransactionFilter(accountID: accountID))
+        #expect(await client.receivedTransactionsFilters.last == TransactionFilter(accountID: accountID))
+        #expect(await client.receivedTransactionsOffsets.last == 0)
+    }
+
+    @Test func loadMoreSendsTheActiveFilter() async throws {
+        // A full first page (pageSize rows) so `loadMore()` actually fires a
+        // second request rather than treating the list as already exhausted.
+        let client = FakeAPIClient()
+        await client.setTransactions((0..<2).map { _ in Self.makeTransaction() })
+        let model = TransactionsViewModel(client: client, pageSize: 2)
+        let categoryID = UUID()
+        await model.applyFilter(TransactionFilter(category: .some(categoryID)))
+
+        await model.loadMore()
+
+        #expect(
+            await client.receivedTransactionsFilters
+                == [TransactionFilter(category: .some(categoryID)), TransactionFilter(category: .some(categoryID))]
+        )
+        #expect(await client.receivedTransactionsOffsets == [0, 2])
     }
 }

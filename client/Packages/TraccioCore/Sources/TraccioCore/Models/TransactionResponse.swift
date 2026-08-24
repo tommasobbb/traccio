@@ -51,6 +51,12 @@ public struct TransactionResponse: Codable, Sendable, Identifiable, Equatable {
     /// `suggested`, else `nil`. The client renders this and never
     /// re-implements the fallback.
     public let effectiveCategoryID: UUID?
+    /// The event this transaction is currently grouped under, or `nil`. A
+    /// display join resolved by the backend router, not a domain field — see
+    /// `docs/domain.md` §Event. The client resolves the event's name
+    /// separately (via `GET /events`), the same pattern already used for
+    /// `effectiveCategoryID`'s name.
+    public let eventID: UUID?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -67,6 +73,7 @@ public struct TransactionResponse: Codable, Sendable, Identifiable, Equatable {
         case suggestedCategoryID = "suggested_category_id"
         case confirmedCategoryID = "confirmed_category_id"
         case effectiveCategoryID = "effective_category_id"
+        case eventID = "event_id"
     }
 
     public init(
@@ -83,7 +90,8 @@ public struct TransactionResponse: Codable, Sendable, Identifiable, Equatable {
         role: TransactionRole,
         suggestedCategoryID: UUID?,
         confirmedCategoryID: UUID?,
-        effectiveCategoryID: UUID?
+        effectiveCategoryID: UUID?,
+        eventID: UUID?
     ) {
         self.id = id
         self.accountID = accountID
@@ -99,5 +107,6 @@ public struct TransactionResponse: Codable, Sendable, Identifiable, Equatable {
         self.suggestedCategoryID = suggestedCategoryID
         self.confirmedCategoryID = confirmedCategoryID
         self.effectiveCategoryID = effectiveCategoryID
+        self.eventID = eventID
     }
 }

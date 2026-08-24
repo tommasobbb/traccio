@@ -94,6 +94,13 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var confirmedCategoryIDs: [UUID] = []
     private(set) var clearCategoryCallCount = 0
     private(set) var transactionFetchCount = 0
+    /// Every `filter` the view model under test passed to `transactions(filter:limit:offset:)`,
+    /// in call order — proves `TransactionsViewModel.applyFilter(_:)` and
+    /// `loadMore()` send it, not just hold it.
+    private(set) var receivedTransactionsFilters: [TransactionFilter] = []
+    /// Every `offset` passed to `transactions(filter:limit:offset:)`, in call
+    /// order — proves a filter change resets pagination to the first page.
+    private(set) var receivedTransactionsOffsets: [Int] = []
     private(set) var confirmedTransferPairs: [RecordedTransferPair] = []
     private(set) var rejectedTransferPairs: [RecordedTransferPair] = []
     private(set) var deletedTransferIDs: [UUID] = []
@@ -397,8 +404,12 @@ actor FakeAPIClient: APIClientProtocol {
         clearCategoryCallCount += 1
     }
 
-    func transactions(accountID: UUID?, limit: Int, offset: Int) async throws -> [TransactionResponse] {
-        transactionsToReturn
+    func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
+        -> [TransactionResponse]
+    {
+        receivedTransactionsFilters.append(filter)
+        receivedTransactionsOffsets.append(offset)
+        return transactionsToReturn
     }
 
     func categories() async throws -> [CategoryResponse] {

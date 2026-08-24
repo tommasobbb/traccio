@@ -293,6 +293,29 @@ event. `start_date`/`end_date` introduced a new client-side type,
 `TraccioCore.CalendarDate` — the first date-only (`yyyy-MM-dd`) field in the
 API, deliberately not folded into the shared timestamp decoder.
 
+**Implementation note** (2026-08-24): `TransactionResponse.event_id` now
+exposes membership on the transaction read model, and `GET /transactions`
+gained `event_id`/`category_id`/`uncategorized` filters (the last two on the
+**effective** category, `coalesce(confirmed_category_id, suggested_category_id)`;
+combining `category_id` with `uncategorized` is a `422
+conflicting_category_filter`). This is a **display join, not a domain
+change**: `event_id` is resolved separately in `api/routers/transactions.py`
+(`db/repositories.py::get_transaction_event_id` /
+`event_ids_for_transactions`) and passed into
+`TransactionResponse.from_domain` as a keyword — the domain `Transaction`
+still carries no `event_id`, unchanged from the 2026-08-21 note above; the
+same pattern the dashboard category breakdown uses to resolve a category
+name. No `event_name` is returned — the client resolves it from `GET
+/events`, same as it already does for category names. This closes the gap
+that made the advance-detail event chip and `AddEventMembersSheet`'s
+candidate list unable to tell which event (if any) a transaction already
+belonged to; both now filter on `TransactionResponse.eventID` instead of
+discovering the conflict only via the backend's `409`. Movimenti's
+account/category filter chips (`docs/design/canvas/Transactions.dc.html`)
+are the client surface for the same two query parameters — filtering is
+always server-side, never applied to an already-fetched page
+(`TraccioCore.TransactionFilter`).
+
 ---
 
 ## Advance

@@ -9,8 +9,10 @@ import TraccioCore
 /// `TransfersView` whenever there is at least one transfer suggestion to
 /// confirm or reject.
 ///
-/// Follows `docs/design/canvas/Transactions.dc.html`, minus the account/
-/// category filter chips.
+/// Follows `docs/design/canvas/Transactions.dc.html`, including the account/
+/// category filter chips — the filtering happens server-side
+/// (`TransactionFilter`, `TransactionsViewModel.applyFilter(_:)`), never on
+/// an already-fetched page.
 struct TransactionsView: View {
     @State private var model = TransactionsViewModel()
     /// `.transactions` is bumped by a write on another tab that can change
@@ -23,31 +25,111 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            content
-                .background(Palette.background)
-                .navigationTitle("Movimenti")
-                .refreshable { await model.load() }
-                .toolbar {
-                    if model.transferSuggestionCount > 0 {
-                        ToolbarItem(placement: .primaryAction) {
-                            NavigationLink {
-                                TransfersView(
-                                    client: model.client,
-                                    onUpdate: { model.replace($0) },
-                                    onDashboardStale: { freshness.markStale([.dashboard]) }
-                                )
-                            } label: {
-                                Label(
-                                    "\(model.transferSuggestionCount) trasferimenti",
-                                    systemImage: "arrow.left.arrow.right"
-                                )
-                            }
+            VStack(spacing: 0) {
+                filterRow
+                content
+            }
+            .background(Palette.background)
+            .navigationTitle("Movimenti")
+            .refreshable { await model.load() }
+            .toolbar {
+                if model.transferSuggestionCount > 0 {
+                    ToolbarItem(placement: .primaryAction) {
+                        NavigationLink {
+                            TransfersView(
+                                client: model.client,
+                                onUpdate: { model.replace($0) },
+                                onDashboardStale: { freshness.markStale([.dashboard]) }
+                            )
+                        } label: {
+                            Label(
+                                "\(model.transferSuggestionCount) trasferimenti",
+                                systemImage: "arrow.left.arrow.right"
+                            )
                         }
                     }
                 }
+            }
         }
         .task(id: freshness.token(for: .transactions)) { await model.load() }
     }
+
+    // MARK: Filter chips
+
+    /// "Tutti i conti" / "Categoria" chips (`docs/design/canvas/Transactions.dc.html`).
+    /// Always visible, independent of `model.state` — these are controls, not
+    /// content, so a load failure or an empty result doesn't hide them.
+    private var filterRow: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button("Tutti i conti") { applyAccountFilter(nil) }
+                if !model.accountsByID.isEmpty {
+                    Divider()
+                    ForEach(sortedAccounts) { account in
+                        Button(account.name ?? "Conto") { applyAccountFilter(account.id) }
+                    }
+                }
+            } label: {
+                FilterChip(title: accountFilterTitle, isActive: model.filter.accountID != nil)
+            }
+            Menu {
+                Button("Tutte le categorie") { applyCategoryFilter(.any) }
+                Button("Senza categoria") { applyCategoryFilter(.uncategorized) }
+                if !model.categories.isEmpty {
+                    Divider()
+                    ForEach(model.categories) { category in
+                        Button(category.name) { applyCategoryFilter(.some(category.id)) }
+                    }
+                }
+            } label: {
+                FilterChip(title: categoryFilterTitle, isActive: model.filter.category != .any)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private var sortedAccounts: [AccountResponse] {
+        model.accountsByID.values.sorted { ($0.name ?? "") < ($1.name ?? "") }
+    }
+
+    private var accountFilterTitle: String {
+        guard let accountID = model.filter.accountID else { return "Tutti i conti" }
+        return model.accountsByID[accountID]?.name ?? "Conto"
+    }
+
+    private var categoryFilterTitle: String {
+        switch model.filter.category {
+        case .any: "Categoria"
+        case .uncategorized: "Senza categoria"
+        case .some(let categoryID):
+            model.categories.first { $0.id == categoryID }?.name ?? "Categoria"
+        }
+    }
+
+    private func applyAccountFilter(_ accountID: UUID?) {
+        Task {
+            await model.applyFilter(
+                TransactionFilter(
+                    accountID: accountID, eventID: model.filter.eventID, category: model.filter.category
+                )
+            )
+        }
+    }
+
+    private func applyCategoryFilter(_ category: TransactionFilter.CategoryFilter) {
+        Task {
+            await model.applyFilter(
+                TransactionFilter(
+                    accountID: model.filter.accountID, eventID: model.filter.eventID, category: category
+                )
+            )
+        }
+    }
+
+    // MARK: Content
 
     @ViewBuilder
     private var content: some View {
@@ -56,7 +138,7 @@ struct TransactionsView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded(let transactions) where transactions.isEmpty:
-            ContentUnavailableView("Nessun movimento", systemImage: "list.bullet")
+            emptyState
         case .loaded(let transactions):
             list(transactions)
         case .failed:
@@ -64,6 +146,22 @@ struct TransactionsView: View {
                 Label("Impossibile caricare i movimenti", systemImage: "wifi.slash")
             } description: {
                 Text("Verifica che il backend sia in esecuzione, poi riprova.")
+            }
+        }
+    }
+
+    /// Distinguishes "no movements at all" from "no movements match this
+    /// filter" — the latter offers a way back to the unfiltered list rather
+    /// than reading as an empty account.
+    @ViewBuilder
+    private var emptyState: some View {
+        if model.filter == .none {
+            ContentUnavailableView("Nessun movimento", systemImage: "list.bullet")
+        } else {
+            ContentUnavailableView {
+                Label("Nessun movimento con questo filtro", systemImage: "line.3.horizontal.decrease.circle")
+            } actions: {
+                Button("Rimuovi filtro") { Task { await model.applyFilter(.none) } }
             }
         }
     }
@@ -92,6 +190,7 @@ struct TransactionsView: View {
                         advancesByTransactionID: model.advancesByTransactionID,
                         transfersByTransactionID: model.transfersByTransactionID,
                         accountsByID: model.accountsByID,
+                        events: model.events,
                         client: model.client,
                         onUpdate: { model.replace($0) },
                         onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },

@@ -139,13 +139,16 @@ public struct APIClient: Sendable {
     /// Fetch a page of the caller's transactions, most recent first.
     ///
     /// Mirrors `GET /transactions` (`docs/api/openapi.json`). Ordering,
-    /// pagination bounds, and the account-scoping rule all live on the
-    /// backend; this method only shapes the request and decodes the result.
+    /// pagination bounds, and every filter all live on the backend; this
+    /// method only shapes the request and decodes the result — filtering is
+    /// never applied client-side against an already-fetched page (see
+    /// `TransactionFilter`).
     ///
     /// Parameters
     /// ----------
-    /// accountID:
-    ///     When given, restrict to this account. `nil` returns every account.
+    /// filter:
+    ///     Which transactions to include. `.none` (the default) returns
+    ///     every account, every category.
     /// limit:
     ///     Page size; the backend validates `1...200` and defaults to `50`.
     /// offset:
@@ -155,17 +158,14 @@ public struct APIClient: Sendable {
     /// -------
     /// The decoded page of transactions, most recent first.
     public func transactions(
-        accountID: UUID? = nil,
+        filter: TransactionFilter = .none,
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> [TransactionResponse] {
-        var query: [URLQueryItem] = [
+        let query: [URLQueryItem] = [
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
-        ]
-        if let accountID {
-            query.append(URLQueryItem(name: "account_id", value: accountID.uuidString))
-        }
+        ] + filter.queryItems
         let envelope: TransactionsResponse = try await get("transactions", query: query)
         return envelope.transactions
     }

@@ -6,7 +6,7 @@ objects on the way out via :mod:`traccio.db.mappers`, so callers above ``db/``
 never see ORM types.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
@@ -559,17 +559,20 @@ def list_transactions(
     user_id: UUID,
     *,
     account_id: UUID | None = None,
+    event_id: UUID | None = None,
+    category_id: UUID | None = None,
+    uncategorized: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Transaction]:
     """Return the user's transactions, most recent first, paginated.
 
-    Scoped by ``user_id``; the optional ``account_id`` narrows to a single
-    account but is always combined with ``user_id``, so it can never expose
-    another user's rows. Ordering is most-recent-first on
-    ``coalesce(booked_at, value_date)`` (a pending row with no ``booked_at``
-    falls back to its ``value_date``), tie-broken by ``id`` for a deterministic,
-    stable page order without relying on dialect-specific ``NULLS FIRST/LAST``.
+    Scoped by ``user_id``; every optional filter is always combined with
+    ``user_id``, so none can expose another user's rows. Ordering is
+    most-recent-first on ``coalesce(booked_at, value_date)`` (a pending row
+    with no ``booked_at`` falls back to its ``value_date``), tie-broken by
+    ``id`` for a deterministic, stable page order without relying on
+    dialect-specific ``NULLS FIRST/LAST``.
 
     Parameters
     ----------
@@ -579,6 +582,18 @@ def list_transactions(
         Owner whose transactions to return; the query is scoped to it.
     account_id : UUID or None, optional
         When given, restrict to this account (still scoped by ``user_id``).
+    event_id : UUID or None, optional
+        When given, restrict to transactions grouped under this event.
+    category_id : UUID or None, optional
+        When given, restrict to transactions whose **effective** category
+        (``coalesce(confirmed_category_id, suggested_category_id)``) is this
+        one — mirroring the pure ``domain/categories.py::effective_category``
+        in SQL. The caller (``api/``) rejects combining this with
+        ``uncategorized``; this function does not re-check that, it just
+        applies both filters if given both.
+    uncategorized : bool, optional
+        When true, restrict to transactions with no effective category (the
+        same ``coalesce`` expression, ``IS NULL``).
     limit : int, optional
         Maximum number of rows to return. The caller (``api/``) validates the
         bounds; the default matches one page.
@@ -593,6 +608,15 @@ def list_transactions(
     query = select(TransactionRow).where(TransactionRow.user_id == user_id)
     if account_id is not None:
         query = query.where(TransactionRow.account_id == account_id)
+    if event_id is not None:
+        query = query.where(TransactionRow.event_id == event_id)
+    effective_category = func.coalesce(
+        TransactionRow.confirmed_category_id, TransactionRow.suggested_category_id
+    )
+    if category_id is not None:
+        query = query.where(effective_category == category_id)
+    if uncategorized:
+        query = query.where(effective_category.is_(None))
     query = (
         query.order_by(
             func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
@@ -1379,6 +1403,44 @@ def get_transaction_event_id(
             TransactionRow.user_id == user_id,
         )
     ).one_or_none()
+
+
+def event_ids_for_transactions(
+    session: Session, *, user_id: UUID, transaction_ids: Sequence[UUID]
+) -> dict[UUID, UUID]:
+    """Return the event membership of a batch of transactions, as a map.
+
+    Scoped by ``user_id``. A single query for the whole page of a
+    ``GET /transactions`` response, rather than one :func:`get_transaction_event_id`
+    call per row — the batched counterpart to that function. Only entries with
+    a non-``None`` ``event_id`` are included, so a caller checks membership
+    with a plain ``.get(transaction_id)``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the transactions; the query is scoped to it.
+    transaction_ids : Sequence[UUID]
+        The transactions to look up. An empty sequence returns an empty map
+        without querying.
+
+    Returns
+    -------
+    dict[UUID, UUID]
+        Transaction id -> event id, for transactions that belong to one.
+    """
+    if not transaction_ids:
+        return {}
+    rows = session.execute(
+        select(TransactionRow.id, TransactionRow.event_id).where(
+            TransactionRow.user_id == user_id,
+            TransactionRow.id.in_(transaction_ids),
+            TransactionRow.event_id.is_not(None),
+        )
+    ).all()
+    return {row.id: row.event_id for row in rows if row.event_id is not None}
 
 
 def assign_transaction_to_event(

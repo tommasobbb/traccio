@@ -18,7 +18,8 @@ public protocol APIClientProtocol: Sendable {
     func transaction(id: UUID) async throws -> TransactionResponse
     func confirmCategory(transactionID: UUID, categoryID: UUID) async throws
     func clearCategory(transactionID: UUID) async throws
-    func transactions(accountID: UUID?, limit: Int, offset: Int) async throws -> [TransactionResponse]
+    func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
+        -> [TransactionResponse]
     func categories() async throws -> [CategoryResponse]
     func seedDefaultCategories() async throws -> [CategoryResponse]
     func createCategory(name: String) async throws -> CategoryResponse

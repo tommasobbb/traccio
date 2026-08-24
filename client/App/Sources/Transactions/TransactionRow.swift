@@ -24,6 +24,9 @@ struct TransactionRow: View {
     let transfersByTransactionID: [UUID: TransferResponse]
     /// Account id → the account, from `TransactionsViewModel.accountsByID`.
     let accountsByID: [UUID: AccountResponse]
+    /// The caller's events, from `TransactionsViewModel.events`, threaded to
+    /// `TransactionDetailView`'s event chip.
+    let events: [EventResponse]
     /// The client `TransactionDetailView` reaches the backend through — the
     /// same one `TransactionsViewModel` uses, not a second default instance.
     let client: any APIClientProtocol
@@ -49,6 +52,7 @@ struct TransactionRow: View {
                 advance: advance,
                 transfer: transfersByTransactionID[transaction.id],
                 account: accountsByID[transaction.accountID],
+                events: events,
                 client: client,
                 onUpdate: onUpdate,
                 onAdvanceChange: onAdvanceUpdate,

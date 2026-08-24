@@ -286,6 +286,180 @@ def test_transactions_expose_null_category_ids_when_uncategorized() -> None:
     assert row["effective_category_id"] is None
 
 
+def test_transactions_can_be_filtered_by_event() -> None:
+    dev_user_id = get_settings().dev_user_id
+    event_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-IN-EVENT",
+                    description="TEST MERCHANT IN EVENT",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    event_id=event_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-NO-EVENT",
+                    description="TEST MERCHANT NO EVENT",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"event_id": str(event_id)})
+
+    assert response.status_code == 200
+    transactions = response.json()["transactions"]
+    assert [t["description"] for t in transactions] == ["TEST MERCHANT IN EVENT"]
+    assert transactions[0]["event_id"] == str(event_id)
+
+
+def test_transactions_event_id_is_null_when_unassigned() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=uuid4(),
+                stable_key="TX-A",
+                description="TEST MERCHANT 01",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions")
+
+    assert response.json()["transactions"][0]["event_id"] is None
+
+
+def test_transactions_event_filter_is_user_scoped() -> None:
+    """A stranger's event id (or one belonging to another user's transaction)
+    must never leak that transaction to the current user."""
+    stranger_id = uuid4()
+    event_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=stranger_id,
+                account_id=uuid4(),
+                stable_key="TX-STRANGER",
+                description="STRANGER MERCHANT",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                event_id=event_id,
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"event_id": str(event_id)})
+
+    assert response.status_code == 200
+    assert response.json() == {"transactions": []}
+
+
+def test_transactions_can_be_filtered_by_effective_category() -> None:
+    dev_user_id = get_settings().dev_user_id
+    category_id = uuid4()
+    other_category_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                # Confirmed overrides suggested — the effective_category rule.
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-CONFIRMED",
+                    description="TEST MERCHANT CONFIRMED",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    confirmed_category_id=category_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-OTHER",
+                    description="TEST MERCHANT OTHER",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                    confirmed_category_id=other_category_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-UNCATEGORIZED",
+                    description="TEST MERCHANT UNCATEGORIZED",
+                    booked_at=datetime(2026, 1, 3, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 3, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"category_id": str(category_id)})
+
+    assert response.status_code == 200
+    assert [t["description"] for t in response.json()["transactions"]] == [
+        "TEST MERCHANT CONFIRMED"
+    ]
+
+
+def test_transactions_can_be_filtered_to_uncategorized() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-CATEGORIZED",
+                    description="TEST MERCHANT CATEGORIZED",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    confirmed_category_id=uuid4(),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-UNCATEGORIZED",
+                    description="TEST MERCHANT UNCATEGORIZED",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"uncategorized": "true"})
+
+    assert response.status_code == 200
+    assert [t["description"] for t in response.json()["transactions"]] == [
+        "TEST MERCHANT UNCATEGORIZED"
+    ]
+
+
+def test_transactions_rejects_conflicting_category_filters() -> None:
+    response = _client(_sqlite_engine()).get(
+        "/transactions", params={"category_id": str(uuid4()), "uncategorized": "true"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "conflicting_category_filter"
+
+
 # --- GET /transactions/{transaction_id} --------------------------------------
 
 
@@ -312,6 +486,30 @@ def test_get_transaction_returns_the_callers_transaction() -> None:
     assert body["id"] == str(tx_id)
     assert body["amount"] == -1234
     assert body["effective_amount"] == -1234
+
+
+def test_get_transaction_exposes_event_id() -> None:
+    dev_user_id = get_settings().dev_user_id
+    event_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        tx = _tx(
+            user_id=dev_user_id,
+            account_id=uuid4(),
+            stable_key="TX-A",
+            description="TEST MERCHANT 01",
+            booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+            value_date=datetime(2026, 1, 1, tzinfo=UTC),
+            event_id=event_id,
+        )
+        session.add(tx)
+        session.commit()
+        tx_id = tx.id
+
+    response = _client(engine).get(f"/transactions/{tx_id}")
+
+    assert response.status_code == 200
+    assert response.json()["event_id"] == str(event_id)
 
 
 def test_get_transaction_404_for_unknown_id() -> None:

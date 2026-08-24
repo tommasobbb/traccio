@@ -1094,7 +1094,7 @@
         "type": "object"
       },
       "TransactionResponse": {
-        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\n    What the bank reported; used only for balance reconciliation.\neffective_amount : int\n    How much counts as real personal spending, derived from ``role`` and\n    ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).\n    In the same ``currency`` as ``amount``. Every dashboard/budget total\n    flows from this, never from ``amount``.\ncurrency : str\n    ISO 4217 code of both ``amount`` and ``effective_amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.\nsuggested_category_id : UUID or None\n    Written by the categorization engine, overwritten freely on every\n    re-run. ``None`` until an engine exists (see ``tasks/backlog.md`` \u00a7M2).\nconfirmed_category_id : UUID or None\n    Set only by explicit user action via\n    ``POST /transactions/{id}/category``; never by automation.\neffective_category_id : UUID or None\n    The category that actually applies: ``confirmed`` if set, else\n    ``suggested``, else ``None`` (see\n    :func:`~traccio.domain.categories.effective_category`). The client\n    renders this and never re-implements the fallback.",
+        "description": "One transaction as returned to the client.\n\nA narrow projection of :class:`~traccio.domain.models.Transaction`:\n``user_id`` (implied by the caller) and the deduplication internals\n(``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally\nomitted. ``amount`` is integer minor units (cents); ``description`` is the\nbank's raw text \u2014 returned to its owner over authenticated transport, but\nnever logged (see ``.claude/rules/data-safety.md``).\n\nAttributes\n----------\nid : UUID\n    Stable transaction identifier.\naccount_id : UUID\n    Account this movement belongs to.\namount : int\n    Value in the currency's minor unit (cents); negative means outgoing.\n    What the bank reported; used only for balance reconciliation.\neffective_amount : int\n    How much counts as real personal spending, derived from ``role`` and\n    ``status`` (see :func:`~traccio.domain.effective_amount.effective_amount`).\n    In the same ``currency`` as ``amount``. Every dashboard/budget total\n    flows from this, never from ``amount``.\ncurrency : str\n    ISO 4217 code of both ``amount`` and ``effective_amount``.\nbooked_at : datetime or None\n    Settlement time; ``None`` while pending.\nvalue_date : datetime or None\n    When it affects the balance.\ndescription : str\n    Raw text from the bank, preserved verbatim.\ndisplay_description : str or None\n    Cleaned-up description, produced separately (``None`` until built).\nstatus : TransactionStatus\n    ``pending`` or ``booked``.\nrole : TransactionRole\n    How much counts as personal spending; defaults to ``personal``.\nsuggested_category_id : UUID or None\n    Written by the categorization engine, overwritten freely on every\n    re-run. ``None`` until an engine exists (see ``tasks/backlog.md`` \u00a7M2).\nconfirmed_category_id : UUID or None\n    Set only by explicit user action via\n    ``POST /transactions/{id}/category``; never by automation.\neffective_category_id : UUID or None\n    The category that actually applies: ``confirmed`` if set, else\n    ``suggested``, else ``None`` (see\n    :func:`~traccio.domain.categories.effective_category`). The client\n    renders this and never re-implements the fallback.\nevent_id : UUID or None\n    The event this transaction is currently grouped under, or ``None``.\n    A display join, not a domain derivation: ``event_id`` lives only on\n    the DB row (``db/models.py::TransactionRow``), deliberately absent\n    from the domain ``Transaction`` (see ``docs/domain.md`` \u00a7Event), so\n    the caller (``api/routers/transactions.py``) resolves it separately\n    and passes it in \u2014 the same pattern the dashboard category breakdown\n    uses to resolve a category name.",
         "properties": {
           "account_id": {
             "format": "uuid",
@@ -1163,6 +1163,18 @@
               }
             ],
             "title": "Effective Category Id"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Id"
           },
           "id": {
             "format": "uuid",
@@ -2708,7 +2720,7 @@
     },
     "/transactions": {
       "get": {
-        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. The optional\n``account_id`` narrows the result to one account but is always combined with\n``user_id``, so it cannot reach another user's rows. ``limit``/``offset``\npage the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
+        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one. Mutually exclusive with ``uncategorized`` \u2014 combining both is a\n    ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
         "operationId": "transactions_transactions_get",
         "parameters": [
           {
@@ -2726,6 +2738,50 @@
                 }
               ],
               "title": "Account Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uncategorized",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Uncategorized",
+              "type": "boolean"
             }
           },
           {
