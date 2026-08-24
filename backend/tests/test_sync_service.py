@@ -21,9 +21,21 @@ from sqlalchemy.pool import StaticPool
 from traccio.core.crypto import TokenCipher
 from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
-from traccio.db.repositories import activate_connection, create_connection
-from traccio.domain.enums import AccountKind, ConnectionStatus, KeyStrategy, TransactionStatus
-from traccio.domain.models import Account, Connection, Transaction
+from traccio.db.repositories import (
+    activate_connection,
+    create_category,
+    create_connection,
+    create_rule,
+    set_confirmed_category,
+)
+from traccio.domain.enums import (
+    AccountKind,
+    ConnectionStatus,
+    KeyStrategy,
+    RuleMatchKind,
+    TransactionStatus,
+)
+from traccio.domain.models import Account, Category, Connection, Rule, Transaction
 from traccio.domain.money import Money
 from traccio.providers.base import (
     AuthorizationResult,
@@ -372,3 +384,196 @@ def test_provider_error_propagates_unchanged() -> None:
                 consent_warning_window_days=14,
                 now=_NOW,
             )
+
+
+def test_sync_suggests_a_category_for_a_newly_synced_transaction() -> None:
+    """A rule matching the fake's "TEST MERCHANT 01" description suggests a
+    category with no explicit POST /rules/apply call — detection runs as
+    part of the sync pipeline (docs/architecture.md)."""
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        category = create_category(session, category=Category(user_id=_USER_ID, name="Groceries"))
+        create_rule(
+            session,
+            rule=Rule(
+                user_id=_USER_ID,
+                category_id=category.id,
+                match_kind=RuleMatchKind.CONTAINS,
+                pattern="TEST MERCHANT",
+            ),
+        )
+        session.commit()
+
+        sync_connection(
+            session,
+            provider=FakeProvider(),
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        session.commit()
+
+        row = session.scalars(select(TransactionRow)).one()
+        assert row.suggested_category_id == category.id
+        assert row.confirmed_category_id is None
+
+
+def test_sync_never_overwrites_a_confirmed_category() -> None:
+    """confirmed_category_id is set only by explicit user action
+    (docs/domain.md §Category) — a re-sync that re-observes and re-suggests
+    for the same row must never touch it."""
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        provider = FakeProvider()
+
+        sync_connection(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        session.commit()
+
+        transaction_id = session.scalars(select(TransactionRow.id)).one()
+        category = create_category(session, category=Category(user_id=_USER_ID, name="Groceries"))
+        set_confirmed_category(
+            session, user_id=_USER_ID, transaction_id=transaction_id, category_id=category.id
+        )
+        create_rule(
+            session,
+            rule=Rule(
+                user_id=_USER_ID,
+                category_id=category.id,
+                match_kind=RuleMatchKind.CONTAINS,
+                pattern="TEST MERCHANT",
+            ),
+        )
+        session.commit()
+
+        # A later sync re-observes the same (now terminal/booked) transaction
+        # and re-runs detection over it.
+        sync_connection(
+            session,
+            provider=provider,
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW + timedelta(hours=1),
+        )
+        session.commit()
+
+        row = session.scalars(
+            select(TransactionRow).where(TransactionRow.id == transaction_id)
+        ).one()
+        assert row.confirmed_category_id == category.id
+        assert row.suggested_category_id == category.id
+
+
+def test_sync_succeeds_even_if_detection_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Detection failures do not fail the sync (docs/architecture.md)."""
+    import traccio.services.sync as sync_module
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(sync_module, "suggest_categories", boom)
+
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        category = create_category(session, category=Category(user_id=_USER_ID, name="Groceries"))
+        create_rule(
+            session,
+            rule=Rule(
+                user_id=_USER_ID,
+                category_id=category.id,
+                match_kind=RuleMatchKind.CONTAINS,
+                pattern="TEST MERCHANT",
+            ),
+        )
+        session.commit()
+
+        outcome = sync_connection(
+            session,
+            provider=FakeProvider(),
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        session.commit()
+
+        assert outcome.transactions_synced == 1
+        row = session.scalars(select(TransactionRow)).one()
+        assert row.suggested_category_id is None
+
+
+def test_sync_with_no_upserted_transactions_skips_detection_entirely(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No rules are even read when a sync upserts nothing."""
+    import traccio.services.sync as sync_module
+
+    calls: list[None] = []
+
+    def fake_list_rules(*args: object, **kwargs: object) -> list[Rule]:
+        calls.append(None)
+        return []
+
+    monkeypatch.setattr(sync_module, "list_rules", fake_list_rules)
+
+    class EmptyProvider(FakeProvider):
+        def fetch_transactions(
+            self,
+            *,
+            credentials: str,
+            account: Account,
+            since: datetime,
+            until: datetime | None,
+            context: SyncContext,
+        ) -> list[Transaction]:
+            return []
+
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+
+        sync_connection(
+            session,
+            provider=EmptyProvider(),
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+
+        assert calls == []

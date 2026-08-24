@@ -1,4 +1,5 @@
-"""Orchestrate one connection's sync: fetch, normalize, deduplicate, persist.
+"""Orchestrate one connection's sync: fetch, normalize, deduplicate, persist,
+detect.
 
 The single path both a user-triggered sync (``POST /connections/{id}/sync``)
 and a scheduled background sync (:mod:`traccio.services.scheduler`) go
@@ -7,6 +8,16 @@ adapter) -> deduplicate -> persist -> run detection -> record outcome.
 Extracted from ``api/routers/connections.py`` so the scheduler can call
 exactly the same path an HTTP-triggered sync uses, rather than a second copy
 of the orchestration.
+
+**Detection is scoped to this sync's own upserted transactions, not a full
+recompute.** ``POST /rules/apply`` (:mod:`traccio.api.routers.rules`) already
+offers the full, explicit, idempotent recompute over every transaction — that
+is the right shape for a user-triggered "re-run my rules" action, but wrong
+for something that fires on every sync: re-suggesting categories for
+hundreds of already-categorized transactions on every tick would waste work
+for no behavior change (a transaction's suggestion cannot change unless its
+own description or the rule set changed). Limiting to the rows this sync
+actually touched keeps detection proportional to what's new.
 
 Unlike :mod:`traccio.services.advances`, :mod:`traccio.services.categorization`,
 and :mod:`traccio.services.transfers` (all pure, importing only ``domain``),
@@ -31,17 +42,23 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from traccio.core.crypto import TokenCipher
+from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     get_connection,
     get_connection_credentials,
+    list_rules,
     mark_connection_synced,
+    set_suggested_categories,
     upsert_account,
     upsert_transaction,
 )
 from traccio.domain.consent import consent_state
 from traccio.domain.enums import ConsentState
-from traccio.domain.models import Account
+from traccio.domain.models import Account, Transaction
 from traccio.providers.base import BankProvider, SyncContext
+from traccio.services.categorization import suggest_categories
+
+logger = get_logger(__name__)
 
 
 def _as_aware_utc(value: datetime) -> datetime:
@@ -140,6 +157,10 @@ def sync_connection(
     record some movements with a retroactive date, and the overlap is free
     since ``upsert_transaction`` is idempotent on stable identity.
 
+    After persisting, runs categorization detection
+    (:func:`_suggest_categories_for`) against this sync's own upserted rows —
+    non-fatal, so a detection failure never fails the sync.
+
     Parameters
     ----------
     session : Session
@@ -216,6 +237,7 @@ def sync_connection(
 
     provider_accounts = provider.list_accounts(credentials=credentials, context=context)
     transactions_synced = 0
+    upserted: list[Transaction] = []
     for provider_account in provider_accounts:
         account = upsert_account(
             session,
@@ -236,8 +258,10 @@ def sync_connection(
             context=context,
         )
         for transaction in transactions:
-            upsert_transaction(session, transaction=transaction, now=now)
+            upserted.append(upsert_transaction(session, transaction=transaction, now=now))
         transactions_synced += len(transactions)
+
+    _suggest_categories_for(session, user_id=user_id, transactions=upserted)
 
     mark_connection_synced(session, user_id=user_id, connection_id=connection_id, now=now)
 
@@ -245,3 +269,43 @@ def sync_connection(
         accounts_synced=len(provider_accounts),
         transactions_synced=transactions_synced,
     )
+
+
+def _suggest_categories_for(
+    session: Session, *, user_id: UUID, transactions: list[Transaction]
+) -> None:
+    """Run categorization detection against this sync's own upserted rows.
+
+    A non-fatal pipeline step (``docs/architecture.md``: "detection failures
+    do not fail the sync") — any failure is logged and swallowed, never
+    propagated, so a categorization bug cannot turn a successful sync into a
+    failed one. Writes only ``suggested_category_id``
+    (:func:`~traccio.db.repositories.set_suggested_categories`); never
+    ``confirmed_category_id``, which no automated path may touch
+    (``docs/domain.md`` §Category).
+
+    A no-op for an empty ``transactions`` list — no need to even read the
+    user's rules on a sync that upserted nothing (a terminal row re-observed
+    unchanged, or zero accounts).
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose rules to apply.
+    transactions : list[Transaction]
+        This sync's own upserted rows (inserted, or a pending row refreshed
+        in place) — never the user's whole transaction pool. Re-suggesting
+        categories for rows a prior sync already categorized would waste
+        work for no behavior change; see the module docstring.
+    """
+    if not transactions:
+        return
+    try:
+        rules = list_rules(session, user_id)
+        suggestions = suggest_categories(transactions, rules)
+        assignments = {s.transaction_id: s.category_id for s in suggestions}
+        set_suggested_categories(session, user_id=user_id, assignments=assignments)
+    except Exception:
+        logger.warning("sync.detection_failed", user_id=str(user_id))
