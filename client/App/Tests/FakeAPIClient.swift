@@ -73,6 +73,21 @@ actor FakeAPIClient: APIClientProtocol {
     var confirmTransferError: Error?
     var rejectTransferError: Error?
     var deleteTransferError: Error?
+    var eventsToReturn: [EventResponse] = []
+    var eventsError: Error?
+    var eventToReturn: EventResponse?
+    var eventError: Error?
+    var eventTransactionsToReturn: [TransactionResponse] = []
+    var eventTransactionsError: Error?
+    var createEventToReturn: EventResponse?
+    var createEventError: Error?
+    var deleteEventError: Error?
+    var closeEventToReturn: EventResponse?
+    var closeEventError: Error?
+    var reopenEventToReturn: EventResponse?
+    var reopenEventError: Error?
+    var assignTransactionError: Error?
+    var unassignTransactionError: Error?
 
     // MARK: Call recording
 
@@ -94,6 +109,15 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var createdRuleRequests: [CreateRuleRequest] = []
     private(set) var deletedRuleIDs: [UUID] = []
     private(set) var applyRulesCallCount = 0
+    private(set) var eventsFetchCount = 0
+    private(set) var eventFetchCount = 0
+    private(set) var eventTransactionsFetchCount = 0
+    private(set) var createdEventRequests: [CreateEventRequest] = []
+    private(set) var deletedEventIDs: [UUID] = []
+    private(set) var closeEventCallCount = 0
+    private(set) var reopenEventCallCount = 0
+    private(set) var assignedEventMembers: [RecordedEventMember] = []
+    private(set) var unassignedEventMembers: [RecordedEventMember] = []
 
     /// A recorded `renameCategory(id:name:)` call, for asserting exactly
     /// which category was renamed to what.
@@ -107,6 +131,13 @@ actor FakeAPIClient: APIClientProtocol {
     struct RecordedTransferPair: Equatable {
         let outgoingID: UUID
         let incomingID: UUID
+    }
+
+    /// A recorded `eventID`/`transactionID` pair, for asserting exactly which
+    /// event and transaction an assign/unassign call named.
+    struct RecordedEventMember: Equatable {
+        let eventID: UUID
+        let transactionID: UUID
     }
 
     // MARK: Configuration (actor-isolated setters, `await`ed from a test)
@@ -272,6 +303,66 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setCreateReimbursementError(_ error: Error) {
         createReimbursementError = error
+    }
+
+    func setEvents(_ events: [EventResponse]) {
+        eventsToReturn = events
+    }
+
+    func setEventsError(_ error: Error) {
+        eventsError = error
+    }
+
+    func setEvent(_ event: EventResponse) {
+        eventToReturn = event
+    }
+
+    func setEventError(_ error: Error) {
+        eventError = error
+    }
+
+    func setEventTransactions(_ transactions: [TransactionResponse]) {
+        eventTransactionsToReturn = transactions
+    }
+
+    func setEventTransactionsError(_ error: Error) {
+        eventTransactionsError = error
+    }
+
+    func setCreateEventResult(_ event: EventResponse) {
+        createEventToReturn = event
+    }
+
+    func setCreateEventError(_ error: Error) {
+        createEventError = error
+    }
+
+    func setDeleteEventError(_ error: Error) {
+        deleteEventError = error
+    }
+
+    func setCloseEventResult(_ event: EventResponse) {
+        closeEventToReturn = event
+    }
+
+    func setCloseEventError(_ error: Error) {
+        closeEventError = error
+    }
+
+    func setReopenEventResult(_ event: EventResponse) {
+        reopenEventToReturn = event
+    }
+
+    func setReopenEventError(_ error: Error) {
+        reopenEventError = error
+    }
+
+    func setAssignTransactionError(_ error: Error) {
+        assignTransactionError = error
+    }
+
+    func setUnassignTransactionError(_ error: Error) {
+        unassignTransactionError = error
     }
 
     // MARK: APIClientProtocol
@@ -448,6 +539,61 @@ actor FakeAPIClient: APIClientProtocol {
     func deleteTransfer(id: UUID) async throws {
         if let deleteTransferError { throw deleteTransferError }
         deletedTransferIDs.append(id)
+    }
+
+    func events() async throws -> [EventResponse] {
+        eventsFetchCount += 1
+        if let eventsError { throw eventsError }
+        return eventsToReturn
+    }
+
+    func event(id: UUID) async throws -> EventResponse {
+        eventFetchCount += 1
+        if let eventError { throw eventError }
+        guard let eventToReturn else { throw NotConfigured() }
+        return eventToReturn
+    }
+
+    func eventTransactions(id: UUID) async throws -> [TransactionResponse] {
+        eventTransactionsFetchCount += 1
+        if let eventTransactionsError { throw eventTransactionsError }
+        return eventTransactionsToReturn
+    }
+
+    func createEvent(_ request: CreateEventRequest) async throws -> EventResponse {
+        if let createEventError { throw createEventError }
+        createdEventRequests.append(request)
+        guard let createEventToReturn else { throw NotConfigured() }
+        return createEventToReturn
+    }
+
+    func deleteEvent(id: UUID) async throws {
+        if let deleteEventError { throw deleteEventError }
+        deletedEventIDs.append(id)
+    }
+
+    func closeEvent(id: UUID) async throws -> EventResponse {
+        closeEventCallCount += 1
+        if let closeEventError { throw closeEventError }
+        guard let closeEventToReturn else { throw NotConfigured() }
+        return closeEventToReturn
+    }
+
+    func reopenEvent(id: UUID) async throws -> EventResponse {
+        reopenEventCallCount += 1
+        if let reopenEventError { throw reopenEventError }
+        guard let reopenEventToReturn else { throw NotConfigured() }
+        return reopenEventToReturn
+    }
+
+    func assignTransaction(eventID: UUID, transactionID: UUID) async throws {
+        if let assignTransactionError { throw assignTransactionError }
+        assignedEventMembers.append(RecordedEventMember(eventID: eventID, transactionID: transactionID))
+    }
+
+    func unassignTransaction(eventID: UUID, transactionID: UUID) async throws {
+        if let unassignTransactionError { throw unassignTransactionError }
+        unassignedEventMembers.append(RecordedEventMember(eventID: eventID, transactionID: transactionID))
     }
 }
 

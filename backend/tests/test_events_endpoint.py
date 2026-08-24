@@ -19,8 +19,10 @@ from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.db.base import Base
 from traccio.db.models import TransactionRow
+from traccio.db.repositories import create_event
 from traccio.db.session import get_session
 from traccio.domain.enums import KeyStrategy, TransactionRole, TransactionStatus
+from traccio.domain.models import Event
 
 _DAY = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -262,6 +264,69 @@ def test_mixed_currency_assignment_is_refused() -> None:
 
 def test_delete_unknown_event_is_404() -> None:
     assert _client(_sqlite_engine()).delete(f"/events/{uuid4()}").status_code == 404
+
+
+def test_event_transactions_lists_members_most_recent_first() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    older = _seed_tx(engine, user_id=dev_user_id, amount=-1000, stable_key="TX-OLDER")
+    newer = _seed_tx(engine, user_id=dev_user_id, amount=-2000, stable_key="TX-NEWER")
+    # Give the two rows distinct booked_at dates so ordering is unambiguous.
+    with Session(engine) as session:
+        session.get(TransactionRow, UUID(older)).booked_at = datetime(2026, 3, 1, tzinfo=UTC)
+        session.get(TransactionRow, UUID(newer)).booked_at = datetime(2026, 3, 5, tzinfo=UTC)
+        session.commit()
+    client = _client(engine)
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+    client.post(f"/events/{event_id}/transactions", json={"transaction_id": older})
+    client.post(f"/events/{event_id}/transactions", json={"transaction_id": newer})
+
+    response = client.get(f"/events/{event_id}/transactions")
+
+    assert response.status_code == 200
+    ids = [tx["id"] for tx in response.json()["transactions"]]
+    assert ids == [newer, older]
+
+
+def test_event_transactions_empty_event_returns_empty_list() -> None:
+    client = _client(_sqlite_engine())
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+
+    response = client.get(f"/events/{event_id}/transactions")
+
+    assert response.status_code == 200
+    assert response.json()["transactions"] == []
+
+
+def test_event_transactions_unknown_event_is_404() -> None:
+    assert _client(_sqlite_engine()).get(f"/events/{uuid4()}/transactions").status_code == 404
+
+
+def test_event_transactions_another_users_event_is_404() -> None:
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        theirs = create_event(session, event=Event(user_id=stranger_id, name="THEIRS"))
+        session.commit()
+        event_id = theirs.id
+    client = _client(engine)
+
+    assert client.get(f"/events/{event_id}/transactions").status_code == 404
+
+
+def test_event_transactions_exposes_advance_share_not_full_amount() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    advanced = _seed_tx(engine, user_id=dev_user_id, amount=-100000, stable_key="TX-ADV")
+    client = _client(engine)
+    client.post("/advances", json={"transaction_id": advanced, "own_share": 20000})
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+    client.post(f"/events/{event_id}/transactions", json={"transaction_id": advanced})
+
+    [member] = client.get(f"/events/{event_id}/transactions").json()["transactions"]
+
+    assert member["amount"] == -100000
+    assert member["effective_amount"] == -20000
 
 
 def test_cannot_assign_another_users_transaction() -> None:

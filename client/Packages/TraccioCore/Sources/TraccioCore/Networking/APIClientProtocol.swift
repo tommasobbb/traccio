@@ -46,6 +46,15 @@ public protocol APIClientProtocol: Sendable {
     func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse
     func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws
     func deleteTransfer(id: UUID) async throws
+    func events() async throws -> [EventResponse]
+    func event(id: UUID) async throws -> EventResponse
+    func eventTransactions(id: UUID) async throws -> [TransactionResponse]
+    func createEvent(_ request: CreateEventRequest) async throws -> EventResponse
+    func deleteEvent(id: UUID) async throws
+    func closeEvent(id: UUID) async throws -> EventResponse
+    func reopenEvent(id: UUID) async throws -> EventResponse
+    func assignTransaction(eventID: UUID, transactionID: UUID) async throws
+    func unassignTransaction(eventID: UUID, transactionID: UUID) async throws
 }
 
 extension APIClient: APIClientProtocol {}

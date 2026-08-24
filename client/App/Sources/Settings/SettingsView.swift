@@ -2,9 +2,8 @@ import SwiftUI
 import TraccioCore
 
 /// The Impostazioni tab — the container for every settings-shaped screen
-/// this app has or will have (ADR 0009). "Categorie e regole" is the first
-/// and only entry today; Eventi (an entire M2 backend with no client
-/// surface yet), biometric lock, and backup/export are tracked in
+/// this app has or will have (ADR 0009). "Categorie e regole" and "Eventi"
+/// are the entries today; biometric lock and backup/export are tracked in
 /// `tasks/backlog.md` as later entries here.
 ///
 /// No mockup covers this screen (`docs/design/canvas/` mocks only
@@ -26,6 +25,13 @@ struct SettingsView: View {
                         )
                     } label: {
                         settingsRow(title: "Categorie e regole", systemImage: "tag")
+                    }
+                    .buttonStyle(.plain)
+                    Divider().overlay(Palette.separator)
+                    NavigationLink {
+                        EventsView()
+                    } label: {
+                        settingsRow(title: "Eventi", systemImage: "calendar")
                     }
                     .buttonStyle(.plain)
                 }

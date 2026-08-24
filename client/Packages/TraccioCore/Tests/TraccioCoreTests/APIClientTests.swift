@@ -1173,6 +1173,250 @@ struct APIClientTests {
             return true
         }
     }
+
+    @Test func eventsDecodesEnvelope() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/events")
+            let envelope = """
+                { "events": [ {
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "name": "TEST TRIP 01",
+                  "start_date": "2026-08-01",
+                  "end_date": null,
+                  "status": "active",
+                  "member_count": 1,
+                  "total": -5000,
+                  "currency": "EUR",
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                } ] }
+                """
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let events = try await client.events()
+        #expect(events.count == 1)
+        #expect(events[0].name == "TEST TRIP 01")
+        #expect(events[0].startDate == CalendarDate(year: 2026, month: 8, day: 1))
+    }
+
+    @Test func eventFetchesOneRowByID() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)")
+            let envelope = """
+                {
+                  "id": "\(eventID.uuidString)",
+                  "name": "TEST TRIP 01",
+                  "start_date": null,
+                  "end_date": null,
+                  "status": "active",
+                  "member_count": 0,
+                  "total": 0,
+                  "currency": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let event = try await client.event(id: eventID)
+        #expect(event.id == eventID)
+    }
+
+    @Test func eventTransactionsDecodesEnvelope() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)/transactions")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{ "transactions": [] }"#.utf8))
+        }
+
+        let members = try await client.eventTransactions(id: eventID)
+        #expect(members.isEmpty)
+    }
+
+    @Test func createEventPostsTheRequestAsSnakeCaseJSON() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/events")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["name"] as? String == "TEST TRIP 01")
+            #expect(body?["start_date"] as? String == "2026-08-01")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "11111111-1111-1111-1111-111111111111",
+                  "name": "TEST TRIP 01",
+                  "start_date": "2026-08-01",
+                  "end_date": null,
+                  "status": "active",
+                  "member_count": 0,
+                  "total": 0,
+                  "currency": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let event = try await client.createEvent(
+            CreateEventRequest(name: "TEST TRIP 01", startDate: CalendarDate(year: 2026, month: 8, day: 1))
+        )
+        #expect(event.name == "TEST TRIP 01")
+    }
+
+    @Test func deleteEventIssuesADeleteToTheEventEndpoint() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteEvent(id: eventID)
+    }
+
+    @Test func deleteEventThrowsBadStatusOnUnknownEvent() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "unknown event"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteEvent(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(404) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func closeEventPostsToTheCloseEndpointAndDecodesTheUpdatedEvent() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)/close")
+            let envelope = """
+                {
+                  "id": "\(eventID.uuidString)",
+                  "name": "TEST TRIP 01",
+                  "start_date": null,
+                  "end_date": null,
+                  "status": "closed",
+                  "member_count": 0,
+                  "total": 0,
+                  "currency": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let event = try await client.closeEvent(id: eventID)
+        #expect(event.status == .closed)
+    }
+
+    @Test func reopenEventPostsToTheReopenEndpointAndDecodesTheUpdatedEvent() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)/reopen")
+            let envelope = """
+                {
+                  "id": "\(eventID.uuidString)",
+                  "name": "TEST TRIP 01",
+                  "start_date": null,
+                  "end_date": null,
+                  "status": "active",
+                  "member_count": 0,
+                  "total": 0,
+                  "currency": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(envelope.utf8))
+        }
+
+        let event = try await client.reopenEvent(id: eventID)
+        #expect(event.status == .active)
+    }
+
+    @Test func assignTransactionPostsTheTransactionIDAsSnakeCaseJSON() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let transactionID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)/transactions")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["transaction_id"] == transactionID.uuidString)
+            // 204 No Content: an empty body must still decode as success.
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.assignTransaction(eventID: eventID, transactionID: transactionID)
+    }
+
+    @Test func assignTransactionThrowsBadStatusWhenAlreadyInAnotherEvent() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "transaction already in another event"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.assignTransaction(eventID: UUID(), transactionID: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    @Test func unassignTransactionIssuesADeleteToTheMemberEndpoint() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let transactionID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(
+                request.url?.path
+                    == "/events/\(eventID.uuidString)/transactions/\(transactionID.uuidString)"
+            )
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.unassignTransaction(eventID: eventID, transactionID: transactionID)
+    }
 }
 
 /// Read every byte of `stream` into `Data`, or empty `Data` if `stream` is `nil`.

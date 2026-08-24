@@ -28,6 +28,7 @@ from traccio.api.schemas.events import (
     EventResponse,
     EventsResponse,
 )
+from traccio.api.schemas.transactions import TransactionResponse, TransactionsResponse
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     assign_transaction_to_event,
@@ -46,7 +47,8 @@ from traccio.db.repositories import (
 from traccio.db.session import get_session
 from traccio.domain.enums import EventStatus
 from traccio.domain.events import event_total
-from traccio.domain.models import Event
+from traccio.domain.models import Event, Transaction
+from traccio.domain.money import Money
 from traccio.services.advances import spending_shares
 
 logger = get_logger(__name__)
@@ -66,18 +68,32 @@ def _load_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event:
     return event
 
 
+def _advance_spending_shares(
+    session: Session, *, user_id: UUID, transactions: list[Transaction]
+) -> dict[UUID, Money]:
+    """Resolve each advanced transaction's signed spending share.
+
+    Shared by :func:`_event_response` (the derived net total) and
+    :func:`event_transactions` (the member listing) — both need the same
+    advance-share resolution :func:`~traccio.api.routers.transactions.transactions`
+    performs, since an advance's ``effective_amount`` is a derived share, not its
+    full amount.
+    """
+    advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
+    reimbursed = sum_reimbursements_by_advance(session, user_id)
+    return spending_shares(transactions, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
+
+
 def _event_response(session: Session, *, user_id: UUID, event: Event) -> EventResponse:
     """Project an event with its derived net total and member count threaded in.
 
     Resolves each advance member's spending share (via
-    :func:`~traccio.services.advances.spending_shares`) so the pure
+    :func:`_advance_spending_shares`) so the pure
     :func:`~traccio.domain.events.event_total` can sum ``effective_amount`` across
     the members in the event's single currency.
     """
     members = list_event_members(session, user_id=user_id, event_id=event.id)
-    advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
-    reimbursed = sum_reimbursements_by_advance(session, user_id)
-    shares = spending_shares(members, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
+    shares = _advance_spending_shares(session, user_id=user_id, transactions=members)
     total = event_total(members, advance_shares=shares)
     return EventResponse.from_domain(event, total=total, member_count=len(members))
 
@@ -174,6 +190,45 @@ def event(
     """
     found = _load_event(session, user_id=user_id, event_id=event_id)
     return _event_response(session, user_id=user_id, event=found)
+
+
+@router.get("/events/{event_id}/transactions", response_model=TransactionsResponse)
+def event_transactions(
+    event_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> TransactionsResponse:
+    """List an event's member transactions, most recent first.
+
+    Membership is a reporting lens (see the module docstring): this endpoint
+    only reads which transactions are grouped under the event, unpaginated —
+    an event's members are a bounded set, unlike ``GET /transactions``'s
+    unbounded pool. Scoped to the current user; a ``404`` if the event is
+    unknown or not the caller's.
+
+    Parameters
+    ----------
+    event_id : UUID
+        The event whose members to list.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the event belongs to.
+
+    Returns
+    -------
+    TransactionsResponse
+        The event's member transactions, most recent first (empty if none).
+    """
+    _load_event(session, user_id=user_id, event_id=event_id)
+    members = list_event_members(session, user_id=user_id, event_id=event_id)
+    shares = _advance_spending_shares(session, user_id=user_id, transactions=members)
+    responses = [
+        TransactionResponse.from_domain(transaction, advance_own_share=shares.get(transaction.id))
+        for transaction in members
+    ]
+    logger.info("events.transactions.list", event_id=str(event_id), count=len(responses))
+    return TransactionsResponse(transactions=responses)
 
 
 @router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)

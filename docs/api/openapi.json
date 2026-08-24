@@ -2452,6 +2452,45 @@
       }
     },
     "/events/{event_id}/transactions": {
+      "get": {
+        "description": "List an event's member transactions, most recent first.\n\nMembership is a reporting lens (see the module docstring): this endpoint\nonly reads which transactions are grouped under the event, unpaginated \u2014\nan event's members are a bounded set, unlike ``GET /transactions``'s\nunbounded pool. Scoped to the current user; a ``404`` if the event is\nunknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event whose members to list.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nTransactionsResponse\n    The event's member transactions, most recent first (empty if none).",
+        "operationId": "event_transactions_events__event_id__transactions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Event Transactions"
+      },
       "post": {
         "description": "Group a transaction under an event.\n\nSets the transaction's ``event_id`` \u2014 the membership is a reporting lens and\ndoes not change its ``role`` or ``effective_amount``. A ``404`` if the event\nor transaction is unknown or not the caller's; a ``409`` if the transaction\nalready belongs to a *different* event (one event per transaction).\nRe-assigning to the same event is idempotent. Scoped to the current user.\n\nParameters\n----------\nevent_id : UUID\n    The event to group the transaction under.\nbody : AssignTransactionRequest\n    The transaction to assign.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user both the event and transaction belong to.",
         "operationId": "assign_transaction_events__event_id__transactions_post",

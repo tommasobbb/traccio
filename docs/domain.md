@@ -280,6 +280,19 @@ also a later slice (the dates are stored as hints, nothing consumes them yet)
 — both tracked in `tasks/backlog.md`. A mixed-currency event has no single
 total (no FX in Traccio) and is refused.
 
+**Implementation note** (2026-08-24): the client had no surface for any of
+this until now — a full backend with zero callers. Shipped end to end: one
+new endpoint, `GET /events/{id}/transactions`, reuses the existing
+`list_event_members` repository read (previously only consumed internally by
+`_event_response`) to expose an event's member transactions, unpaginated
+(the member set is bounded, unlike `GET /transactions`'s pool). The Eventi
+screen (`App/Sources/Events/`, reached from Impostazioni per ADR 0009) lists
+events, creates one, and on its detail screen shows the net total and
+members, assigns/unassigns transactions, and closes/reopens or deletes the
+event. `start_date`/`end_date` introduced a new client-side type,
+`TraccioCore.CalendarDate` — the first date-only (`yyyy-MM-dd`) field in the
+API, deliberately not folded into the shared timestamp decoder.
+
 ---
 
 ## Advance
