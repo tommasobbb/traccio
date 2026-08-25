@@ -31,8 +31,19 @@ struct DashboardView: View {
             }
             .background(Palette.background)
             .navigationTitle("Panoramica")
+            .animation(.easeInOut(duration: 0.2), value: stateTag)
         }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
+    }
+
+    /// A cheap discriminator for `.animation(_:value:)` — see
+    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
+    private var stateTag: String {
+        switch model.state {
+        case .idle, .loading: "loading"
+        case .loaded: "loaded"
+        case .failed: "failed"
+        }
     }
 
     @ViewBuilder

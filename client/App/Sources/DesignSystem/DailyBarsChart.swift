@@ -16,6 +16,9 @@ struct DailyBarsChart: View {
     let bars: [DailyBar]
     var height: CGFloat = 90
     var barSpacing: CGFloat = 3
+    /// Drives the draw-in on appear — every bar grows from zero to its
+    /// actual height, rather than popping in already drawn.
+    @State private var isDrawn = false
 
     var body: some View {
         HStack(alignment: .bottom, spacing: barSpacing) {
@@ -28,13 +31,18 @@ struct DailyBarsChart: View {
                     // track underneath never reads as a missing bar.
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(Palette.accent)
-                        .frame(height: max(3, height * bar.fraction))
+                        .frame(height: isDrawn ? max(3, height * bar.fraction) : 0)
                 }
                 .frame(maxWidth: .infinity)
             }
         }
         .frame(height: height)
         .accessibilityHidden(true)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.5)) {
+                isDrawn = true
+            }
+        }
     }
 }
 

@@ -45,6 +45,7 @@ struct CategorizationView: View {
         }
         .background(Palette.background)
         .navigationTitle("Categorie e regole")
+        .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }
         .task { await model.load() }
         .sheet(isPresented: $isPresentingCreateRuleSheet) {
@@ -84,6 +85,16 @@ struct CategorizationView: View {
                 },
                 onCancel: { isPresentingCategorySheet = false }
             )
+        }
+    }
+
+    /// A cheap discriminator for `.animation(_:value:)` — see
+    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
+    private var stateTag: String {
+        switch model.state {
+        case .idle, .loading: "loading"
+        case .loaded: "loaded"
+        case .failed: "failed"
         }
     }
 

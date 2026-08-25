@@ -80,6 +80,14 @@ final class TransactionDetailViewModel {
     private(set) var isUpdating = false
     /// The most recent action failure, if any, for the view to surface.
     private(set) var actionFailure: ActionFailure?
+    /// Increments once per successful category confirm/clear, advance
+    /// creation, or reimbursement creation — a trigger for
+    /// `.sensoryFeedback(.success, trigger:)`, not a count anyone reads.
+    /// `actionFailure` already covers the failure trigger; this is its
+    /// success-side counterpart, needed because it must change on *every*
+    /// success (including a second identical one in a row), which a `Bool`
+    /// flipping to the same value again would not.
+    private(set) var successTick = 0
 
     /// Client used to reach the backend.
     private let client: any APIClientProtocol
@@ -282,6 +290,7 @@ final class TransactionDetailViewModel {
             onUpdate(refreshed)
             onAdvanceChange(created)
             onDashboardStale()
+            successTick += 1
         } catch {
             actionFailure = .generic
         }
@@ -406,6 +415,7 @@ final class TransactionDetailViewModel {
                 onUpdate(refreshedLinked)
             }
             onDashboardStale()
+            successTick += 1
         } catch {
             actionFailure = .generic
         }
@@ -501,6 +511,7 @@ final class TransactionDetailViewModel {
             transaction = refreshed
             onUpdate(refreshed)
             onDashboardStale()
+            successTick += 1
         } catch {
             actionFailure = .generic
         }

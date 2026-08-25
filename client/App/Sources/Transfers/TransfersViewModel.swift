@@ -45,6 +45,11 @@ final class TransfersViewModel {
     private(set) var isUpdating = false
     /// The most recent action failure, if any, for the view to surface.
     private(set) var actionFailure: ActionFailure?
+    /// Increments once per successful confirm — a `.sensoryFeedback(.success,
+    /// trigger:)` trigger, not a count anyone reads. Deliberately not bumped
+    /// on a successful reject: dismissing a suggestion is a "not this one,"
+    /// not an accomplishment worth celebrating with a haptic.
+    private(set) var successTick = 0
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -137,6 +142,7 @@ final class TransfersViewModel {
         }
         if actionFailure == nil {
             onDashboardStale()
+            successTick += 1
         }
     }
 

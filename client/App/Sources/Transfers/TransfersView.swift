@@ -45,8 +45,21 @@ struct TransfersView: View {
         content
             .background(Palette.background)
             .navigationTitle("Trasferimenti")
+            .sensoryFeedback(.success, trigger: model.successTick)
+            .sensoryFeedback(.error, trigger: model.actionFailure)
+            .animation(.easeInOut(duration: 0.2), value: stateTag)
             .task { await model.load() }
             .refreshable { await model.load() }
+    }
+
+    /// A cheap discriminator for `.animation(_:value:)` — see
+    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
+    private var stateTag: String {
+        switch model.state {
+        case .idle, .loading: "loading"
+        case .loaded: "loaded"
+        case .failed: "failed"
+        }
     }
 
     @ViewBuilder

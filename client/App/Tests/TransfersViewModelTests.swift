@@ -153,6 +153,42 @@ struct TransfersViewModelTests {
         #expect(freshness.token(for: .dashboard) == 1)
     }
 
+    @Test func confirmSuccessIncrementsSuccessTick() async throws {
+        let client = await Self.makeClientWithOneSuggestion()
+        await client.setConfirmTransferResult(
+            TransferResponse(
+                id: UUID(), outgoingTransactionID: Self.outgoingID, incomingTransactionID: Self.incomingID,
+                createdAt: Date()
+            )
+        )
+        let model = TransfersViewModel(client: client)
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded pair")
+            return
+        }
+
+        await model.confirm(pair)
+
+        #expect(model.successTick == 1)
+    }
+
+    @Test func rejectSuccessNeverIncrementsSuccessTick() async throws {
+        // Dismissing a suggestion is "not this one," not an accomplishment
+        // worth a haptic — see `successTick`'s doc comment.
+        let client = await Self.makeClientWithOneSuggestion()
+        let model = TransfersViewModel(client: client)
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded pair")
+            return
+        }
+
+        await model.reject(pair)
+
+        #expect(model.successTick == 0)
+    }
+
     @Test func confirmFailureNeverInvalidatesDashboardFreshness() async throws {
         let client = await Self.makeClientWithOneSuggestion()
         await client.setConfirmTransferError(FakeAPIError())

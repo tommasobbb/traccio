@@ -82,6 +82,26 @@ struct TransactionDetailViewModelTests {
         #expect(await client.transactionFetchCount == 1)
     }
 
+    @Test func confirmSuccessIncrementsSuccessTick() async throws {
+        let client = FakeAPIClient()
+        await client.setTransaction(Self.makeTransaction(confirmedCategoryID: Self.categoryID))
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.confirm(categoryID: Self.categoryID)
+
+        #expect(model.successTick == 1)
+    }
+
+    @Test func confirmFailureNeverIncrementsSuccessTick() async throws {
+        let client = FakeAPIClient()
+        await client.setConfirmCategoryError(FakeAPIError())
+        let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
+
+        await model.confirm(categoryID: Self.categoryID)
+
+        #expect(model.successTick == 0)
+    }
+
     @Test func confirmSuccessInvalidatesOnlyTheDashboardFreshnessScope() async throws {
         // The scope split this test exists for: confirming a category
         // changes GET /dashboard/summary's by_category breakdown, but not

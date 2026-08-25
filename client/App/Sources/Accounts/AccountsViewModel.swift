@@ -49,6 +49,9 @@ final class AccountsViewModel {
     private(set) var reauthorizing: Set<UUID> = []
     /// The most recent action failure, if any, for the view to surface.
     private(set) var actionFailure: ActionFailure?
+    /// Increments once per successful manual sync — a `.sensoryFeedback(
+    /// .success, trigger:)` trigger, not a count anyone reads.
+    private(set) var successTick = 0
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -110,6 +113,7 @@ final class AccountsViewModel {
         do {
             _ = try await client.syncConnection(connectionID: connectionID)
             await load()
+            successTick += 1
         } catch APIError.badStatus(409) {
             actionFailure = .consentExpired(connectionID: connectionID)
             await load()

@@ -18,6 +18,9 @@ struct AccountsView: View {
             content
                 .background(Palette.background)
                 .navigationTitle("Conti")
+                .sensoryFeedback(.success, trigger: model.successTick)
+                .sensoryFeedback(.error, trigger: model.actionFailure)
+                .animation(.easeInOut(duration: 0.2), value: stateTag)
                 .refreshable { await model.load() }
         }
         .task { await model.load() }
@@ -28,6 +31,16 @@ struct AccountsView: View {
             if newPhase == .active {
                 Task { await model.load() }
             }
+        }
+    }
+
+    /// A cheap discriminator for `.animation(_:value:)` — see
+    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
+    private var stateTag: String {
+        switch model.state {
+        case .idle, .loading: "loading"
+        case .loaded: "loaded"
+        case .failed: "failed"
         }
     }
 

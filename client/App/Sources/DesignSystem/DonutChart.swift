@@ -18,6 +18,10 @@ struct DonutChart: View {
     let segments: [DonutSegment]
     var diameter: CGFloat = 116
     var lineWidth: CGFloat = 14
+    /// Drives the draw-in on appear — each segment starts collapsed to its
+    /// own `startFraction` and animates out to `endFraction`, rather than
+    /// popping in already drawn.
+    @State private var isDrawn = false
 
     var body: some View {
         ZStack {
@@ -25,7 +29,10 @@ struct DonutChart: View {
                 .stroke(Palette.neutralFill, style: StrokeStyle(lineWidth: lineWidth))
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 Circle()
-                    .trim(from: segment.startFraction, to: segment.endFraction)
+                    .trim(
+                        from: segment.startFraction,
+                        to: isDrawn ? segment.endFraction : segment.startFraction
+                    )
                     .stroke(
                         Palette.categoryChart(rank: segment.rank),
                         style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
@@ -39,6 +46,11 @@ struct DonutChart: View {
         }
         .frame(width: diameter, height: diameter)
         .accessibilityHidden(true)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                isDrawn = true
+            }
+        }
     }
 }
 

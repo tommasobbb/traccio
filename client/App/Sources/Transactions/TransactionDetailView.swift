@@ -146,6 +146,8 @@ struct TransactionDetailView: View {
         }
         .background(Palette.background)
         .navigationTitle("Dettaglio movimento")
+        .sensoryFeedback(.success, trigger: model.successTick)
+        .sensoryFeedback(.error, trigger: model.actionFailure)
         .task {
             await model.loadCategoriesIfNeeded()
             await model.loadTransferIfNeeded()

@@ -31,6 +31,7 @@ struct TransactionsView: View {
             }
             .background(Palette.background)
             .navigationTitle("Movimenti")
+            .animation(.easeInOut(duration: 0.2), value: stateTag)
             .refreshable { await model.load() }
             .toolbar {
                 if model.transferSuggestionCount > 0 {
@@ -130,6 +131,17 @@ struct TransactionsView: View {
     }
 
     // MARK: Content
+
+    /// A cheap discriminator for `.animation(_:value:)` — `State` carries a
+    /// `[TransactionResponse]` payload not worth making `Equatable` just for
+    /// this, so the animation keys off which case, not the case's content.
+    private var stateTag: String {
+        switch model.state {
+        case .idle, .loading: "loading"
+        case .loaded: "loaded"
+        case .failed: "failed"
+        }
+    }
 
     @ViewBuilder
     private var content: some View {

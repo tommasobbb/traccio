@@ -36,5 +36,6 @@ struct FilterChip: View {
             Capsule()
                 .strokeBorder(isActive ? Palette.accent.opacity(0.3) : Palette.separator)
         )
+        .sensoryFeedback(.selection, trigger: isActive)
     }
 }
