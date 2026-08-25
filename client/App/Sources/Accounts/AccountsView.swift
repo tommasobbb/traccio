@@ -38,15 +38,18 @@ struct AccountsView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded(let connections) where connections.isEmpty:
-            ContentUnavailableView("Nessun conto collegato", systemImage: "creditcard")
+            EmptyState(systemImage: "creditcard", title: "Nessun conto collegato")
         case .loaded(let connections):
             list(connections)
         case .failed:
-            ContentUnavailableView {
-                Label("Impossibile caricare i conti", systemImage: "wifi.slash")
-            } description: {
-                Text("Verifica che il backend sia in esecuzione, poi riprova.")
-            }
+            EmptyState(
+                systemImage: "wifi.slash",
+                title: "Impossibile caricare i conti",
+                description: "Verifica che il backend sia in esecuzione, poi riprova.",
+                tone: .warning,
+                actionTitle: "Riprova",
+                action: { Task { await model.load() } }
+            )
         }
     }
 

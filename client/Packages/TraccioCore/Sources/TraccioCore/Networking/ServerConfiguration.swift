@@ -21,6 +21,12 @@ public struct ServerConfiguration: Equatable, Sendable {
 public protocol ServerConfigurationStoring: Sendable {
     func load() -> ServerConfiguration
     func save(_ configuration: ServerConfiguration)
+    /// Whether `save` has ever succeeded — distinct from `load()` always
+    /// returning *some* configuration, since a fresh install's zero-config
+    /// default is itself a valid value, not a sentinel for "unset". Onboarding
+    /// (`OnboardingView`) uses this to show the first-run setup screen only
+    /// once, not every time the default happens to still be in effect.
+    var isConfigured: Bool { get }
 }
 
 /// The production `ServerConfigurationStoring`: the base URL in
@@ -37,6 +43,7 @@ public struct ServerConfigurationStore: ServerConfigurationStoring {
     public static let shared = ServerConfigurationStore()
 
     private static let baseURLDefaultsKey = "server.baseURL"
+    private static let configuredDefaultsKey = "server.configured"
 
     // UserDefaults is not (yet) Sendable-annotated in the SDK despite being
     // documented thread-safe — trusted rather than boxed in `@unchecked
@@ -52,6 +59,10 @@ public struct ServerConfigurationStore: ServerConfigurationStoring {
         self.tokenStore = tokenStore
     }
 
+    public var isConfigured: Bool {
+        defaults.bool(forKey: Self.configuredDefaultsKey)
+    }
+
     public func load() -> ServerConfiguration {
         let baseURL =
             defaults.string(forKey: Self.baseURLDefaultsKey).flatMap(URL.init(string:))
@@ -61,6 +72,7 @@ public struct ServerConfigurationStore: ServerConfigurationStoring {
 
     public func save(_ configuration: ServerConfiguration) {
         defaults.set(configuration.baseURL.absoluteString, forKey: Self.baseURLDefaultsKey)
+        defaults.set(true, forKey: Self.configuredDefaultsKey)
         if let token = configuration.apiToken, !token.isEmpty {
             tokenStore.save(token)
         } else {

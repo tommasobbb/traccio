@@ -72,12 +72,14 @@ struct EventsView: View {
                 eventsCard(events)
             }
         case .failed:
-            ContentUnavailableView {
-                Label("Impossibile caricare gli eventi", systemImage: "wifi.slash")
-            } description: {
-                Text("Verifica che il backend sia in esecuzione, poi riprova.")
-            }
-            .frame(maxWidth: .infinity, minHeight: 240)
+            EmptyState(
+                systemImage: "wifi.slash",
+                title: "Impossibile caricare gli eventi",
+                description: "Verifica che il backend sia in esecuzione, poi riprova.",
+                tone: .warning,
+                actionTitle: "Riprova",
+                action: { Task { await model.load() } }
+            )
         }
     }
 

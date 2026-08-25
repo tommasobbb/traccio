@@ -14,6 +14,7 @@ private final class FakeServerConfigurationStore: ServerConfigurationStoring, @u
         self.initial = initial
     }
 
+    var isConfigured: Bool { saved != nil }
     func load() -> ServerConfiguration { saved ?? initial }
     func save(_ configuration: ServerConfiguration) { saved = configuration }
 }

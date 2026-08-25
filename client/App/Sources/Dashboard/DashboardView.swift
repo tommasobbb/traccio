@@ -49,12 +49,14 @@ struct DashboardView: View {
         case .failed:
             VStack(alignment: .leading, spacing: 16) {
                 periodPicker
-                ContentUnavailableView {
-                    Label("Impossibile caricare la panoramica", systemImage: "wifi.slash")
-                } description: {
-                    Text("Verifica che il backend sia in esecuzione, poi riprova.")
-                }
-                .frame(maxWidth: .infinity, minHeight: 240)
+                EmptyState(
+                    systemImage: "wifi.slash",
+                    title: "Impossibile caricare la panoramica",
+                    description: "Verifica che il backend sia in esecuzione, poi riprova.",
+                    tone: .warning,
+                    actionTitle: "Riprova",
+                    action: { Task { await model.load() } }
+                )
             }
         }
     }

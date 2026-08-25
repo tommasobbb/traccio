@@ -62,4 +62,14 @@ struct ServerConfigurationTests {
         #expect(tokenStore.stored == nil)
         #expect(store.load().apiToken == nil)
     }
+
+    @Test func isConfiguredIsFalseUntilSaveIsCalledOnce() {
+        let (store, _) = makeStore()
+
+        #expect(store.isConfigured == false)
+
+        store.save(ServerConfiguration(baseURL: URL(string: "https://traccio.example.com")!))
+
+        #expect(store.isConfigured == true)
+    }
 }

@@ -56,17 +56,20 @@ struct TransfersView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded(let pairs) where pairs.isEmpty:
-            ContentUnavailableView(
-                "Nessun trasferimento da confermare", systemImage: "arrow.left.arrow.right"
+            EmptyState(
+                systemImage: "arrow.left.arrow.right", title: "Nessun trasferimento da confermare"
             )
         case .loaded(let pairs):
             list(pairs)
         case .failed:
-            ContentUnavailableView {
-                Label("Impossibile caricare i suggerimenti", systemImage: "wifi.slash")
-            } description: {
-                Text("Verifica che il backend sia in esecuzione, poi riprova.")
-            }
+            EmptyState(
+                systemImage: "wifi.slash",
+                title: "Impossibile caricare i suggerimenti",
+                description: "Verifica che il backend sia in esecuzione, poi riprova.",
+                tone: .warning,
+                actionTitle: "Riprova",
+                action: { Task { await model.load() } }
+            )
         }
     }
 

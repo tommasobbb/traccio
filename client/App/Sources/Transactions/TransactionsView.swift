@@ -142,11 +142,14 @@ struct TransactionsView: View {
         case .loaded(let transactions):
             list(transactions)
         case .failed:
-            ContentUnavailableView {
-                Label("Impossibile caricare i movimenti", systemImage: "wifi.slash")
-            } description: {
-                Text("Verifica che il backend sia in esecuzione, poi riprova.")
-            }
+            EmptyState(
+                systemImage: "wifi.slash",
+                title: "Impossibile caricare i movimenti",
+                description: "Verifica che il backend sia in esecuzione, poi riprova.",
+                tone: .warning,
+                actionTitle: "Riprova",
+                action: { Task { await model.load() } }
+            )
         }
     }
 
@@ -156,13 +159,14 @@ struct TransactionsView: View {
     @ViewBuilder
     private var emptyState: some View {
         if model.filter == .none {
-            ContentUnavailableView("Nessun movimento", systemImage: "list.bullet")
+            EmptyState(systemImage: "list.bullet", title: "Nessun movimento")
         } else {
-            ContentUnavailableView {
-                Label("Nessun movimento con questo filtro", systemImage: "line.3.horizontal.decrease.circle")
-            } actions: {
-                Button("Rimuovi filtro") { Task { await model.applyFilter(.none) } }
-            }
+            EmptyState(
+                systemImage: "line.3.horizontal.decrease.circle",
+                title: "Nessun movimento con questo filtro",
+                actionTitle: "Rimuovi filtro",
+                action: { Task { await model.applyFilter(.none) } }
+            )
         }
     }
 
