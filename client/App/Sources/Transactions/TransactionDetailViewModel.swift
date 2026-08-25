@@ -135,7 +135,7 @@ final class TransactionDetailViewModel {
         advance: AdvanceResponse? = nil,
         categories: [CategoryResponse] = [],
         transfer: TransferResponse? = nil,
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {}

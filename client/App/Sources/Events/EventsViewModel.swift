@@ -46,7 +46,7 @@ final class EventsViewModel {
     /// client:
     ///     The API client to reach the backend through. Defaults to a client
     ///     pointed at the local dev backend.
-    init(client: any APIClientProtocol = APIClient.devDefault) {
+    init(client: any APIClientProtocol = APIClient.current) {
         self.client = client
     }
 

@@ -80,7 +80,7 @@ final class CategorizationViewModel {
     ///     category. Defaults to a no-op for previews and callers that don't
     ///     need it.
     init(
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onSuggestionsChanged: @escaping () -> Void = {}
     ) {
         self.client = client

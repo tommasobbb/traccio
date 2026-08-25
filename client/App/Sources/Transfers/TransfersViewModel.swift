@@ -74,7 +74,7 @@ final class TransfersViewModel {
     ///     Called after a successful confirm. Defaults to a no-op for
     ///     previews and callers that don't need it.
     init(
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {}
     ) {

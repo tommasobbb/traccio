@@ -93,3 +93,56 @@ auth will look like.
   disappear together rather than growing a multi-user shim.
 - A second client (beyond the owner's own phone) ever needs to call the
   backend — that's the trigger to reconsider mTLS.
+
+## 2026-08-25 revision: client wiring
+
+The follow-up flagged in Consequences above. `APIClient+Dev.swift`'s
+hardcoded `http://localhost:8000` (a force-unwrapped literal —
+`.claude/rules/swift.md` forbids `!` outside test scaffolding, which this
+already wasn't) is replaced by `TraccioCore.ServerConfigurationStore`: the
+base URL in `UserDefaults` (not financial data), the token in the Keychain
+via a new `APITokenStoring` seam (`KeychainAPITokenStore` in production, an
+in-memory fake in tests — the real Keychain adapter is exercised only by a
+one-off manual script, not the automated suite, since Keychain access from a
+sandboxed `swift test` process isn't reliable to assert on).
+
+`APIClient` gained an `apiToken` parameter, attached as `Authorization:
+Bearer` on every request when set; `APIError` gained `.unauthorized`,
+mapped from a `401` response and split out from the generic `badStatus` so
+the client can say "check your server token" specifically. Every
+`= APIClient.devDefault` default-parameter call site (13 of them, across
+every view model) was renamed to `= APIClient.current` — `devDefault` had
+become a misnomer once the value stopped being a fixed dev constant.
+
+A new "Server" section in Impostazioni (`ServerSettingsViewModel`) edits and
+verifies both fields before ever persisting them: "Verifica e salva" builds
+an *ad-hoc* client from whatever is currently typed (never
+`APIClient.current`, which would only reflect what was already saved), calls
+`GET /health` then an authenticated endpoint, and only calls
+`ServerConfigurationStore.save` once both succeed — so a saved configuration
+has always already been proven to work, and the three failure shapes (bad
+URL, unreachable server, wrong token) get distinct Italian copy rather than
+one generic error.
+
+**One deliberate, documented limitation**: `APIClient.current` is a computed
+property, re-evaluated on every call — but every tab's view model is
+constructed once, at app launch (`TabView` builds all four tabs up front).
+Changing the server configuration takes effect for any *newly created*
+screen, but an already-running tab keeps using the client it was built
+with until the app is relaunched. Rearchitecting client injection so every
+live screen picks up a change instantly (an environment-injected client,
+observed and swapped app-wide) was judged out of scope for this slice —
+restart-to-apply is a standard, well-understood pattern for base-URL
+settings in mobile apps, and the alternative is a much larger change to
+touch for a value that, once set for a personal single-user deployment,
+rarely changes again.
+
+**Verified**: `xcodebuild` macOS build clean, zero warnings. `swift test`
+(TraccioCore, 232, up from 225 — 3 new `APIClient` header/401 cases, 4 new
+`ServerConfigurationStore` cases) and `make test-app` (127, up from 121 — 6
+new `ServerSettingsViewModel` cases against `FakeAPIClient`) green. The real
+`KeychainAPITokenStore` logic verified by a one-off manual script exercising
+add/update/delete against the real Keychain on this machine (all
+`errSecSuccess`), matching `docs/decisions/0013-biometric-lock.md`'s
+precedent of verifying a system-API adapter by hand alongside the automated
+seam tests rather than only in them.

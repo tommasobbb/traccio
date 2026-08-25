@@ -30,7 +30,7 @@ struct CategorizationView: View {
     ///     Called after a write that can change a transaction's effective
     ///     category, so the caller can invalidate other screens.
     init(
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onSuggestionsChanged: @escaping () -> Void = {}
     ) {
         _model = State(

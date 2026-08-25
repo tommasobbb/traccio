@@ -41,7 +41,7 @@ final class DashboardViewModel {
     ///     pointed at the local dev backend.
     /// period:
     ///     The month to load initially. Defaults to the current month.
-    init(client: any APIClientProtocol = APIClient.devDefault, period: MonthPeriod = .current()) {
+    init(client: any APIClientProtocol = APIClient.current, period: MonthPeriod = .current()) {
         self.client = client
         self.period = period
     }

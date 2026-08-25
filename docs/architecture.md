@@ -137,7 +137,10 @@ changing it.
 
 Bank tokens are encrypted at rest with a key held outside the database.
 They are never logged, never returned by any endpoint, and never leave the
-backend — the client has no notion that tokens exist.
+backend — the client has no notion that *bank* tokens exist. The client does
+hold its own, unrelated API token gating access to the backend itself (ADR
+0014) — a shared secret, not a bank credential, stored client-side in the
+Keychain.
 
 Authorization redirects use the system browser. Never an in-app WebView:
 bank SCA apps often fail to open from one (see `openbanking.md`).

@@ -12,6 +12,10 @@ public enum APIError: Error, Sendable {
     case transport(underlying: any Error)
     /// The server answered with a non-2xx status. Carries the code only.
     case badStatus(Int)
+    /// The server answered `401` — a missing, incorrect, or revoked API
+    /// token (ADR 0014). Split out from `badStatus` so the client can show
+    /// "check your server token" rather than a generic network-error message.
+    case unauthorized
     /// The response was received but could not be decoded into the model.
     case decoding(underlying: any Error)
     /// A request body could not be encoded to JSON before sending.

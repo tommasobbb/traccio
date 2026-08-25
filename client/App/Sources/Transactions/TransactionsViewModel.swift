@@ -86,7 +86,7 @@ final class TransactionsViewModel {
     ///     the local dev backend.
     /// pageSize:
     ///     Transactions requested per page.
-    init(client: any APIClientProtocol = APIClient.devDefault, pageSize: Int = 50) {
+    init(client: any APIClientProtocol = APIClient.current, pageSize: Int = 50) {
         self.client = client
         self.pageSize = pageSize
     }

@@ -15,35 +15,94 @@ import TraccioCore
 struct SettingsView: View {
     @Environment(DataFreshness.self) private var freshness
     @Environment(AppLock.self) private var lock
+    @State private var serverSettings = ServerSettingsViewModel()
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                Card {
-                    NavigationLink {
-                        CategorizationView(
-                            onSuggestionsChanged: { freshness.markStale([.dashboard, .transactions]) }
-                        )
-                    } label: {
-                        settingsRow(title: "Categorie e regole", systemImage: "tag")
+                VStack(spacing: 16) {
+                    Card {
+                        NavigationLink {
+                            CategorizationView(
+                                onSuggestionsChanged: { freshness.markStale([.dashboard, .transactions]) }
+                            )
+                        } label: {
+                            settingsRow(title: "Categorie e regole", systemImage: "tag")
+                        }
+                        .buttonStyle(.plain)
+                        Divider().overlay(Palette.separator)
+                        NavigationLink {
+                            EventsView()
+                        } label: {
+                            settingsRow(title: "Eventi", systemImage: "calendar")
+                        }
+                        .buttonStyle(.plain)
+                        #if os(iOS)
+                        Divider().overlay(Palette.separator)
+                        biometricLockRow
+                        #endif
                     }
-                    .buttonStyle(.plain)
-                    Divider().overlay(Palette.separator)
-                    NavigationLink {
-                        EventsView()
-                    } label: {
-                        settingsRow(title: "Eventi", systemImage: "calendar")
-                    }
-                    .buttonStyle(.plain)
-                    #if os(iOS)
-                    Divider().overlay(Palette.separator)
-                    biometricLockRow
-                    #endif
+                    serverCard
                 }
                 .padding(20)
             }
             .background(Palette.background)
             .navigationTitle("Impostazioni")
+        }
+    }
+
+    /// Base URL and API token (ADR 0014) — where `APIClient.current` used to
+    /// be hardcoded to local `make run`. "Verifica e salva" checks the
+    /// values actually work before persisting them; see
+    /// `ServerSettingsViewModel`'s doc comment for why.
+    private var serverCard: some View {
+        Card {
+            EyebrowLabel(text: "Server")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("URL")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkSecondary)
+                TextField("http://localhost:8000", text: $serverSettings.baseURLText)
+                    .font(Typography.body)
+                    .foregroundStyle(Palette.ink)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Token API")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkSecondary)
+                SecureField(
+                    "Vuoto se il server non richiede un token", text: $serverSettings.apiTokenText
+                )
+                .font(Typography.body)
+                .foregroundStyle(Palette.ink)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+            }
+            if case .failure(let message) = serverSettings.state {
+                Text(message)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.warning)
+            } else if serverSettings.state == .success {
+                Text("Connessione verificata.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.income)
+            }
+            PillButton(
+                title: "Verifica e salva",
+                isLoading: serverSettings.state == .checking
+            ) {
+                Task { await serverSettings.verifyAndSave() }
+            }
+            Text("Riavvia l'app perché le altre schermate usino la nuova configurazione.")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
         }
     }
 

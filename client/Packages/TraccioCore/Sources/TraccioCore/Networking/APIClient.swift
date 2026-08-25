@@ -4,14 +4,20 @@ import Foundation
 ///
 /// This is where the client's networking lives — the app target only renders
 /// what these methods return (see `client/CLAUDE.md`). The client has no notion
-/// of tokens: it sends no authorization header and stores no credentials; bank
-/// tokens never leave the backend.
+/// of *bank* tokens: it never stores or forwards a bank credential; those never
+/// leave the backend. `apiToken` below is a different thing entirely — the
+/// app's own shared secret for reaching its own backend (ADR 0014), sent as a
+/// plain bearer header, never a bank credential.
 ///
 /// The `URLSession` is injectable so tests can drive the client with a stub
 /// transport (a `URLProtocol`) instead of hitting the network.
 public struct APIClient: Sendable {
     /// Base URL the endpoints are resolved against, e.g. `http://localhost:8000`.
     private let baseURL: URL
+    /// Sent as `Authorization: Bearer <apiToken>` on every request when set;
+    /// omitted entirely when `nil` (a backend with no `TRACCIO_API_TOKEN`
+    /// configured, e.g. local `make run`).
+    private let apiToken: String?
     /// The session used for requests; defaults to `.shared`.
     private let session: URLSession
 
@@ -21,11 +27,15 @@ public struct APIClient: Sendable {
     /// ----------
     /// baseURL:
     ///     Root the endpoint paths are appended to.
+    /// apiToken:
+    ///     The backend's shared API token, or `nil` if unconfigured — see
+    ///     the type's doc comment.
     /// session:
     ///     Transport to use; inject a stubbed session in tests. Defaults to
     ///     `URLSession.shared`.
-    public init(baseURL: URL, session: URLSession = .shared) {
+    public init(baseURL: URL, apiToken: String? = nil, session: URLSession = .shared) {
         self.baseURL = baseURL
+        self.apiToken = apiToken
         self.session = session
     }
 
@@ -821,6 +831,9 @@ public struct APIClient: Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
+        if let apiToken {
+            request.setValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        }
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -838,6 +851,9 @@ public struct APIClient: Sendable {
             throw APIError.notHTTP
         }
         guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401 {
+                throw APIError.unauthorized
+            }
             throw APIError.badStatus(http.statusCode)
         }
         return data

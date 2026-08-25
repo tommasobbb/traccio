@@ -88,7 +88,7 @@ struct TransactionDetailView: View {
         transfer: TransferResponse? = nil,
         account: AccountResponse?,
         events: [EventResponse] = [],
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {}

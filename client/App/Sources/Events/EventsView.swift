@@ -27,7 +27,7 @@ struct EventsView: View {
     ///     The API client to reach the backend through. Defaults to a client
     ///     pointed at the local dev backend; also handed to
     ///     `EventDetailView` so both screens share one client instance.
-    init(client: any APIClientProtocol = APIClient.devDefault) {
+    init(client: any APIClientProtocol = APIClient.current) {
         self.client = client
         _model = State(wrappedValue: EventsViewModel(client: client))
     }

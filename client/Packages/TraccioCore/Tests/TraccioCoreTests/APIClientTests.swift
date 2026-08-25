@@ -41,13 +41,14 @@ struct APIClientTests {
 
     /// Build an `APIClient` whose session answers every request with `handler`.
     private static func makeClient(
+        apiToken: String? = nil,
         handler: @escaping StubURLProtocol.Handler
     ) -> APIClient {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]
         let session = URLSession(configuration: configuration)
         StubURLProtocol.setHandler(handler)
-        return APIClient(baseURL: URL(string: "http://localhost:8000")!, session: session)
+        return APIClient(baseURL: URL(string: "http://localhost:8000")!, apiToken: apiToken, session: session)
     }
 
     @Test func accountsDecodesEnvelopeInOrder() async throws {
@@ -66,6 +67,46 @@ struct APIClientTests {
         #expect(accounts[0].kind == .current)
         #expect(accounts[1].kind == .card)
         #expect(accounts[1].name == nil)
+    }
+
+    @Test func authorizationHeaderIsSentWhenAnApiTokenIsConfigured() async throws {
+        let client = Self.makeClient(apiToken: "TEST-TOKEN-01") { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer TEST-TOKEN-01")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.accountsEnvelope.utf8))
+        }
+
+        _ = try await client.accounts()
+    }
+
+    @Test func authorizationHeaderIsOmittedWhenNoApiTokenIsConfigured() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.accountsEnvelope.utf8))
+        }
+
+        _ = try await client.accounts()
+    }
+
+    @Test func unauthorizedStatusThrowsUnauthorizedRatherThanBadStatus() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data("{}".utf8))
+        }
+
+        await #expect {
+            try await client.accounts()
+        } throws: { error in
+            guard case APIError.unauthorized = error else { return false }
+            return true
+        }
     }
 
     @Test func nonSuccessStatusThrowsBadStatus() async {

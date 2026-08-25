@@ -21,7 +21,9 @@ actor FakeAPIClient: APIClientProtocol {
     // MARK: Configurable results
 
     var accountsToReturn: [AccountResponse] = []
+    var accountsError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
+    var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
     var transactionToReturn: TransactionResponse?
     /// Per-id overrides for `transaction(id:)`, checked before
@@ -151,6 +153,14 @@ actor FakeAPIClient: APIClientProtocol {
     }
 
     // MARK: Configuration (actor-isolated setters, `await`ed from a test)
+
+    func setAccountsError(_ error: Error) {
+        accountsError = error
+    }
+
+    func setHealthError(_ error: Error) {
+        healthError = error
+    }
 
     func setTransaction(_ transaction: TransactionResponse) {
         transactionToReturn = transaction
@@ -390,11 +400,13 @@ actor FakeAPIClient: APIClientProtocol {
     // MARK: APIClientProtocol
 
     func accounts() async throws -> [AccountResponse] {
-        accountsToReturn
+        if let accountsError { throw accountsError }
+        return accountsToReturn
     }
 
     func health() async throws -> HealthResponse {
-        healthToReturn
+        if let healthError { throw healthError }
+        return healthToReturn
     }
 
     func dashboardSummary(start: Date?, end: Date?) async throws -> DashboardSummaryResponse {

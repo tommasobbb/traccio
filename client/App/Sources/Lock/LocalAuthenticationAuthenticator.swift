@@ -61,8 +61,8 @@ struct LocalAuthenticationAuthenticator: BiometricAuthenticating {
 #endif
 
 /// The authenticator to use on this platform — the same injectable-default
-/// idiom as `APIClient.devDefault`
-/// (`client/App/Sources/APIClient+Dev.swift`). Not gated itself: it must
+/// idiom as `APIClient.current`
+/// (`client/App/Sources/APIClient+Default.swift`). Not gated itself: it must
 /// resolve to something on every platform this target builds for, so
 /// `AppLock()`'s default initializer compiles on macOS too.
 enum BiometricAuthenticator {

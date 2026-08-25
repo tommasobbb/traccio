@@ -34,7 +34,7 @@ struct EventDetailView: View {
     ///     a no-op.
     init(
         event: EventResponse,
-        client: any APIClientProtocol = APIClient.devDefault,
+        client: any APIClientProtocol = APIClient.current,
         onEventChange: @escaping (EventResponse) -> Void = { _ in },
         onEventDeleted: @escaping (UUID) -> Void = { _ in }
     ) {
