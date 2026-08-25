@@ -13,8 +13,14 @@ struct CategorizationViewModelTests {
     private static let categoryID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
     private static let ruleID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
 
-    private static func makeCategory(id: UUID = categoryID, name: String = "Alimentari") -> CategoryResponse {
-        CategoryResponse(id: id, name: name, createdAt: Date(timeIntervalSince1970: 1_755_000_000))
+    private static func makeCategory(
+        id: UUID = categoryID, name: String = "Alimentari", parentID: UUID? = nil,
+        color: PaletteColor = .slate
+    ) -> CategoryResponse {
+        CategoryResponse(
+            id: id, name: name, parentID: parentID, color: color, icon: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
     }
 
     private static func makeRule(
@@ -197,6 +203,62 @@ struct CategorizationViewModelTests {
         #expect(model.actionFailure == .nameTaken)
     }
 
+    @Test func createCategoryWithAParentPassesItThrough() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let root = Self.makeCategory(name: "Casa")
+        await client.setCategories([root])
+        await client.setCreateCategoryResult(
+            Self.makeCategory(id: UUID(), name: "Affitto", parentID: root.id, color: .indigo)
+        )
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.createCategory(name: "Affitto", parentID: root.id, color: .indigo, icon: .rent)
+
+        #expect(model.actionFailure == nil)
+        let recorded = await client.createCategoryRequests
+        #expect(
+            recorded == [
+                FakeAPIClient.RecordedCategoryCreate(
+                    name: "Affitto", parentID: root.id, color: .indigo, icon: .rent
+                )
+            ]
+        )
+    }
+
+    @Test func setCategoryAppearanceRefetchesOnSuccess() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        await client.setCategories([Self.makeCategory()])
+        await client.setCategoryAppearanceResult(Self.makeCategory(color: .teal))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.setCategoryAppearance(id: Self.categoryID, color: .teal, icon: nil)
+
+        #expect(model.actionFailure == nil)
+        let recorded = await client.categoryAppearanceUpdates
+        #expect(
+            recorded == [
+                FakeAPIClient.RecordedCategoryAppearance(id: Self.categoryID, color: .teal, icon: nil)
+            ]
+        )
+    }
+
+    @Test func setCategoryAppearanceFailureSurfacesGeneric() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        await client.setCategories([Self.makeCategory()])
+        await client.setCategoryAppearanceError(APIError.badStatus(404))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.setCategoryAppearance(id: Self.categoryID, color: .teal, icon: nil)
+
+        #expect(model.actionFailure == .generic)
+    }
+
     @Test func applyRulesPublishesTheCounts() async throws {
         let client = FakeAPIClient()
         await client.setRules([Self.makeRule()])
@@ -252,8 +314,12 @@ struct CategorizationViewModelTests {
         let model = CategorizationViewModel(client: client)
         await model.load()
 
-        async let first: Void = model.createCategory(name: "Trasporti")
-        async let second: Void = model.createCategory(name: "Svago")
+        async let first: Void = model.createCategory(
+            name: "Trasporti", parentID: nil, color: .slate, icon: nil
+        )
+        async let second: Void = model.createCategory(
+            name: "Svago", parentID: nil, color: .slate, icon: nil
+        )
         _ = await (first, second)
 
         #expect(await client.createdCategoryNames.count == 1)

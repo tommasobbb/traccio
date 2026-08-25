@@ -272,7 +272,7 @@
         "type": "object"
       },
       "CategoriesResponse": {
-        "description": "Envelope for the categories list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncategories : list[CategoryResponse]\n    The user's categories, alphabetically by name.",
+        "description": "Envelope for the categories list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncategories : list[CategoryResponse]\n    The user's categories: each root, alphabetically, immediately\n    followed by its own children, also alphabetically (see\n    :func:`~traccio.db.repositories.list_categories`).",
         "properties": {
           "categories": {
             "items": {
@@ -288,13 +288,56 @@
         "title": "CategoriesResponse",
         "type": "object"
       },
+      "CategoryIcon": {
+        "description": "A semantic icon for a :class:`~traccio.domain.models.Category`.\n\nNamed for what the category *is*, not for an SF Symbol \u2014 same reasoning as\n:class:`AccountIcon`, and a separate enum from it for the same reason:\nthe two vocabularies are disjoint (a category picker has no use for\n\"wallet\", an account picker has no use for a dozen food/shopping icons).\nCovers both :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE`'s\nroots and its first set of children; a user-created category not covered\nhere picks the closest fit or ``OTHER``.\n\nAttributes\n----------\nGROCERIES, DINING, COFFEE, TAKEOUT, TRANSPORT, FUEL, PUBLIC_TRANSPORT,\nHOUSING, RENT, MAINTENANCE, UTILITIES, HEALTH, SHOPPING, CLOTHING,\nELECTRONICS, ENTERTAINMENT, STREAMING, MOVIES, TRAVEL, SUBSCRIPTIONS,\nFEES, INCOME, OTHER : str\n    One per default root or child category \u2014 see\n    :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE` for which is\n    which.",
+        "enum": [
+          "groceries",
+          "dining",
+          "coffee",
+          "takeout",
+          "transport",
+          "fuel",
+          "public_transport",
+          "housing",
+          "rent",
+          "maintenance",
+          "utilities",
+          "health",
+          "shopping",
+          "clothing",
+          "electronics",
+          "entertainment",
+          "streaming",
+          "movies",
+          "travel",
+          "subscriptions",
+          "fees",
+          "income",
+          "other"
+        ],
+        "title": "CategoryIcon",
+        "type": "string"
+      },
       "CategoryResponse": {
-        "description": "One category as returned to the client.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the category.\nname : str\n    Human-readable name.\ncreated_at : datetime\n    When the category was created (timezone-aware, UTC).",
+        "description": "One category as returned to the client.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the category.\nname : str\n    Human-readable name.\nparent_id : UUID or None\n    The root this category nests under, or ``None`` if it is itself a\n    root.\ncolor : PaletteColor\n    The category's colour.\nicon : CategoryIcon or None\n    The category's icon, or ``None`` if unset.\ncreated_at : datetime\n    When the category was created (timezone-aware, UTC).",
         "properties": {
+          "color": {
+            "$ref": "#/components/schemas/PaletteColor"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "format": "uuid",
@@ -304,11 +347,26 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
           }
         },
         "required": [
           "id",
           "name",
+          "parent_id",
+          "color",
+          "icon",
           "created_at"
         ],
         "title": "CategoryResponse",
@@ -577,11 +635,43 @@
         "type": "object"
       },
       "CreateCategoryRequest": {
-        "description": "Body for creating a category.\n\nAttributes\n----------\nname : str\n    The category's name, e.g. ``\"Groceries\"``. Stripped and validated by\n    :func:`~traccio.domain.categories.normalize_category_name`.",
+        "description": "Body for creating a category.\n\nAttributes\n----------\nname : str\n    The category's name, e.g. ``\"Alimentari\"``. Stripped and validated by\n    :func:`~traccio.domain.categories.normalize_category_name`.\nparent_id : UUID or None\n    The root this category should nest under, or ``None`` (the default)\n    to create a root. Validated by\n    :func:`~traccio.domain.categories.validate_parent` \u2014 a parent that is\n    itself a child is rejected, not silently flattened.\ncolor : PaletteColor or None\n    The category's colour, or ``None`` to default to the parent's own\n    colour (a child) or\n    :attr:`~traccio.domain.enums.PaletteColor.SLATE` (a root).\nicon : CategoryIcon or None\n    The category's icon, or ``None`` to leave it unset.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
           }
         },
         "required": [
@@ -934,6 +1024,28 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "MoveCategoryRequest": {
+        "description": "Body for reparenting a category.\n\nAttributes\n----------\nparent_id : UUID or None\n    The new parent, or ``None`` to make this category a root.",
+        "properties": {
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "required": [
+          "parent_id"
+        ],
+        "title": "MoveCategoryRequest",
+        "type": "object"
+      },
       "PaletteColor": {
         "description": "A semantic colour, shared by :class:`~traccio.domain.models.Account` and\n:class:`~traccio.domain.models.Category`.\n\nDeliberately a fixed vocabulary rather than a free hex string (ADR 0017):\nthe client's ``Colors.xcassets`` is the only place a colour has an explicit\ndark-mode variant, so a user-chosen hex would have no dark counterpart and\nsilently break the design system's dark-mode contract. One shared enum for\nboth entities, not two, because there is exactly one colour vocabulary in\nthe app \u2014 the icon vocabularies differ (see :class:`AccountIcon` and\n``CategoryIcon``), the colour one does not.\n\nAttributes\n----------\nBLUE, INDIGO, PURPLE, PINK, RED, ORANGE, AMBER, GREEN, TEAL, SLATE : str\n    The ten selectable tones. ``SLATE`` is the neutral default for\n    anything the user has not deliberately coloured yet.",
         "enum": [
@@ -1277,6 +1389,30 @@
           "icon"
         ],
         "title": "SetAccountAppearanceRequest",
+        "type": "object"
+      },
+      "SetCategoryAppearanceRequest": {
+        "description": "Body for setting a category's colour and icon.\n\nA full replace, not a partial update \u2014 mirrors\n``SetAccountAppearanceRequest``. Unlike an account's colour, ``color`` is\nmandatory and never ``null``: every category always has one.\n\nAttributes\n----------\ncolor : PaletteColor\n    The new colour.\nicon : CategoryIcon or None\n    The new icon, or ``None`` to clear it.",
+        "properties": {
+          "color": {
+            "$ref": "#/components/schemas/PaletteColor"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "color",
+          "icon"
+        ],
+        "title": "SetCategoryAppearanceRequest",
         "type": "object"
       },
       "StartConnectionRequest": {
@@ -2360,7 +2496,7 @@
     },
     "/categories": {
       "get": {
-        "description": "List the current user's categories, alphabetically by name.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose categories to return.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories, alphabetically (empty if none).",
+        "description": "List the current user's categories: roots, each followed by its children.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose categories to return.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories, flat with ``parent_id`` (empty if none) \u2014 see\n    :func:`~traccio.db.repositories.list_categories` for the exact order.",
         "operationId": "categories_categories_get",
         "parameters": [
           {
@@ -2405,7 +2541,7 @@
         "summary": "Categories"
       },
       "post": {
-        "description": "Create a category.\n\nScoped to the current user. A ``409`` if the (normalized) name collides\nwith one of the user's existing categories; a ``422`` if the name is blank\nor too long.\n\nParameters\n----------\nbody : CreateCategoryRequest\n    The category's name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The created category.",
+        "description": "Create a category, optionally as a child of an existing root.\n\nScoped to the current user. A ``404`` if ``parent_id`` is given but names\nan unknown (or another user's) category; a ``422`` if the name is blank\nor too long, or if ``parent_id`` names a category that is itself a child\n(``category_depth_exceeded``); a ``409`` if the (normalized) name collides\nwith one of the user's existing categories, anywhere in the tree.\n\nParameters\n----------\nbody : CreateCategoryRequest\n    The category's name, optional parent, colour, and icon.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The created category.",
         "operationId": "create_category_endpoint_categories_post",
         "parameters": [
           {
@@ -2462,7 +2598,7 @@
     },
     "/categories/defaults": {
       "post": {
-        "description": "Seed the shared default categories, then return the user's full list.\n\nIdempotent: inserts the default set only when the user currently has zero\ncategories (see :func:`~traccio.db.repositories.seed_default_categories`),\nso calling it again after the user has renamed or deleted some is a no-op,\nnever a resurrection.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user to seed.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories after seeding (the defaults, or whatever they\n    already had).",
+        "description": "Seed the shared default category tree, then return the user's full list.\n\nIdempotent: inserts the default tree only when the user currently has\nzero categories (see\n:func:`~traccio.db.repositories.seed_default_categories`), so calling it\nagain after the user has renamed or deleted some is a no-op, never a\nresurrection. On an already-seeded account this stays a no-op even after\nthe tree gains new default children in a later release \u2014 this endpoint\nonly ever fires from zero.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user to seed.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories after seeding (the defaults, or whatever they\n    already had).",
         "operationId": "seed_defaults_categories_defaults_post",
         "parameters": [
           {
@@ -2509,7 +2645,7 @@
     },
     "/categories/{category_id}": {
       "delete": {
-        "description": "Delete a category.\n\nRefuses (``409``) when the category is confirmed on any of the user's\ntransactions \u2014 that layer is user-typed data, and nulling it as a side\neffect of this delete would be an automated write to\n``confirmed_category_id`` (see the module docstring). Any ``suggested``\nreferences are cleared, since that layer is disposable by design. A ``404``\nif the category is unknown or not the caller's.\n\nParameters\n----------\ncategory_id : UUID\n    The category to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.",
+        "description": "Delete a category.\n\nRefuses (``409 category_has_children``) when the category has children \u2014\nchecked first, since it can never be worked around from the client the way\nclearing a confirmation can. Refuses (``409 category_in_use``) when it is\nconfirmed on any of the user's transactions \u2014 that layer is user-typed\ndata, and nulling it as a side effect of this delete would be an automated\nwrite to ``confirmed_category_id`` (see the module docstring). Any\n``suggested`` references are cleared, since that layer is disposable by\ndesign. A ``404`` if the category is unknown or not the caller's.\n\nParameters\n----------\ncategory_id : UUID\n    The category to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.",
         "operationId": "remove_category_categories__category_id__delete",
         "parameters": [
           {
@@ -2557,9 +2693,143 @@
         "summary": "Remove Category"
       }
     },
+    "/categories/{category_id}/appearance": {
+      "post": {
+        "description": "Set a category's colour and icon.\n\nA full replace: both fields are applied together. A ``404`` if the\ncategory is unknown or not the caller's; an unrecognized colour or icon\nvalue is rejected by request validation before the handler runs\n(``422``).\n\nParameters\n----------\ncategory_id : UUID\n    The category to restyle.\nbody : SetCategoryAppearanceRequest\n    The new colour and icon.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The category under its new appearance.",
+        "operationId": "set_category_appearance_endpoint_categories__category_id__appearance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCategoryAppearanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Category Appearance Endpoint"
+      }
+    },
+    "/categories/{category_id}/move": {
+      "post": {
+        "description": "Reparent a category \u2014 make it a root, or nest it under one.\n\nA ``404`` if the category, or (when given) the new parent, is unknown or\nnot the caller's. A ``422`` if the new parent is the category itself\n(``category_self_parent``) or is itself a child\n(``category_depth_exceeded``). A ``409`` if the category being moved has\nchildren of its own and a non-``null`` parent was given \u2014 moving it would\notherwise strand its children a third level deep, which the schema cannot\nexpress.\n\nParameters\n----------\ncategory_id : UUID\n    The category to move.\nbody : MoveCategoryRequest\n    The new parent, or ``null`` to make it a root.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The category under its new parent.",
+        "operationId": "move_category_endpoint_categories__category_id__move_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "category_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Category Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveCategoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Category Endpoint"
+      }
+    },
     "/categories/{category_id}/rename": {
       "post": {
-        "description": "Rename a category \u2014 its only mutation.\n\nA ``404`` if the category is unknown or not the caller's; a ``409`` if the\nnew (normalized) name collides with a *different* one of the user's\ncategories (renaming to the category's own current name is a no-op\nsuccess); a ``422`` if the name is blank or too long.\n\nParameters\n----------\ncategory_id : UUID\n    The category to rename.\nbody : RenameCategoryRequest\n    The new name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The category under its new name.",
+        "description": "Rename a category.\n\nA ``404`` if the category is unknown or not the caller's; a ``409`` if the\nnew (normalized) name collides with a *different* one of the user's\ncategories (renaming to the category's own current name is a no-op\nsuccess); a ``422`` if the name is blank or too long.\n\nParameters\n----------\ncategory_id : UUID\n    The category to rename.\nbody : RenameCategoryRequest\n    The new name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The category under its new name.",
         "operationId": "rename_category_endpoint_categories__category_id__rename_post",
         "parameters": [
           {
@@ -3732,7 +4002,7 @@
     },
     "/transactions": {
       "get": {
-        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one. Mutually exclusive with ``uncategorized`` \u2014 combining both is a\n    ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
+        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one \u2014 or, if it names a root category, one of its children too (a\n    two-level rollup, so a Panoramica drill-down through a root shows\n    every transaction the chart above it counted). Mutually exclusive\n    with ``uncategorized`` \u2014 combining both is a ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
         "operationId": "transactions_transactions_get",
         "parameters": [
           {

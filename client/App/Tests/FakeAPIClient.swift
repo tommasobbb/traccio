@@ -46,6 +46,10 @@ actor FakeAPIClient: APIClientProtocol {
     var createCategoryError: Error?
     var renameCategoryToReturn: CategoryResponse?
     var renameCategoryError: Error?
+    var categoryAppearanceToReturn: CategoryResponse?
+    var categoryAppearanceError: Error?
+    var moveCategoryToReturn: CategoryResponse?
+    var moveCategoryError: Error?
     var deleteCategoryError: Error?
     var rulesToReturn: [RuleResponse] = []
     var rulesError: Error?
@@ -119,7 +123,10 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var createdReimbursementRequests: [CreateReimbursementRequest] = []
     private(set) var deletedReimbursementIDs: [UUID] = []
     private(set) var createdCategoryNames: [String] = []
+    private(set) var createCategoryRequests: [RecordedCategoryCreate] = []
     private(set) var renamedCategories: [RecordedRename] = []
+    private(set) var categoryAppearanceUpdates: [RecordedCategoryAppearance] = []
+    private(set) var movedCategories: [RecordedCategoryMove] = []
     private(set) var deletedCategoryIDs: [UUID] = []
     private(set) var rulesFetchCount = 0
     private(set) var createdRuleRequests: [CreateRuleRequest] = []
@@ -142,6 +149,27 @@ actor FakeAPIClient: APIClientProtocol {
     struct RecordedRename: Equatable {
         let id: UUID
         let name: String
+    }
+
+    /// A recorded `createCategory(name:parentID:color:icon:)` call.
+    struct RecordedCategoryCreate: Equatable {
+        let name: String
+        let parentID: UUID?
+        let color: PaletteColor?
+        let icon: CategoryIcon?
+    }
+
+    /// A recorded `setCategoryAppearance(id:color:icon:)` call.
+    struct RecordedCategoryAppearance: Equatable {
+        let id: UUID
+        let color: PaletteColor
+        let icon: CategoryIcon?
+    }
+
+    /// A recorded `moveCategory(id:parentID:)` call.
+    struct RecordedCategoryMove: Equatable {
+        let id: UUID
+        let parentID: UUID?
     }
 
     /// A recorded `renameAccount(id:alias:)` call.
@@ -251,6 +279,22 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setDeleteCategoryError(_ error: Error) {
         deleteCategoryError = error
+    }
+
+    func setCategoryAppearanceResult(_ category: CategoryResponse) {
+        categoryAppearanceToReturn = category
+    }
+
+    func setCategoryAppearanceError(_ error: Error) {
+        categoryAppearanceError = error
+    }
+
+    func setMoveCategoryResult(_ category: CategoryResponse) {
+        moveCategoryToReturn = category
+    }
+
+    func setMoveCategoryError(_ error: Error) {
+        moveCategoryError = error
     }
 
     func setRules(_ rules: [RuleResponse]) {
@@ -504,9 +548,14 @@ actor FakeAPIClient: APIClientProtocol {
         return seedDefaultCategoriesToReturn
     }
 
-    func createCategory(name: String) async throws -> CategoryResponse {
+    func createCategory(
+        name: String, parentID: UUID?, color: PaletteColor?, icon: CategoryIcon?
+    ) async throws -> CategoryResponse {
         if let createCategoryError { throw createCategoryError }
         createdCategoryNames.append(name)
+        createCategoryRequests.append(
+            RecordedCategoryCreate(name: name, parentID: parentID, color: color, icon: icon)
+        )
         guard let createCategoryToReturn else { throw NotConfigured() }
         return createCategoryToReturn
     }
@@ -516,6 +565,22 @@ actor FakeAPIClient: APIClientProtocol {
         renamedCategories.append(RecordedRename(id: id, name: name))
         guard let renameCategoryToReturn else { throw NotConfigured() }
         return renameCategoryToReturn
+    }
+
+    func setCategoryAppearance(
+        id: UUID, color: PaletteColor, icon: CategoryIcon?
+    ) async throws -> CategoryResponse {
+        if let categoryAppearanceError { throw categoryAppearanceError }
+        categoryAppearanceUpdates.append(RecordedCategoryAppearance(id: id, color: color, icon: icon))
+        guard let categoryAppearanceToReturn else { throw NotConfigured() }
+        return categoryAppearanceToReturn
+    }
+
+    func moveCategory(id: UUID, parentID: UUID?) async throws -> CategoryResponse {
+        if let moveCategoryError { throw moveCategoryError }
+        movedCategories.append(RecordedCategoryMove(id: id, parentID: parentID))
+        guard let moveCategoryToReturn else { throw NotConfigured() }
+        return moveCategoryToReturn
     }
 
     func deleteCategory(id: UUID) async throws {

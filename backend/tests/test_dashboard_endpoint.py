@@ -21,7 +21,7 @@ from traccio.core.config import get_settings
 from traccio.db.base import Base
 from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, TransactionStatus
+from traccio.domain.enums import KeyStrategy, PaletteColor, TransactionStatus
 
 _IN_PERIOD = datetime(2026, 8, 15, tzinfo=UTC)
 _BEFORE_PERIOD = datetime(2026, 7, 1, tzinfo=UTC)
@@ -100,7 +100,9 @@ def _seed_tx(
 
 def _seed_category(engine: Engine, *, user_id: UUID, name: str) -> str:
     with Session(engine) as session:
-        category = CategoryRow(id=uuid4(), user_id=user_id, name=name, created_at=_IN_PERIOD)
+        category = CategoryRow(
+            id=uuid4(), user_id=user_id, name=name, color=PaletteColor.SLATE, created_at=_IN_PERIOD
+        )
         session.add(category)
         session.commit()
         return str(category.id)

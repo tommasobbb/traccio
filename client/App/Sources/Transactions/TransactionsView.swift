@@ -78,8 +78,16 @@ struct TransactionsView: View {
                 Button("Senza categoria") { applyCategoryFilter(.uncategorized) }
                 if !model.categories.isEmpty {
                     Divider()
-                    ForEach(model.categories) { category in
-                        Button(category.name) { applyCategoryFilter(.some(category.id)) }
+                    // Root, then its own children indented under it (a Menu
+                    // has no real indentation, so an arrow prefix stands in)
+                    // — mirrors the flat, backend-ordered list's own shape.
+                    ForEach(TraccioCore.categoryTree(model.categories)) { node in
+                        Button(node.category.name) { applyCategoryFilter(.some(node.category.id)) }
+                        ForEach(node.children) { child in
+                            Button("    ↳ \(child.name)") {
+                                applyCategoryFilter(.some(child.id))
+                            }
+                        }
                     }
                 }
             } label: {

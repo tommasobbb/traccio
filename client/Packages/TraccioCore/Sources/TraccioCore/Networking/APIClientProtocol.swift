@@ -26,8 +26,14 @@ public protocol APIClientProtocol: Sendable {
         -> [TransactionResponse]
     func categories() async throws -> [CategoryResponse]
     func seedDefaultCategories() async throws -> [CategoryResponse]
-    func createCategory(name: String) async throws -> CategoryResponse
+    func createCategory(
+        name: String, parentID: UUID?, color: PaletteColor?, icon: CategoryIcon?
+    ) async throws -> CategoryResponse
     func renameCategory(id: UUID, name: String) async throws -> CategoryResponse
+    func setCategoryAppearance(
+        id: UUID, color: PaletteColor, icon: CategoryIcon?
+    ) async throws -> CategoryResponse
+    func moveCategory(id: UUID, parentID: UUID?) async throws -> CategoryResponse
     func deleteCategory(id: UUID) async throws
     func rules() async throws -> [RuleResponse]
     func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse

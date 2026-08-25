@@ -206,7 +206,12 @@ struct TransactionDetailViewModelTests {
 
     @Test func loadCategoriesIfNeededIsANoOpWhenAlreadySeeded() async throws {
         let client = FakeAPIClient()
-        let seeded = [CategoryResponse(id: UUID(), name: "TEST CATEGORY", createdAt: Date())]
+        let seeded = [
+            CategoryResponse(
+                id: UUID(), name: "TEST CATEGORY", parentID: nil, color: .slate, icon: nil,
+                createdAt: Date()
+            )
+        ]
         let model = TransactionDetailViewModel(
             transaction: Self.makeTransaction(), categories: seeded, client: client
         )
@@ -219,7 +224,12 @@ struct TransactionDetailViewModelTests {
 
     @Test func seedDefaultCategoriesPublishesTheReturnedSet() async throws {
         let client = FakeAPIClient()
-        let defaults = [CategoryResponse(id: UUID(), name: "TEST CATEGORY", createdAt: Date())]
+        let defaults = [
+            CategoryResponse(
+                id: UUID(), name: "TEST CATEGORY", parentID: nil, color: .slate, icon: nil,
+                createdAt: Date()
+            )
+        ]
         await client.setSeedDefaultCategoriesResult(defaults)
         let model = TransactionDetailViewModel(transaction: Self.makeTransaction(), client: client)
 

@@ -19,6 +19,7 @@ from traccio.domain.enums import (
     AccountIcon,
     AccountKind,
     AdvanceStatus,
+    CategoryIcon,
     ConnectionStatus,
     EventStatus,
     KeyStrategy,
@@ -449,10 +450,18 @@ class Category(BaseModel):
 
     User-scoped: renaming or deleting a category never affects another user's
     (see ``docs/domain.md`` §Category). A user is seeded from a shared default
-    set (:func:`~traccio.domain.categories.default_categories`) but the row
+    tree (:func:`~traccio.domain.categories.default_categories`) but the row
     itself belongs to them from creation — there is no shared "global" row.
-    Deliberately flat: no ``kind``/``is_income`` flag (already carried by the
-    sign of ``effective_amount``) and no parent for hierarchy (YAGNI).
+    No ``kind``/``is_income`` flag: that is already carried by the sign of
+    ``effective_amount``, so a second flag would be a second, desynchronisable
+    source of truth.
+
+    A **strict two-level hierarchy** (ADR 0018, 2026-08-25): ``parent_id`` is
+    either ``None`` (a root) or the id of a root — never the id of another
+    child. :func:`~traccio.domain.categories.validate_parent` is the one place
+    that rule is enforced. Unique on ``(user_id, name)`` **globally**, not per
+    parent — two children under different roots cannot share a name (see ADR
+    0018 for the cost and why it was accepted).
 
     Attributes
     ----------
@@ -461,7 +470,18 @@ class Category(BaseModel):
     user_id : UUID
         Owning user.
     name : str
-        Human-readable name (e.g. ``"Groceries"``), unique per user.
+        Human-readable name (e.g. ``"Groceries"``), unique per user across the
+        whole tree.
+    parent_id : UUID or None
+        The root this category nests under, or ``None`` if it is itself a
+        root.
+    color : PaletteColor
+        The category's colour (ADR 0017). Always set — every creation path
+        resolves one, defaulting to the parent's own colour for a new child
+        (:func:`~traccio.domain.categories.default_child_color`) or to
+        :attr:`~traccio.domain.enums.PaletteColor.SLATE` for a root.
+    icon : CategoryIcon or None
+        The category's icon, or ``None`` before the user has picked one.
     created_at : datetime
         When the category was created (timezone-aware, UTC).
     """
@@ -471,6 +491,9 @@ class Category(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
     name: str
+    parent_id: UUID | None = None
+    color: PaletteColor = PaletteColor.SLATE
+    icon: CategoryIcon | None = None
     created_at: datetime = Field(default_factory=_now)
 
 

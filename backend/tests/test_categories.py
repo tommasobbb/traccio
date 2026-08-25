@@ -10,14 +10,19 @@ import pytest
 
 from traccio.domain import KeyStrategy, Money, Transaction, TransactionStatus, default_categories
 from traccio.domain.categories import (
-    DEFAULT_CATEGORY_NAMES,
+    DEFAULT_CATEGORY_TREE,
     MAX_CATEGORY_NAME_LENGTH,
     REASON_BLANK_NAME,
+    REASON_DEPTH_EXCEEDED,
     REASON_NAME_TOO_LONG,
+    REASON_SELF_PARENT,
     CategoryError,
+    default_child_color,
     effective_category,
     normalize_category_name,
+    validate_parent,
 )
+from traccio.domain.enums import PaletteColor
 
 
 def _tx(
@@ -104,7 +109,74 @@ def test_default_categories_are_user_scoped_and_uniquely_named() -> None:
     """The seed set belongs to the given user and has no duplicate names."""
     user_id = uuid4()
     categories = default_categories(user_id)
-    assert len(categories) == len(DEFAULT_CATEGORY_NAMES)
+    expected_count = len(DEFAULT_CATEGORY_TREE) + sum(
+        len(root.children) for root in DEFAULT_CATEGORY_TREE
+    )
+    assert len(categories) == expected_count
     assert all(category.user_id == user_id for category in categories)
     names = [category.name for category in categories]
     assert len(names) == len(set(names))
+
+
+def test_default_categories_has_all_thirteen_roots() -> None:
+    """The 13 root names survive byte-identical (the migration backfill key)."""
+    user_id = uuid4()
+    categories = default_categories(user_id)
+    root_names = {category.name for category in categories if category.parent_id is None}
+    assert root_names == {
+        "Groceries",
+        "Dining out",
+        "Transport",
+        "Housing",
+        "Utilities",
+        "Health",
+        "Shopping",
+        "Entertainment",
+        "Travel",
+        "Subscriptions",
+        "Fees",
+        "Income",
+        "Other",
+    }
+
+
+def test_default_categories_children_carry_their_roots_id() -> None:
+    """Every child's parent_id resolves to a real root already in the list."""
+    categories = default_categories(uuid4())
+    root_ids = {category.id for category in categories if category.parent_id is None}
+    children = [category for category in categories if category.parent_id is not None]
+    assert children, "expected at least one default child category"
+    assert all(child.parent_id in root_ids for child in children)
+
+
+def test_validate_parent_allows_no_parent() -> None:
+    """A `None` parent (a root) never raises, regardless of the other ids."""
+    validate_parent(category_id=uuid4(), parent_id=None, parent_parent_id=uuid4())
+
+
+def test_validate_parent_allows_a_root_parent() -> None:
+    """Nesting under a genuine root (no parent of its own) is fine."""
+    validate_parent(category_id=uuid4(), parent_id=uuid4(), parent_parent_id=None)
+
+
+def test_validate_parent_rejects_self_parent() -> None:
+    category_id = uuid4()
+    with pytest.raises(CategoryError) as excinfo:
+        validate_parent(category_id=category_id, parent_id=category_id, parent_parent_id=None)
+    assert excinfo.value.reason == REASON_SELF_PARENT
+
+
+def test_validate_parent_rejects_a_third_level() -> None:
+    """A parent that is itself a child would make this a grandchild."""
+    with pytest.raises(CategoryError) as excinfo:
+        validate_parent(category_id=uuid4(), parent_id=uuid4(), parent_parent_id=uuid4())
+    assert excinfo.value.reason == REASON_DEPTH_EXCEEDED
+
+
+def test_validate_parent_on_create_has_no_self_parent_case() -> None:
+    """category_id=None (a brand-new category) can never equal parent_id."""
+    validate_parent(category_id=None, parent_id=uuid4(), parent_parent_id=None)
+
+
+def test_default_child_color_inherits_the_parent() -> None:
+    assert default_child_color(PaletteColor.TEAL) is PaletteColor.TEAL

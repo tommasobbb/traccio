@@ -28,6 +28,7 @@ from traccio.db.repositories import (
     get_transaction,
     get_transaction_event_id,
     list_advances,
+    list_child_category_ids,
     list_transactions,
     prune_stale_pending_transactions,
     set_confirmed_category,
@@ -73,8 +74,10 @@ def transactions(
         When given, restrict to transactions grouped under this event.
     category_id : UUID or None, optional
         When given, restrict to transactions whose effective category is this
-        one. Mutually exclusive with ``uncategorized`` — combining both is a
-        ``422``.
+        one — or, if it names a root category, one of its children too (a
+        two-level rollup, so a Panoramica drill-down through a root shows
+        every transaction the chart above it counted). Mutually exclusive
+        with ``uncategorized`` — combining both is a ``422``.
     uncategorized : bool, optional
         When true, restrict to transactions with no effective category.
         Mutually exclusive with ``category_id``.
@@ -90,12 +93,21 @@ def transactions(
     """
     if category_id is not None and uncategorized:
         raise HTTPException(status_code=422, detail="conflicting_category_filter")
+    category_ids: list[UUID] | None = None
+    if category_id is not None:
+        # Expand a root into itself + its children (a no-op list if
+        # category_id names a child, or an unknown/foreign id) — see
+        # list_transactions's own docstring for why this is a plural filter.
+        category_ids = [
+            category_id,
+            *list_child_category_ids(session, user_id=user_id, category_id=category_id),
+        ]
     found = list_transactions(
         session,
         user_id,
         account_id=account_id,
         event_id=event_id,
-        category_id=category_id,
+        category_ids=category_ids,
         uncategorized=uncategorized,
         limit=limit,
         offset=offset,

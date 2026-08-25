@@ -337,6 +337,9 @@ def category_to_row(category: Category) -> CategoryRow:
         id=category.id,
         user_id=category.user_id,
         name=category.name,
+        parent_id=category.parent_id,
+        color=category.color,
+        icon=category.icon,
         created_at=category.created_at,
     )
 
@@ -347,6 +350,9 @@ def row_to_category(row: CategoryRow) -> Category:
         id=row.id,
         user_id=row.user_id,
         name=row.name,
+        parent_id=row.parent_id,
+        color=row.color,
+        icon=row.icon,
         created_at=row.created_at,
     )
 

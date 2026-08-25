@@ -58,6 +58,7 @@ from traccio.domain.categories import default_categories
 from traccio.domain.enums import (
     AccountIcon,
     AdvanceStatus,
+    CategoryIcon,
     ConnectionStatus,
     EventStatus,
     PaletteColor,
@@ -661,7 +662,7 @@ def list_transactions(
     *,
     account_id: UUID | None = None,
     event_id: UUID | None = None,
-    category_id: UUID | None = None,
+    category_ids: Sequence[UUID] | None = None,
     uncategorized: bool = False,
     limit: int = 50,
     offset: int = 0,
@@ -685,13 +686,16 @@ def list_transactions(
         When given, restrict to this account (still scoped by ``user_id``).
     event_id : UUID or None, optional
         When given, restrict to transactions grouped under this event.
-    category_id : UUID or None, optional
+    category_ids : Sequence[UUID] or None, optional
         When given, restrict to transactions whose **effective** category
-        (``coalesce(confirmed_category_id, suggested_category_id)``) is this
-        one — mirroring the pure ``domain/categories.py::effective_category``
-        in SQL. The caller (``api/``) rejects combining this with
-        ``uncategorized``; this function does not re-check that, it just
-        applies both filters if given both.
+        (``coalesce(confirmed_category_id, suggested_category_id)``) is one of
+        these ids — mirroring the pure
+        ``domain/categories.py::effective_category`` in SQL. A plural filter,
+        not a single id: filtering by a root category rolls up its children
+        too, and the caller (``api/``) is the one that expands a root id into
+        that root plus its children before calling this. The caller also
+        rejects combining this with ``uncategorized``; this function does not
+        re-check that, it just applies both filters if given both.
     uncategorized : bool, optional
         When true, restrict to transactions with no effective category (the
         same ``coalesce`` expression, ``IS NULL``).
@@ -714,8 +718,8 @@ def list_transactions(
     effective_category = func.coalesce(
         TransactionRow.confirmed_category_id, TransactionRow.suggested_category_id
     )
-    if category_id is not None:
-        query = query.where(effective_category == category_id)
+    if category_ids is not None:
+        query = query.where(effective_category.in_(category_ids))
     if uncategorized:
         query = query.where(effective_category.is_(None))
     query = (
@@ -1725,11 +1729,17 @@ def get_category(session: Session, *, user_id: UUID, category_id: UUID) -> Categ
 
 
 def list_categories(session: Session, user_id: UUID) -> list[Category]:
-    """Return the user's categories, alphabetically by name.
+    """Return the user's categories: each root, alphabetically, immediately
+    followed by its own children, also alphabetically.
 
-    Alphabetical rather than the ``created_at`` order used elsewhere: this list
-    is what a category picker renders, and a picker wants alphabetical, not
-    chronological.
+    A flat list — not nested — because every consumer (a picker, the rules
+    editor, the filter chips) wants a flat list to render with indentation, not
+    a tree to walk. The interleaving is done here, in Python, rather than with
+    a self-join in SQL: a single ``ORDER BY name`` fetch, split into roots and
+    a per-parent grouping, and re-merged — simpler to read than the SQL this
+    would take, and correct because the two-level depth guarantee
+    (:func:`~traccio.domain.categories.validate_parent`) means every child's
+    parent is always a root already in this same list.
 
     Parameters
     ----------
@@ -1741,13 +1751,25 @@ def list_categories(session: Session, user_id: UUID) -> list[Category]:
     Returns
     -------
     list[Category]
-        Domain categories owned by ``user_id``, ordered by name (empty if
-        none).
+        Domain categories owned by ``user_id``: roots and children
+        interleaved as described above (empty if none).
     """
     rows = session.scalars(
         select(CategoryRow).where(CategoryRow.user_id == user_id).order_by(CategoryRow.name)
     ).all()
-    return [row_to_category(row) for row in rows]
+    categories = [row_to_category(row) for row in rows]
+
+    children_by_parent: dict[UUID, list[Category]] = {}
+    for category in categories:
+        if category.parent_id is not None:
+            children_by_parent.setdefault(category.parent_id, []).append(category)
+
+    ordered: list[Category] = []
+    for category in categories:
+        if category.parent_id is None:
+            ordered.append(category)
+            ordered.extend(children_by_parent.get(category.id, []))
+    return ordered
 
 
 def category_name_exists(session: Session, *, user_id: UUID, name: str) -> bool:
@@ -1893,6 +1915,135 @@ def category_is_confirmed_on_any_transaction(
             )
         ).first()
         is not None
+    )
+
+
+def list_child_category_ids(session: Session, *, user_id: UUID, category_id: UUID) -> list[UUID]:
+    """Return the ids of a category's direct children, scoped by ``user_id``.
+
+    Always empty for a category that is itself a child — the two-level
+    hierarchy means a child never has children of its own
+    (:func:`~traccio.domain.categories.validate_parent`).
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner to check within; the query is scoped to it.
+    category_id : UUID
+        The (presumed root) category to find children of.
+
+    Returns
+    -------
+    list[UUID]
+        The ids of every category whose ``parent_id`` is ``category_id``
+        (empty if none, including when ``category_id`` does not exist).
+    """
+    return list(
+        session.scalars(
+            select(CategoryRow.id).where(
+                CategoryRow.user_id == user_id, CategoryRow.parent_id == category_id
+            )
+        ).all()
+    )
+
+
+def category_has_children(session: Session, *, user_id: UUID, category_id: UUID) -> bool:
+    """Return whether a category has at least one direct child.
+
+    The guard behind refusing to delete a parent, and behind refusing to move
+    a category-with-children under another root (both would otherwise
+    silently orphan or re-parent rows the user organized deliberately).
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner to check within; the query is scoped to it.
+    category_id : UUID
+        The category to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if at least one of the user's categories has this one as its
+        ``parent_id``.
+    """
+    return (
+        session.scalars(
+            select(CategoryRow.id).where(
+                CategoryRow.user_id == user_id, CategoryRow.parent_id == category_id
+            )
+        ).first()
+        is not None
+    )
+
+
+def set_category_appearance(
+    session: Session,
+    *,
+    user_id: UUID,
+    category_id: UUID,
+    color: PaletteColor,
+    icon: CategoryIcon | None,
+) -> None:
+    """Set a category's colour and icon, scoped by ``user_id``.
+
+    A full replace: both fields are applied together, mirroring
+    :func:`set_account_appearance`. Unlike an account's colour, a category's
+    ``color`` is never ``None`` — every creation path already resolved one.
+    Scoped by ``user_id``; a no-op if no row matches. The caller owns the
+    transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the category; the update is scoped to it.
+    category_id : UUID
+        The category to restyle.
+    color : PaletteColor
+        The new colour.
+    icon : CategoryIcon or None
+        The new icon, or ``None`` to clear it.
+    """
+    session.execute(
+        update(CategoryRow)
+        .where(CategoryRow.id == category_id, CategoryRow.user_id == user_id)
+        .values(color=color, icon=icon)
+    )
+
+
+def move_category(
+    session: Session, *, user_id: UUID, category_id: UUID, parent_id: UUID | None
+) -> None:
+    """Set a category's parent, scoped by ``user_id``.
+
+    The caller validates the move first
+    (:func:`~traccio.domain.categories.validate_parent` for depth/self-parent,
+    :func:`category_has_children` for "moving a category-with-children under
+    another root would silently strand its own children two levels deep") —
+    this function performs the write unconditionally. A no-op if no row
+    matches. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the category; the update is scoped to it.
+    category_id : UUID
+        The category to move.
+    parent_id : UUID or None
+        The new parent, or ``None`` to make this category a root.
+    """
+    session.execute(
+        update(CategoryRow)
+        .where(CategoryRow.id == category_id, CategoryRow.user_id == user_id)
+        .values(parent_id=parent_id)
     )
 
 

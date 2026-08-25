@@ -15,19 +15,27 @@ from sqlalchemy.pool import StaticPool
 from traccio.db.base import Base
 from traccio.db.models import TransactionRow
 from traccio.db.repositories import (
+    category_has_children,
     category_is_confirmed_on_any_transaction,
     category_name_exists,
     create_category,
     delete_category,
     get_category,
     list_categories,
+    list_child_category_ids,
+    move_category,
     rename_category,
     seed_default_categories,
+    set_category_appearance,
     set_confirmed_category,
 )
-from traccio.domain.categories import DEFAULT_CATEGORY_NAMES
-from traccio.domain.enums import KeyStrategy, TransactionStatus
+from traccio.domain.categories import DEFAULT_CATEGORY_TREE
+from traccio.domain.enums import KeyStrategy, PaletteColor, TransactionStatus
 from traccio.domain.models import Category
+
+_DEFAULT_CATEGORY_COUNT = len(DEFAULT_CATEGORY_TREE) + sum(
+    len(root.children) for root in DEFAULT_CATEGORY_TREE
+)
 
 
 def _engine() -> Engine:
@@ -183,9 +191,9 @@ def test_seed_default_categories_is_idempotent() -> None:
 
         listed = list_categories(session, user_id)
 
-    assert len(first) == len(DEFAULT_CATEGORY_NAMES)
+    assert len(first) == _DEFAULT_CATEGORY_COUNT
     assert second == []
-    assert len(listed) == len(DEFAULT_CATEGORY_NAMES)
+    assert len(listed) == _DEFAULT_CATEGORY_COUNT
 
 
 def test_seed_default_categories_is_user_scoped() -> None:
@@ -199,7 +207,7 @@ def test_seed_default_categories_is_user_scoped() -> None:
         created = seed_default_categories(session, user_id=mine)
         session.commit()
 
-    assert len(created) == len(DEFAULT_CATEGORY_NAMES)
+    assert len(created) == _DEFAULT_CATEGORY_COUNT
 
 
 def test_delete_category_clears_suggested_references() -> None:
@@ -302,6 +310,137 @@ def test_set_confirmed_category_clears_with_none() -> None:
 
     assert surviving is not None
     assert surviving.confirmed_category_id is None
+
+
+def test_list_categories_interleaves_each_root_with_its_children() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        housing = _category(user_id=user_id, name="Housing")
+        create_category(session, category=housing)
+        create_category(session, category=_category(user_id=user_id, name="Groceries"))
+        create_category(
+            session,
+            category=Category(user_id=user_id, name="Rent", parent_id=housing.id),
+        )
+        create_category(
+            session,
+            category=Category(user_id=user_id, name="Maintenance", parent_id=housing.id),
+        )
+        session.commit()
+
+        listed = list_categories(session, user_id)
+
+    # Roots alphabetically (Groceries, Housing); Housing's children immediately
+    # after it, also alphabetically (Maintenance, Rent) — not interleaved with
+    # Groceries or sorted as one flat alphabetical list.
+    assert [c.name for c in listed] == ["Groceries", "Housing", "Maintenance", "Rent"]
+
+
+def test_list_child_category_ids_returns_only_direct_children() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        root = _category(user_id=user_id, name="Housing")
+        create_category(session, category=root)
+        child = Category(user_id=user_id, name="Rent", parent_id=root.id)
+        create_category(session, category=child)
+        create_category(session, category=_category(user_id=user_id, name="Groceries"))
+        session.commit()
+
+        child_ids = list_child_category_ids(session, user_id=user_id, category_id=root.id)
+
+    assert child_ids == [child.id]
+
+
+def test_list_child_category_ids_is_empty_for_a_leaf() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        root = _category(user_id=user_id, name="Housing")
+        create_category(session, category=root)
+        child = Category(user_id=user_id, name="Rent", parent_id=root.id)
+        create_category(session, category=child)
+        session.commit()
+
+        assert list_child_category_ids(session, user_id=user_id, category_id=child.id) == []
+
+
+def test_category_has_children() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        root = _category(user_id=user_id, name="Housing")
+        create_category(session, category=root)
+        session.commit()
+        assert not category_has_children(session, user_id=user_id, category_id=root.id)
+
+        create_category(session, category=Category(user_id=user_id, name="Rent", parent_id=root.id))
+        session.commit()
+        assert category_has_children(session, user_id=user_id, category_id=root.id)
+
+
+def test_move_category_sets_a_new_parent() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        housing = _category(user_id=user_id, name="Housing")
+        transport = _category(user_id=user_id, name="Transport")
+        create_category(session, category=housing)
+        create_category(session, category=transport)
+        child = Category(user_id=user_id, name="Fuel", parent_id=transport.id)
+        create_category(session, category=child)
+        session.commit()
+
+        move_category(session, user_id=user_id, category_id=child.id, parent_id=housing.id)
+        session.commit()
+
+        fetched = get_category(session, user_id=user_id, category_id=child.id)
+
+    assert fetched is not None
+    assert fetched.parent_id == housing.id
+
+
+def test_move_category_to_none_makes_it_a_root() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        root = _category(user_id=user_id, name="Housing")
+        create_category(session, category=root)
+        child = Category(user_id=user_id, name="Rent", parent_id=root.id)
+        create_category(session, category=child)
+        session.commit()
+
+        move_category(session, user_id=user_id, category_id=child.id, parent_id=None)
+        session.commit()
+
+        fetched = get_category(session, user_id=user_id, category_id=child.id)
+
+    assert fetched is not None
+    assert fetched.parent_id is None
+
+
+def test_set_category_appearance() -> None:
+    user_id = uuid4()
+    engine = _engine()
+    with Session(engine) as session:
+        category = _category(user_id=user_id)
+        create_category(session, category=category)
+        session.commit()
+
+        set_category_appearance(
+            session,
+            user_id=user_id,
+            category_id=category.id,
+            color=PaletteColor.TEAL,
+            icon=None,
+        )
+        session.commit()
+
+        fetched = get_category(session, user_id=user_id, category_id=category.id)
+
+    assert fetched is not None
+    assert fetched.color is PaletteColor.TEAL
 
 
 def test_category_is_confirmed_on_any_transaction_is_user_scoped() -> None:

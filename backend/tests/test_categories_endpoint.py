@@ -20,7 +20,7 @@ from traccio.core.config import get_settings
 from traccio.db.base import Base
 from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, TransactionStatus
+from traccio.domain.enums import KeyStrategy, PaletteColor, TransactionStatus
 
 _DAY = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -72,7 +72,9 @@ def _seed_tx(engine: Engine, *, user_id: UUID, stable_key: str = "TX-A") -> str:
 
 def _seed_category(engine: Engine, *, user_id: UUID, name: str = "TEST CATEGORY 01") -> str:
     with Session(engine) as session:
-        row = CategoryRow(id=uuid4(), user_id=user_id, name=name, created_at=_DAY)
+        row = CategoryRow(
+            id=uuid4(), user_id=user_id, name=name, color=PaletteColor.SLATE, created_at=_DAY
+        )
         session.add(row)
         session.commit()
         return str(row.id)
@@ -158,8 +160,15 @@ def test_seed_defaults_does_not_resurrect_a_category_deleted_while_others_remain
 def test_seed_defaults_reseeds_after_the_user_empties_the_set() -> None:
     client = _client(_sqlite_engine())
     client.post("/categories/defaults")
-    for category in client.get("/categories").json()["categories"]:
-        client.delete(f"/categories/{category['id']}")
+    # Children first: a root with children refuses DELETE (409
+    # category_has_children), so the tree must be emptied leaf-first.
+    seeded = client.get("/categories").json()["categories"]
+    for category in seeded:
+        if category["parent_id"] is not None:
+            client.delete(f"/categories/{category['id']}")
+    for category in seeded:
+        if category["parent_id"] is None:
+            client.delete(f"/categories/{category['id']}")
     assert client.get("/categories").json()["categories"] == []
 
     response = client.post("/categories/defaults")
@@ -343,6 +352,177 @@ def test_cannot_confirm_another_users_category() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "unknown category"
+
+
+def test_create_category_as_a_child_inherits_the_parents_color_by_default() -> None:
+    client = _client(_sqlite_engine())
+    root = client.post("/categories", json={"name": "Housing", "color": "indigo"}).json()
+
+    response = client.post("/categories", json={"name": "Rent", "parent_id": root["id"]})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["parent_id"] == root["id"]
+    assert body["color"] == "indigo"
+
+
+def test_create_category_with_an_explicit_color_overrides_the_parent_default() -> None:
+    client = _client(_sqlite_engine())
+    root = client.post("/categories", json={"name": "Housing", "color": "indigo"}).json()
+
+    response = client.post(
+        "/categories", json={"name": "Rent", "parent_id": root["id"], "color": "teal"}
+    )
+
+    assert response.json()["color"] == "teal"
+
+
+def test_create_root_category_with_no_color_defaults_to_slate() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post("/categories", json={"name": "Groceries"})
+
+    assert response.json()["color"] == "slate"
+
+
+def test_create_category_with_unknown_parent_is_404() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post("/categories", json={"name": "Rent", "parent_id": str(uuid4())})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "unknown parent category"
+
+
+def test_create_category_under_a_child_is_depth_exceeded() -> None:
+    client = _client(_sqlite_engine())
+    root = client.post("/categories", json={"name": "Housing"}).json()
+    child = client.post("/categories", json={"name": "Rent", "parent_id": root["id"]}).json()
+
+    response = client.post("/categories", json={"name": "Sub-rent", "parent_id": child["id"]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "category_depth_exceeded"
+
+
+def test_set_category_appearance() -> None:
+    client = _client(_sqlite_engine())
+    category_id = client.post("/categories", json={"name": "Groceries"}).json()["id"]
+
+    response = client.post(
+        f"/categories/{category_id}/appearance", json={"color": "teal", "icon": "groceries"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["color"] == "teal"
+    assert body["icon"] == "groceries"
+
+
+def test_set_category_appearance_unknown_is_404() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post(
+        f"/categories/{uuid4()}/appearance", json={"color": "teal", "icon": None}
+    )
+
+    assert response.status_code == 404
+
+
+def test_move_category_to_a_root() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    transport = client.post("/categories", json={"name": "Transport"}).json()
+    fuel = client.post("/categories", json={"name": "Fuel", "parent_id": transport["id"]}).json()
+
+    response = client.post(f"/categories/{fuel['id']}/move", json={"parent_id": housing["id"]})
+
+    assert response.status_code == 200
+    assert response.json()["parent_id"] == housing["id"]
+
+
+def test_move_category_to_none_makes_it_a_root() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    rent = client.post("/categories", json={"name": "Rent", "parent_id": housing["id"]}).json()
+
+    response = client.post(f"/categories/{rent['id']}/move", json={"parent_id": None})
+
+    assert response.status_code == 200
+    assert response.json()["parent_id"] is None
+
+
+def test_move_category_to_itself_is_self_parent() -> None:
+    client = _client(_sqlite_engine())
+    category = client.post("/categories", json={"name": "Groceries"}).json()
+
+    response = client.post(f"/categories/{category['id']}/move", json={"parent_id": category["id"]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "category_self_parent"
+
+
+def test_move_category_under_a_child_is_depth_exceeded() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    rent = client.post("/categories", json={"name": "Rent", "parent_id": housing["id"]}).json()
+    groceries = client.post("/categories", json={"name": "Groceries"}).json()
+
+    response = client.post(f"/categories/{groceries['id']}/move", json={"parent_id": rent["id"]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "category_depth_exceeded"
+
+
+def test_move_a_category_with_children_under_another_root_is_refused() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    client.post("/categories", json={"name": "Rent", "parent_id": housing["id"]})
+    transport = client.post("/categories", json={"name": "Transport"}).json()
+
+    response = client.post(f"/categories/{housing['id']}/move", json={"parent_id": transport["id"]})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "category_has_children"
+
+
+def test_move_unknown_category_is_404() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post(f"/categories/{uuid4()}/move", json={"parent_id": None})
+
+    assert response.status_code == 404
+
+
+def test_move_to_an_unknown_parent_is_404() -> None:
+    client = _client(_sqlite_engine())
+    category = client.post("/categories", json={"name": "Groceries"}).json()
+
+    response = client.post(f"/categories/{category['id']}/move", json={"parent_id": str(uuid4())})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "unknown parent category"
+
+
+def test_delete_category_with_children_is_refused() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    client.post("/categories", json={"name": "Rent", "parent_id": housing["id"]})
+
+    response = client.delete(f"/categories/{housing['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "category_has_children"
+
+
+def test_delete_a_child_category_succeeds() -> None:
+    client = _client(_sqlite_engine())
+    housing = client.post("/categories", json={"name": "Housing"}).json()
+    rent = client.post("/categories", json={"name": "Rent", "parent_id": housing["id"]}).json()
+
+    assert client.delete(f"/categories/{rent['id']}").status_code == 204
+    names = {c["name"] for c in client.get("/categories").json()["categories"]}
+    assert names == {"Housing"}
 
 
 def test_cannot_categorize_another_users_transaction() -> None:

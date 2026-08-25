@@ -18,9 +18,9 @@ from sqlalchemy.pool import StaticPool
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.db.base import Base
-from traccio.db.models import TransactionRow
+from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, TransactionRole, TransactionStatus
+from traccio.domain.enums import KeyStrategy, PaletteColor, TransactionRole, TransactionStatus
 
 
 def _tx(
@@ -414,6 +414,141 @@ def test_transactions_can_be_filtered_by_effective_category() -> None:
     assert [t["description"] for t in response.json()["transactions"]] == [
         "TEST MERCHANT CONFIRMED"
     ]
+
+
+def test_category_filter_includes_children() -> None:
+    """Filtering on a root category rolls up its children too."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    root_id, child_id, other_id = uuid4(), uuid4(), uuid4()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                CategoryRow(
+                    id=root_id,
+                    user_id=dev_user_id,
+                    name="Housing",
+                    color=PaletteColor.INDIGO,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                CategoryRow(
+                    id=child_id,
+                    user_id=dev_user_id,
+                    name="Rent",
+                    parent_id=root_id,
+                    color=PaletteColor.INDIGO,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                CategoryRow(
+                    id=other_id,
+                    user_id=dev_user_id,
+                    name="Transport",
+                    color=PaletteColor.BLUE,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-ROOT",
+                    description="TEST MERCHANT ROOT",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    confirmed_category_id=root_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-CHILD",
+                    description="TEST MERCHANT CHILD",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                    confirmed_category_id=child_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-OTHER",
+                    description="TEST MERCHANT OTHER",
+                    booked_at=datetime(2026, 1, 3, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 3, tzinfo=UTC),
+                    confirmed_category_id=other_id,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"category_id": str(root_id)})
+
+    assert response.status_code == 200
+    descriptions = {t["description"] for t in response.json()["transactions"]}
+    assert descriptions == {"TEST MERCHANT ROOT", "TEST MERCHANT CHILD"}
+
+
+def test_category_filter_on_a_child_does_not_roll_up_to_siblings() -> None:
+    """Filtering on a child returns only that child — no expansion upward."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    root_id, child_id, sibling_id = uuid4(), uuid4(), uuid4()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                CategoryRow(
+                    id=root_id,
+                    user_id=dev_user_id,
+                    name="Housing",
+                    color=PaletteColor.INDIGO,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                CategoryRow(
+                    id=child_id,
+                    user_id=dev_user_id,
+                    name="Rent",
+                    parent_id=root_id,
+                    color=PaletteColor.INDIGO,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                CategoryRow(
+                    id=sibling_id,
+                    user_id=dev_user_id,
+                    name="Maintenance",
+                    parent_id=root_id,
+                    color=PaletteColor.INDIGO,
+                    created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-CHILD",
+                    description="TEST MERCHANT CHILD",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                    confirmed_category_id=child_id,
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-SIBLING",
+                    description="TEST MERCHANT SIBLING",
+                    booked_at=datetime(2026, 1, 3, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 3, tzinfo=UTC),
+                    confirmed_category_id=sibling_id,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"category_id": str(child_id)})
+
+    assert response.status_code == 200
+    assert [t["description"] for t in response.json()["transactions"]] == ["TEST MERCHANT CHILD"]
 
 
 def test_transactions_can_be_filtered_to_uncategorized() -> None:

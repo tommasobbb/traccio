@@ -514,7 +514,9 @@ struct APIClientTests {
     /// A representative `GET /categories` envelope: one category.
     private static let categoriesEnvelope = """
         { "categories": [
-          { "id": "11111111-1111-1111-1111-111111111111", "name": "Alimentari", "created_at": "2026-08-10T09:30:00+00:00" }
+          { "id": "11111111-1111-1111-1111-111111111111", "name": "Alimentari",
+            "parent_id": null, "color": "green", "icon": "groceries",
+            "created_at": "2026-08-10T09:30:00+00:00" }
         ] }
         """
 
@@ -559,6 +561,7 @@ struct APIClientTests {
             )!
             let envelope = """
                 { "id": "11111111-1111-1111-1111-111111111111", "name": "Alimentari",
+                  "parent_id": null, "color": "slate", "icon": null,
                   "created_at": "2026-08-24T09:30:00+00:00" }
                 """
             return (response, Data(envelope.utf8))
@@ -566,6 +569,35 @@ struct APIClientTests {
 
         let category = try await client.createCategory(name: "Alimentari")
         #expect(category.name == "Alimentari")
+    }
+
+    @Test func createCategoryWithParentPostsParentIDColorAndIcon() async throws {
+        let parentID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/categories")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["name"] == "Affitto")
+            #expect(body?["parent_id"] == parentID.uuidString)
+            #expect(body?["color"] == "indigo")
+            #expect(body?["icon"] == "rent")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "11111111-1111-1111-1111-111111111111", "name": "Affitto",
+                  "parent_id": "\(parentID.uuidString)", "color": "indigo", "icon": "rent",
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.createCategory(
+            name: "Affitto", parentID: parentID, color: .indigo, icon: .rent
+        )
+        #expect(category.parentID == parentID)
+        #expect(category.color == .indigo)
+        #expect(category.icon == .rent)
     }
 
     @Test func createCategoryThrowsBadStatusOnADuplicateName() async {
@@ -597,6 +629,7 @@ struct APIClientTests {
             )!
             let envelope = """
                 { "id": "\(categoryID.uuidString)", "name": "Spesa",
+                  "parent_id": null, "color": "slate", "icon": null,
                   "created_at": "2026-08-24T09:30:00+00:00" }
                 """
             return (response, Data(envelope.utf8))
@@ -604,6 +637,78 @@ struct APIClientTests {
 
         let category = try await client.renameCategory(id: categoryID, name: "Spesa")
         #expect(category.name == "Spesa")
+    }
+
+    @Test func setCategoryAppearancePostsColorAndIconAndDecodesThem() async throws {
+        let categoryID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/categories/\(categoryID.uuidString)/appearance")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["color"] as? String == "teal")
+            #expect(body?["icon"] is NSNull)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(categoryID.uuidString)", "name": "Spesa",
+                  "parent_id": null, "color": "teal", "icon": null,
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.setCategoryAppearance(
+            id: categoryID, color: .teal, icon: nil
+        )
+        #expect(category.color == .teal)
+        #expect(category.icon == nil)
+    }
+
+    @Test func moveCategoryPostsTheNewParentAndDecodesIt() async throws {
+        let categoryID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let parentID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/categories/\(categoryID.uuidString)/move")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["parent_id"] == parentID.uuidString)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(categoryID.uuidString)", "name": "Affitto",
+                  "parent_id": "\(parentID.uuidString)", "color": "slate", "icon": null,
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.moveCategory(id: categoryID, parentID: parentID)
+        #expect(category.parentID == parentID)
+    }
+
+    @Test func moveCategoryToNilParentSendsExplicitNull() async throws {
+        let categoryID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["parent_id"] is NSNull)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(categoryID.uuidString)", "name": "Affitto",
+                  "parent_id": null, "color": "slate", "icon": null,
+                  "created_at": "2026-08-24T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let category = try await client.moveCategory(id: categoryID, parentID: nil)
+        #expect(category.parentID == nil)
     }
 
     @Test func deleteCategoryIssuesADeleteToTheCategoryEndpoint() async throws {

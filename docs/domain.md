@@ -480,6 +480,33 @@ side effect of deleting a different entity would itself be the automated
 write the rule forbids — but clears any `suggested` references, since that
 layer is disposable by design.
 
+**Hierarchy, colour, and icon** (ADR 0018, ADR 0017, 2026-08-25): a category
+nests in a **strict two-level hierarchy** — `parent_id` is `None` (a root) or
+names a root; a category whose own `parent_id` is set can never itself be a
+parent. `domain/categories.py::validate_parent` is the one place depth is
+checked (the schema cannot portably express "at most two levels"). Deleting a
+category refuses (`409 category_has_children`, checked before the
+confirmation-in-use refusal above) when it has children — the same posture as
+the confirmation refusal: silently orphaning or cascading would be a mutation
+the user never asked for. Reparenting is its own action,
+`POST /categories/{id}/move`, so reorganizing does not require delete-and-
+recreate (which the confirmation refusal would block anyway for exactly the
+categories worth reorganizing).
+
+Every category carries a `color` (`PaletteColor`, never `None` — every
+creation path resolves one, defaulting to the parent's own colour for a new
+child or to `slate` for a root) and an optional `icon`. Both are fixed,
+shared vocabularies, not free hex/SF Symbol strings — see ADR 0017.
+
+Uniqueness on `(user_id, name)` stays **global**, not per parent: two
+children under different roots cannot share a name (you write "Bollette
+casa" / "Bollette auto", not two "Bollette"). A per-parent constraint was
+considered and rejected — `NULL` compares distinct to itself on PostgreSQL, so
+a `(user_id, parent_id, name)` constraint would let two same-named *roots*
+through, and every client surface (a picker, a filter chip, a rule) renders a
+category by bare name, where two identically-named children would be
+indistinguishable anyway. See ADR 0018 for the full argument.
+
 ---
 
 ## Rule
@@ -488,6 +515,12 @@ A user-defined mapping from a transaction pattern to a `Category`, applied
 during categorization. Rules run before the automatic engine and win over it,
 but still write to `suggested_category_id` — they are automation, not a user
 confirming an individual transaction.
+
+A rule may target a root **or a child** category (ADR 0018) — `category_id` is
+just a foreign key, and the service that applies rules has no notion of the
+hierarchy at all. Precision is the entire point of a child category
+(`"AMAZON PRIME"` → `Subscriptions › Streaming` rather than the whole of
+`Subscriptions`), so no special case exists for it.
 
 **Implementation note** (2026-08-21): a rule matches on `Transaction.description`
 — the raw bank text — never `display_description`, since no code path

@@ -313,18 +313,31 @@ struct TransactionDetailView: View {
         }
     }
 
+    /// Two-level picker (ADR 0018): each root immediately followed by its own
+    /// children, indented — `TraccioCore.categoryTree(_:)` does the pure
+    /// regrouping, this view only adds indentation.
     private var categoryList: some View {
-        VStack(spacing: 0) {
-            ForEach(model.categories) { category in
-                categoryRow(category)
-                if category.id != model.categories.last?.id {
+        let tree = TraccioCore.categoryTree(model.categories)
+        return VStack(spacing: 0) {
+            ForEach(tree) { node in
+                categoryRow(node.category, indented: false)
+                if !node.children.isEmpty {
+                    Divider().overlay(Palette.separatorSubtle)
+                }
+                ForEach(node.children) { child in
+                    categoryRow(child, indented: true)
+                    if child.id != node.children.last?.id {
+                        Divider().overlay(Palette.separatorSubtle)
+                    }
+                }
+                if node.id != tree.last?.id {
                     Divider().overlay(Palette.separator)
                 }
             }
         }
     }
 
-    private func categoryRow(_ category: CategoryResponse) -> some View {
+    private func categoryRow(_ category: CategoryResponse, indented: Bool) -> some View {
         let isConfirmed = category.id == model.transaction.confirmedCategoryID
         // A suggestion renders as a lightweight tag, never the checkmark
         // reserved for an explicit confirmation — tapping still confirms it,
@@ -334,7 +347,12 @@ struct TransactionDetailView: View {
         return Button {
             Task { await model.confirm(categoryID: category.id) }
         } label: {
-            HStack {
+            HStack(spacing: 10) {
+                IconTile(
+                    systemImage: (category.icon ?? .other).systemImageName,
+                    color: category.color,
+                    diameter: 28
+                )
                 Text(category.name)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
@@ -348,7 +366,8 @@ struct TransactionDetailView: View {
                         .accessibilityHidden(true)
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
+            .padding(.leading, indented ? 24 : 0)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

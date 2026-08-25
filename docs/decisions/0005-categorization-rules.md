@@ -81,6 +81,10 @@ a live suggestion is already waiting rather than `None`.
 - A rule has no rename/edit endpoint: its two fields, `match_kind` and
   `pattern`, are what make it a distinct rule at all, so editing one is
   indistinguishable from deleting it and creating a new one.
+- **2026-08-25 (ADR 0018):** categories gained a two-level hierarchy. No code
+  change was needed here — `category_id` is just a foreign key to this
+  service, and a rule may target a child exactly as freely as a root
+  (`"AMAZON PRIME"` → `Subscriptions › Streaming`, not just `Subscriptions`).
 
 ## Alternatives considered
 

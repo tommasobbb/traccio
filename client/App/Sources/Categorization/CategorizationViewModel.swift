@@ -111,19 +111,30 @@ final class CategorizationViewModel {
         }
     }
 
-    /// Create a category.
+    /// Create a category, optionally as a child of an existing root.
     ///
     /// Parameters
     /// ----------
     /// name:
     ///     The category's name.
-    func createCategory(name: String) async {
+    /// parentID:
+    ///     The root to nest under, or `nil` to create a root.
+    /// color:
+    ///     The category's colour.
+    /// icon:
+    ///     The category's icon, or `nil` to leave it unset.
+    func createCategory(
+        name: String, parentID: UUID?, color: PaletteColor, icon: CategoryIcon?
+    ) async {
         await performUpdate(onFailure: { $0 == 409 ? .nameTaken : .generic }) { client in
-            _ = try await client.createCategory(name: name)
+            _ = try await client.createCategory(
+                name: name, parentID: parentID, color: color, icon: icon
+            )
         }
     }
 
-    /// Rename a category.
+    /// Rename a category (its name only — colour and icon go through
+    /// `setCategoryAppearance`, so a rename never resets either).
     ///
     /// Parameters
     /// ----------
@@ -134,6 +145,22 @@ final class CategorizationViewModel {
     func renameCategory(id: UUID, name: String) async {
         await performUpdate(onFailure: { $0 == 409 ? .nameTaken : .generic }) { client in
             _ = try await client.renameCategory(id: id, name: name)
+        }
+    }
+
+    /// Set a category's colour and icon.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The category to restyle.
+    /// color:
+    ///     The new colour.
+    /// icon:
+    ///     The new icon, or `nil` to clear it.
+    func setCategoryAppearance(id: UUID, color: PaletteColor, icon: CategoryIcon?) async {
+        await performUpdate { client in
+            _ = try await client.setCategoryAppearance(id: id, color: color, icon: icon)
         }
     }
 

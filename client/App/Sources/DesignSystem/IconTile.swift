@@ -40,6 +40,38 @@ extension AccountIcon {
     }
 }
 
+extension CategoryIcon {
+    /// The SF Symbol this icon renders as. Exhaustive over every case — an
+    /// unmapped icon is a compile error, never a blank tile.
+    var systemImageName: String {
+        switch self {
+        case .groceries: "cart"
+        case .dining: "fork.knife"
+        case .coffee: "cup.and.saucer"
+        case .takeout: "takeoutbag.and.cup.and.straw"
+        case .transport: "bus"
+        case .fuel: "fuelpump"
+        case .publicTransport: "tram"
+        case .housing: "house"
+        case .rent: "key"
+        case .maintenance: "wrench.and.screwdriver"
+        case .utilities: "bolt"
+        case .health: "cross.case"
+        case .shopping: "bag"
+        case .clothing: "tshirt"
+        case .electronics: "tv"
+        case .entertainment: "ticket"
+        case .streaming: "play.rectangle"
+        case .movies: "film"
+        case .travel: "airplane"
+        case .subscriptions: "arrow.triangle.2.circlepath"
+        case .fees: "percent"
+        case .income: "arrow.down.circle"
+        case .other: "tag"
+        }
+    }
+}
+
 #Preview {
     HStack(spacing: 12) {
         IconTile(systemImage: AccountIcon.bank.systemImageName, color: .indigo)

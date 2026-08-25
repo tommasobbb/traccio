@@ -21,7 +21,7 @@ from traccio.db.base import Base
 from traccio.db.mappers import rule_to_row
 from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, RuleMatchKind, TransactionStatus
+from traccio.domain.enums import KeyStrategy, PaletteColor, RuleMatchKind, TransactionStatus
 from traccio.domain.models import Rule
 
 _DAY = datetime(2026, 3, 1, tzinfo=UTC)
@@ -78,9 +78,18 @@ def _seed_tx(
         return str(tx.id)
 
 
-def _seed_category(engine: Engine, *, user_id: UUID, name: str = "TEST CATEGORY 01") -> str:
+def _seed_category(
+    engine: Engine, *, user_id: UUID, name: str = "TEST CATEGORY 01", parent_id: UUID | None = None
+) -> str:
     with Session(engine) as session:
-        row = CategoryRow(id=uuid4(), user_id=user_id, name=name, created_at=_DAY)
+        row = CategoryRow(
+            id=uuid4(),
+            user_id=user_id,
+            name=name,
+            parent_id=parent_id,
+            color=PaletteColor.SLATE,
+            created_at=_DAY,
+        )
         session.add(row)
         session.commit()
         return str(row.id)
@@ -253,6 +262,29 @@ def test_apply_sets_suggested_category_on_a_match() -> None:
     assert projected["id"] == tx
     assert projected["suggested_category_id"] == category_id
     assert projected["effective_category_id"] == category_id
+
+
+def test_apply_sets_suggested_category_when_the_rule_targets_a_child_category() -> None:
+    """A rule may target a child category, not just a root — no special case."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx = _seed_tx(engine, user_id=dev_user_id, description="TEST MERCHANT 01")
+    root_id = _seed_category(engine, user_id=dev_user_id, name="Subscriptions")
+    child_id = _seed_category(
+        engine, user_id=dev_user_id, name="Streaming", parent_id=UUID(root_id)
+    )
+    client = _client(engine)
+    client.post(
+        "/rules", json={"category_id": child_id, "match_kind": "contains", "pattern": "MERCHANT"}
+    )
+
+    response = client.post("/rules/apply")
+
+    assert response.status_code == 200
+    assert response.json() == {"rules_applied": 1, "matched": 1, "cleared": 0}
+    [projected] = client.get("/transactions").json()["transactions"]
+    assert projected["id"] == tx
+    assert projected["suggested_category_id"] == child_id
 
 
 def test_apply_clears_a_stale_suggestion_from_a_deleted_rule() -> None:

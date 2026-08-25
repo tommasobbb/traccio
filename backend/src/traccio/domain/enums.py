@@ -329,6 +329,53 @@ class AccountIcon(StrEnum):
     PHONE = "phone"
 
 
+class CategoryIcon(StrEnum):
+    """A semantic icon for a :class:`~traccio.domain.models.Category`.
+
+    Named for what the category *is*, not for an SF Symbol — same reasoning as
+    :class:`AccountIcon`, and a separate enum from it for the same reason:
+    the two vocabularies are disjoint (a category picker has no use for
+    "wallet", an account picker has no use for a dozen food/shopping icons).
+    Covers both :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE`'s
+    roots and its first set of children; a user-created category not covered
+    here picks the closest fit or ``OTHER``.
+
+    Attributes
+    ----------
+    GROCERIES, DINING, COFFEE, TAKEOUT, TRANSPORT, FUEL, PUBLIC_TRANSPORT,
+    HOUSING, RENT, MAINTENANCE, UTILITIES, HEALTH, SHOPPING, CLOTHING,
+    ELECTRONICS, ENTERTAINMENT, STREAMING, MOVIES, TRAVEL, SUBSCRIPTIONS,
+    FEES, INCOME, OTHER : str
+        One per default root or child category — see
+        :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE` for which is
+        which.
+    """
+
+    GROCERIES = "groceries"
+    DINING = "dining"
+    COFFEE = "coffee"
+    TAKEOUT = "takeout"
+    TRANSPORT = "transport"
+    FUEL = "fuel"
+    PUBLIC_TRANSPORT = "public_transport"
+    HOUSING = "housing"
+    RENT = "rent"
+    MAINTENANCE = "maintenance"
+    UTILITIES = "utilities"
+    HEALTH = "health"
+    SHOPPING = "shopping"
+    CLOTHING = "clothing"
+    ELECTRONICS = "electronics"
+    ENTERTAINMENT = "entertainment"
+    STREAMING = "streaming"
+    MOVIES = "movies"
+    TRAVEL = "travel"
+    SUBSCRIPTIONS = "subscriptions"
+    FEES = "fees"
+    INCOME = "income"
+    OTHER = "other"
+
+
 class SyncRunOutcome(StrEnum):
     """What happened to one :class:`~traccio.domain.models.SyncRun`.
 

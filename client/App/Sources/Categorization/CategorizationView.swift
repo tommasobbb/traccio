@@ -13,10 +13,13 @@ struct CategorizationView: View {
     @State private var model: CategorizationViewModel
     @State private var isPresentingCreateRuleSheet = false
     @State private var isPresentingCategorySheet = false
-    /// `nil` means the category sheet is creating; set means it is renaming.
-    @State private var editingCategory: CategoryResponse?
+    @State private var categorySheetMode: CategoryEditorSheet.Mode = .create(parentID: nil)
     @State private var ruleToDelete: RuleResponse?
     @State private var categoryToDelete: CategoryResponse?
+    /// Set when the user tried to delete a category that still has children —
+    /// known from already-loaded data, so this never needs a round trip: see
+    /// `categoriesCard`'s doc comment.
+    @State private var categoryDeletionBlocked: CategoryResponse?
     @State private var isConfirmingApply = false
 
     /// Create the screen.
@@ -68,15 +71,23 @@ struct CategorizationView: View {
         }
         .sheet(isPresented: $isPresentingCategorySheet) {
             CategoryEditorSheet(
-                mode: editingCategory.map { .rename($0) } ?? .create,
+                mode: categorySheetMode,
                 isSaving: model.isUpdating,
                 failureMessage: model.actionFailure != nil ? failureMessage : nil,
-                onSave: { name in
+                onSave: { name, color, icon in
                     Task {
-                        if let editingCategory {
-                            await model.renameCategory(id: editingCategory.id, name: name)
-                        } else {
-                            await model.createCategory(name: name)
+                        switch categorySheetMode {
+                        case .create(let parentID):
+                            await model.createCategory(
+                                name: name, parentID: parentID, color: color, icon: icon
+                            )
+                        case .edit(let category):
+                            await model.renameCategory(id: category.id, name: name)
+                            if model.actionFailure == nil {
+                                await model.setCategoryAppearance(
+                                    id: category.id, color: color, icon: icon
+                                )
+                            }
                         }
                         if model.actionFailure == nil {
                             isPresentingCategorySheet = false
@@ -84,6 +95,19 @@ struct CategorizationView: View {
                     }
                 },
                 onCancel: { isPresentingCategorySheet = false }
+            )
+        }
+        .alert(
+            "Elimina prima le sotto-categorie",
+            isPresented: Binding(
+                get: { categoryDeletionBlocked != nil }, set: { if !$0 { categoryDeletionBlocked = nil } }
+            ),
+            presenting: categoryDeletionBlocked
+        ) { _ in
+            Button("Ho capito", role: .cancel) {}
+        } message: { category in
+            Text(
+                "«\(category.name)» ha delle sotto-categorie: elimina prima quelle, poi potrai eliminare «\(category.name)»."
             )
         }
     }
@@ -227,16 +251,28 @@ struct CategorizationView: View {
 
     // MARK: Categorie
 
+    /// A category is a strict two-level tree (ADR 0018):
+    /// `TraccioCore.categoryTree(_:)` regroups the flat, backend-ordered list
+    /// into roots with their own children, purely for rendering. Deleting a
+    /// root with children is refused server-side (`409
+    /// category_has_children`), but that refusal is already knowable from
+    /// `data.categories` itself — a root has children iff some other loaded
+    /// category names it as `parentID` — so the trash action checks that
+    /// first and skips the round trip entirely when it would fail.
     private func categoriesCard(_ data: CategorizationViewModel.Content) -> some View {
         Card {
             EyebrowLabel(text: "Categorie")
             if data.categories.isEmpty {
                 emptyCategoriesState
             } else {
+                let tree = TraccioCore.categoryTree(data.categories)
                 VStack(spacing: 0) {
-                    ForEach(data.categories) { category in
-                        categoryRow(category)
-                        if category.id != data.categories.last?.id {
+                    ForEach(tree) { node in
+                        categoryRow(node.category, indented: false, hasChildren: !node.children.isEmpty)
+                        ForEach(node.children) { child in
+                            categoryRow(child, indented: true, hasChildren: false)
+                        }
+                        if node.id != tree.last?.id {
                             Divider().overlay(Palette.separator)
                         }
                     }
@@ -246,7 +282,7 @@ struct CategorizationView: View {
             PillButton(
                 title: "Nuova categoria",
                 action: {
-                    editingCategory = nil
+                    categorySheetMode = .create(parentID: nil)
                     isPresentingCategorySheet = true
                 }
             )
@@ -281,17 +317,34 @@ struct CategorizationView: View {
         }
     }
 
-    private func categoryRow(_ category: CategoryResponse) -> some View {
-        HStack(spacing: 12) {
+    private func categoryRow(
+        _ category: CategoryResponse, indented: Bool, hasChildren: Bool
+    ) -> some View {
+        HStack(spacing: 10) {
+            IconTile(
+                systemImage: (category.icon ?? .other).systemImageName,
+                color: category.color,
+                diameter: 28
+            )
             Text(category.name)
                 .font(Typography.body.weight(.semibold))
                 .foregroundStyle(Palette.ink)
             Spacer()
+            if !indented {
+                IconButton(
+                    systemImage: "plus",
+                    accessibilityLabel: "Nuova sotto-categoria di \(category.name)",
+                    action: {
+                        categorySheetMode = .create(parentID: category.id)
+                        isPresentingCategorySheet = true
+                    }
+                )
+            }
             IconButton(
                 systemImage: "pencil",
-                accessibilityLabel: "Rinomina \(category.name)",
+                accessibilityLabel: "Modifica \(category.name)",
                 action: {
-                    editingCategory = category
+                    categorySheetMode = .edit(category)
                     isPresentingCategorySheet = true
                 }
             )
@@ -299,9 +352,16 @@ struct CategorizationView: View {
                 systemImage: "trash",
                 accessibilityLabel: "Elimina \(category.name)",
                 isLoading: model.isUpdating,
-                action: { categoryToDelete = category }
+                action: {
+                    if hasChildren {
+                        categoryDeletionBlocked = category
+                    } else {
+                        categoryToDelete = category
+                    }
+                }
             )
         }
         .padding(.vertical, 6)
+        .padding(.leading, indented ? 24 : 0)
     }
 }
