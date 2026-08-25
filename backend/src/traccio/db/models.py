@@ -177,7 +177,14 @@ class AccountRow(Base):
     currency : str
         The account's own ISO 4217 currency.
     identification_hash : str
-        Derived stable identity used to match the account across consents.
+        Opaque stable identity Enable Banking assigns per account, used to
+        match it across consents. Provider-controlled, not a hash this
+        codebase generates — length is not something we can bound, so it is
+        ``Text`` like ``ConnectionRow.encrypted_credentials``, not a guessed
+        ``VARCHAR`` size (a first real Revolut sync exceeded a prior
+        ``VARCHAR(128)`` on Postgres, invisible on SQLite which ignores
+        declared VARCHAR length — see migration
+        ``e2c4a8f1b6d3_widen_identification_hash``).
     name : str or None
         Optional display name.
     created_at : datetime
@@ -192,7 +199,7 @@ class AccountRow(Base):
     connection_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("connections.id"))
     kind: Mapped[AccountKind] = mapped_column(_enum_column(AccountKind))
     currency: Mapped[str] = mapped_column(String(3))
-    identification_hash: Mapped[str] = mapped_column(String(128))
+    identification_hash: Mapped[str] = mapped_column(Text)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
