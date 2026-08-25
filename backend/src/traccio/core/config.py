@@ -51,6 +51,13 @@ class Settings(BaseSettings):
         Filesystem path to the application's ``<application-id>.pem`` RSA private
         key. The key is a secret held **outside the database** and never
         committed or logged; only its path lives here. ``None`` until configured.
+        Ignored when :attr:`enable_banking_private_key_pem` is set.
+    enable_banking_private_key_pem : str or None
+        The RSA private key's PEM content directly, for a deployment with no
+        writable filesystem to hold a key file (Fly.io: injected as a secret
+        env var, ``docs/decisions/0015-deploy-fly-io.md``). Takes precedence
+        over :attr:`enable_banking_private_key_path` when both are set. Never
+        logged.
     enable_banking_base_url : str
         Base URL of the Enable Banking API. Defaults to the production host.
     enable_banking_redirect_url : str
@@ -152,6 +159,9 @@ class Settings(BaseSettings):
     # here, never logged. Both None until configured. See docs/openbanking.md.
     enable_banking_application_id: str | None = None
     enable_banking_private_key_path: str | None = None
+    # PEM content directly, for deployments with no writable filesystem to hold
+    # a key file. Takes precedence over the path above when both are set.
+    enable_banking_private_key_pem: str | None = None
     enable_banking_base_url: str = "https://api.enablebanking.com"
     # Must match the redirect registered in the Control Panel and the callback
     # endpoint. https is mandatory; localhost is accepted (docs/openbanking.md).

@@ -100,12 +100,19 @@ def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
     settings = get_settings()
     if settings.enable_banking_application_id is None:
         raise RuntimeError("TRACCIO_ENABLE_BANKING_APPLICATION_ID is not set")
-    if settings.enable_banking_private_key_path is None:
-        raise RuntimeError("TRACCIO_ENABLE_BANKING_PRIVATE_KEY_PATH is not set")
+    if settings.enable_banking_private_key_pem is not None:
+        private_key_pem = settings.enable_banking_private_key_pem
+    elif settings.enable_banking_private_key_path is not None:
+        private_key_pem = load_private_key_pem(settings.enable_banking_private_key_path)
+    else:
+        raise RuntimeError(
+            "neither TRACCIO_ENABLE_BANKING_PRIVATE_KEY_PEM nor "
+            "TRACCIO_ENABLE_BANKING_PRIVATE_KEY_PATH is set"
+        )
 
     client = EnableBankingClient(
         application_id=settings.enable_banking_application_id,
-        private_key_pem=load_private_key_pem(settings.enable_banking_private_key_path),
+        private_key_pem=private_key_pem,
         base_url=settings.enable_banking_base_url,
     )
     provider = EnableBankingProvider(client, send_psu_headers=settings.send_psu_headers)
