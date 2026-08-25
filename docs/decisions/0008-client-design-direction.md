@@ -107,8 +107,36 @@ sets of values.
 
 ## Revisit when
 
-- Dark mode or accessibility work reveals the custom system needs a real
-  token layer (e.g. a `ColorScheme`-aware asset catalog) rather than a
-  Swift file of constants.
 - A second design canvas iteration changes the palette or type — update the
   tokens here rather than letting SwiftUI and the canvas drift apart.
+
+## 2026-08-25 revision: dark mode
+
+Item 6 of the M3 iPhone-trial roadmap (`tasks/backlog.md`). `Palette.swift`
+moved from an `enum` of hardcoded `Color(hex:)` literals to named colors in a
+new `App/Resources/Colors.xcassets`, each with an explicit light and dark
+appearance — the `ColorScheme`-aware token layer this ADR's original
+"Revisit when" anticipated. `Palette`'s public API is unchanged (still
+`Palette.ink`, `Palette.card`, …), so no view in `App/Sources/` needed to
+change; every consumer already went through `Palette` rather than a raw hex,
+confirmed by grep before the change.
+
+Two tokens stayed computed rather than becoming assets:
+`separator`/`separatorSubtle` (a low-opacity overlay of `Palette.ink`, which
+is itself dynamic, so the overlay reads correctly in both appearances without
+a separate dark value) and `cardShadow` (stays pure black in both — a black
+shadow is naturally near-invisible on a dark card over a dark background,
+which is the correct dark-mode look; `Card`'s existing `separatorSubtle`
+border is what defines the edge once the shadow stops reading). Full values
+are in `docs/design/tokens.md`, updated in the same change.
+
+Dark values are not a mechanical inversion of the light ones: where Apple has
+its own dark system color for the same hue (accent, income, warning, category
+red), that value was used instead of deriving one; category-chart and ink
+scale values were hand-raised in luminosity rather than opacity-flipped,
+which reads muddy on a near-black background.
+
+**Verified**: `xcodebuild` macOS build clean, `swift test` (225 cases) and
+`make test-app` (121 cases) green — dark mode has no logic to unit test, so
+build success plus a manual light/dark visual pass per screen is the
+verification of record, same as the original ADR 0008 slice.
