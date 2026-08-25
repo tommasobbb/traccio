@@ -26,7 +26,11 @@ enum Palette {
 
     // MARK: Accent
 
-    static let accent = Color("Accent", bundle: .main)
+    /// Named "AccentColor" rather than "Accent" so the same asset also
+    /// serves as the target's global accent color
+    /// (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME` in `Project.yml`) —
+    /// one color, not two colorsets kept in sync by hand.
+    static let accent = Color("AccentColor", bundle: .main)
     static let accentPressed = Color("AccentPressed", bundle: .main)
 
     // MARK: Semantic

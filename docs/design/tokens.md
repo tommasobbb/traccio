@@ -44,6 +44,12 @@ Dark accent is Apple's own `systemIndigo` dark value — lighter than the light
 variant (the usual dark-mode adjustment so a saturated color stays legible on
 a near-black background), not a re-derivation of the light hex.
 
+The underlying asset is named `AccentColor`, not `Accent`: it doubles as the
+target's global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`
+in `client/Project.yml`, the tint system controls pick up automatically), so
+`Palette.accent` reads that one asset rather than keeping a second colorset
+in sync by hand.
+
 ## Semantic
 
 **Spending stays in ink, never red.** This is the rule most likely to get
