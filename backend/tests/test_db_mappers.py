@@ -25,9 +25,11 @@ from traccio.db.mappers import (
     user_to_row,
 )
 from traccio.domain.enums import (
+    AccountIcon,
     AccountKind,
     ConnectionStatus,
     KeyStrategy,
+    PaletteColor,
     RuleMatchKind,
     SyncRunOutcome,
     SyncTrigger,
@@ -80,6 +82,23 @@ def test_account_round_trips() -> None:
         currency="EUR",
         identification_hash="hash-01",
         name="TEST ACCOUNT 01",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    assert row_to_account(account_to_row(account)) == account
+
+
+def test_account_round_trips_with_alias_and_appearance() -> None:
+    account = Account(
+        id=uuid4(),
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        kind=AccountKind.CURRENT,
+        currency="EUR",
+        identification_hash="hash-01",
+        name="TEST ACCOUNT 01",
+        alias="My salary account",
+        color=PaletteColor.TEAL,
+        icon=AccountIcon.BANK,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert row_to_account(account_to_row(account)) == account

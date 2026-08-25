@@ -1,6 +1,19 @@
 {
   "components": {
     "schemas": {
+      "AccountIcon": {
+        "description": "A semantic icon for an :class:`~traccio.domain.models.Account`.\n\nNamed for what the account *is*, not for an SF Symbol \u2014 the backend has no\nnotion that SF Symbols exist; the client owns the icon-name mapping (see\nADR 0017). A separate enum from ``CategoryIcon`` (added in the categories\nslice) because the two\nvocabularies are disjoint: an account picker has no use for a dozen food\nicons, a category picker has no use for \"wallet\".\n\nAttributes\n----------\nBANK : str\n    A current/checking account at a bank.\nCARD : str\n    A card account.\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal).\nSAVINGS : str\n    A savings account.\nCASH : str\n    A cash-like account.\nPHONE : str\n    A mobile-first account (e.g. a phone-based neobank).",
+        "enum": [
+          "bank",
+          "card",
+          "wallet",
+          "savings",
+          "cash",
+          "phone"
+        ],
+        "title": "AccountIcon",
+        "type": "string"
+      },
       "AccountKind": {
         "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.",
         "enum": [
@@ -13,8 +26,29 @@
         "type": "string"
       },
       "AccountResponse": {
-        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, or ``wallet``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Optional display name.\ncreated_at : datetime\n    When the account was first recorded.",
+        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, or ``wallet``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Provider-supplied display name (overwritten on every sync).\nalias : str or None\n    User-chosen display name (ADR 0017), or ``None`` if unset.\ndisplay_name : str or None\n    The one name the client should actually show \u2014 ``alias`` if set, else\n    ``name``, else ``None`` \u2014 resolved once by\n    :func:`~traccio.domain.accounts.display_name` so the client does not\n    reimplement the fallback (it previously did, inconsistently, in three\n    different places).\ncolor : PaletteColor or None\n    User-chosen colour, or ``None`` if unset.\nicon : AccountIcon or None\n    User-chosen icon, or ``None`` if unset.\ncreated_at : datetime\n    When the account was first recorded.",
         "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "connection_id": {
             "format": "uuid",
             "title": "Connection Id",
@@ -28,6 +62,27 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "id": {
             "format": "uuid",
@@ -55,6 +110,10 @@
           "kind",
           "currency",
           "name",
+          "alias",
+          "display_name",
+          "color",
+          "icon",
           "created_at"
         ],
         "title": "AccountResponse",
@@ -875,6 +934,23 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "PaletteColor": {
+        "description": "A semantic colour, shared by :class:`~traccio.domain.models.Account` and\n:class:`~traccio.domain.models.Category`.\n\nDeliberately a fixed vocabulary rather than a free hex string (ADR 0017):\nthe client's ``Colors.xcassets`` is the only place a colour has an explicit\ndark-mode variant, so a user-chosen hex would have no dark counterpart and\nsilently break the design system's dark-mode contract. One shared enum for\nboth entities, not two, because there is exactly one colour vocabulary in\nthe app \u2014 the icon vocabularies differ (see :class:`AccountIcon` and\n``CategoryIcon``), the colour one does not.\n\nAttributes\n----------\nBLUE, INDIGO, PURPLE, PINK, RED, ORANGE, AMBER, GREEN, TEAL, SLATE : str\n    The ten selectable tones. ``SLATE`` is the neutral default for\n    anything the user has not deliberately coloured yet.",
+        "enum": [
+          "blue",
+          "indigo",
+          "purple",
+          "pink",
+          "red",
+          "orange",
+          "amber",
+          "green",
+          "teal",
+          "slate"
+        ],
+        "title": "PaletteColor",
+        "type": "string"
+      },
       "ParticipantRequest": {
         "description": "One person who owes the user back, as entered when creating an advance.\n\nNo ``id``: the domain mints one on creation\n(:class:`~traccio.domain.models.Participant`'s own ``default_factory``) \u2014\nthe caller cannot know it yet. See :class:`ParticipantResponse` for the\nread side, which does carry one (ADR 0012).\n\nAttributes\n----------\nname : str\n    The participant's plain name.\nexpected_amount : int\n    What the participant is expected to pay back, a positive magnitude in\n    minor units (cents).",
         "properties": {
@@ -1074,6 +1150,27 @@
         "title": "RejectTransferRequest",
         "type": "object"
       },
+      "RenameAccountRequest": {
+        "description": "Body for setting or clearing an account's alias.\n\nAttributes\n----------\nalias : str or None\n    The new alias, stripped and validated by\n    :func:`~traccio.domain.accounts.normalize_account_alias`. ``None``\n    clears the alias and falls back to the provider name \u2014 a mandatory,\n    nullable field rather than an optional one, so \"absent\" and \"clear\n    it\" are never ambiguous.",
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alias"
+          }
+        },
+        "required": [
+          "alias"
+        ],
+        "title": "RenameAccountRequest",
+        "type": "object"
+      },
       "RenameCategoryRequest": {
         "description": "Body for renaming a category.\n\nAttributes\n----------\nname : str\n    The new name. Stripped and validated by\n    :func:`~traccio.domain.categories.normalize_category_name`.",
         "properties": {
@@ -1149,6 +1246,37 @@
           "rules"
         ],
         "title": "RulesResponse",
+        "type": "object"
+      },
+      "SetAccountAppearanceRequest": {
+        "description": "Body for setting an account's colour and icon.\n\nA full replace, not a partial update \u2014 both fields are mandatory (but\nindividually nullable, to allow clearing) \u2014 mirroring\n``appearance``'s single action-style endpoint rather than two.\n\nAttributes\n----------\ncolor : PaletteColor or None\n    The new colour, or ``None`` to clear it.\nicon : AccountIcon or None\n    The new icon, or ``None`` to clear it.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "color",
+          "icon"
+        ],
+        "title": "SetAccountAppearanceRequest",
         "type": "object"
       },
       "StartConnectionRequest": {
@@ -1591,6 +1719,140 @@
           }
         },
         "summary": "Accounts"
+      }
+    },
+    "/accounts/{account_id}/appearance": {
+      "post": {
+        "description": "Set an account's colour and icon.\n\nA full replace: both fields are applied together. A ``404`` if the\naccount is unknown or not the caller's; an unrecognized value is\nrejected by request validation before the handler runs (``422``).\n\nParameters\n----------\naccount_id : UUID\n    The account to restyle.\nbody : SetAccountAppearanceRequest\n    The new colour and icon.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account belongs to.\n\nReturns\n-------\nAccountResponse\n    The account under its new appearance.",
+        "operationId": "set_account_appearance_endpoint_accounts__account_id__appearance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccountAppearanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Account Appearance Endpoint"
+      }
+    },
+    "/accounts/{account_id}/rename": {
+      "post": {
+        "description": "Set or clear an account's alias.\n\nA ``404`` if the account is unknown or not the caller's; a ``422`` if the\nalias is blank (use ``null`` to clear it) or too long.\n\nParameters\n----------\naccount_id : UUID\n    The account to rename.\nbody : RenameAccountRequest\n    The new alias, or ``null`` to clear it.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account belongs to.\n\nReturns\n-------\nAccountResponse\n    The account under its new alias.",
+        "operationId": "rename_account_endpoint_accounts__account_id__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Account Endpoint"
       }
     },
     "/advances": {

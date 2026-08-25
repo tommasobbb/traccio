@@ -19,14 +19,18 @@ from traccio.db.repositories import (
     list_transactions_in_period,
     mark_connection_synced,
     prune_stale_pending_transactions,
+    set_account_alias,
+    set_account_appearance,
     upsert_account,
     upsert_transaction,
 )
 from traccio.domain import Account, Transaction
 from traccio.domain.enums import (
+    AccountIcon,
     AccountKind,
     ConnectionStatus,
     KeyStrategy,
+    PaletteColor,
     TransactionRole,
     TransactionStatus,
 )
@@ -134,6 +138,53 @@ def test_upsert_account_updates_in_place_without_duplicating() -> None:
     assert row.created_at == original_created
     assert row.connection_id == second_conn
     assert row.name == "NEW NAME"
+
+
+def test_upsert_account_preserves_user_owned_fields() -> None:
+    """A re-sync must never clobber ``alias``/``color``/``icon``.
+
+    This is the load-bearing guarantee of the whole account-appearance
+    feature: the user sets an alias and an appearance, a later sync brings a
+    fresh provider ``name``, and only ``name`` should change.
+    """
+    engine = _engine()
+    user_id, first_conn, second_conn = uuid4(), uuid4(), uuid4()
+
+    with Session(engine) as session:
+        inserted = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=first_conn, name="OLD NAME")
+        )
+        session.commit()
+        account_id = inserted.id
+
+    with Session(engine) as session:
+        set_account_alias(
+            session, user_id=user_id, account_id=account_id, alias="My salary account"
+        )
+        set_account_appearance(
+            session,
+            user_id=user_id,
+            account_id=account_id,
+            color=PaletteColor.TEAL,
+            icon=AccountIcon.SAVINGS,
+        )
+        session.commit()
+
+    # A later sync re-exposes the account through a new consent with a fresh
+    # provider-supplied name.
+    with Session(engine) as session:
+        upsert_account(
+            session, account=_account(user_id=user_id, connection_id=second_conn, name="NEW NAME")
+        )
+        session.commit()
+
+    with Session(engine) as session:
+        row = session.scalars(select(AccountRow).where(AccountRow.id == account_id)).one()
+    assert row.name == "NEW NAME"
+    assert row.connection_id == second_conn
+    assert row.alias == "My salary account"
+    assert row.color == PaletteColor.TEAL
+    assert row.icon == AccountIcon.SAVINGS
 
 
 def test_upsert_account_separates_users_with_the_same_hash() -> None:

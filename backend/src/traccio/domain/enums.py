@@ -264,6 +264,71 @@ class SyncTrigger(StrEnum):
     BACKGROUND = "background"
 
 
+class PaletteColor(StrEnum):
+    """A semantic colour, shared by :class:`~traccio.domain.models.Account` and
+    :class:`~traccio.domain.models.Category`.
+
+    Deliberately a fixed vocabulary rather than a free hex string (ADR 0017):
+    the client's ``Colors.xcassets`` is the only place a colour has an explicit
+    dark-mode variant, so a user-chosen hex would have no dark counterpart and
+    silently break the design system's dark-mode contract. One shared enum for
+    both entities, not two, because there is exactly one colour vocabulary in
+    the app — the icon vocabularies differ (see :class:`AccountIcon` and
+    ``CategoryIcon``), the colour one does not.
+
+    Attributes
+    ----------
+    BLUE, INDIGO, PURPLE, PINK, RED, ORANGE, AMBER, GREEN, TEAL, SLATE : str
+        The ten selectable tones. ``SLATE`` is the neutral default for
+        anything the user has not deliberately coloured yet.
+    """
+
+    BLUE = "blue"
+    INDIGO = "indigo"
+    PURPLE = "purple"
+    PINK = "pink"
+    RED = "red"
+    ORANGE = "orange"
+    AMBER = "amber"
+    GREEN = "green"
+    TEAL = "teal"
+    SLATE = "slate"
+
+
+class AccountIcon(StrEnum):
+    """A semantic icon for an :class:`~traccio.domain.models.Account`.
+
+    Named for what the account *is*, not for an SF Symbol — the backend has no
+    notion that SF Symbols exist; the client owns the icon-name mapping (see
+    ADR 0017). A separate enum from ``CategoryIcon`` (added in the categories
+    slice) because the two
+    vocabularies are disjoint: an account picker has no use for a dozen food
+    icons, a category picker has no use for "wallet".
+
+    Attributes
+    ----------
+    BANK : str
+        A current/checking account at a bank.
+    CARD : str
+        A card account.
+    WALLET : str
+        A currency-agnostic wallet (e.g. PayPal).
+    SAVINGS : str
+        A savings account.
+    CASH : str
+        A cash-like account.
+    PHONE : str
+        A mobile-first account (e.g. a phone-based neobank).
+    """
+
+    BANK = "bank"
+    CARD = "card"
+    WALLET = "wallet"
+    SAVINGS = "savings"
+    CASH = "cash"
+    PHONE = "phone"
+
+
 class SyncRunOutcome(StrEnum):
     """What happened to one :class:`~traccio.domain.models.SyncRun`.
 

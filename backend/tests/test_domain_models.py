@@ -12,11 +12,13 @@ from pydantic import ValidationError
 
 from traccio.domain import (
     Account,
+    AccountIcon,
     AccountKind,
     Connection,
     ConnectionStatus,
     KeyStrategy,
     Money,
+    PaletteColor,
     SyncRun,
     SyncRunOutcome,
     SyncTrigger,
@@ -88,6 +90,30 @@ def test_account_construction() -> None:
 
     assert account.kind is AccountKind.CURRENT
     assert account.name is None
+    assert account.alias is None
+    assert account.color is None
+    assert account.icon is None
+
+
+def test_account_carries_user_owned_appearance() -> None:
+    """An account may carry an alias distinct from the provider name, plus a
+    colour and icon (ADR 0017)."""
+    account = Account(
+        user_id=uuid4(),
+        connection_id=uuid4(),
+        kind=AccountKind.CURRENT,
+        currency="EUR",
+        identification_hash="hash-abc",
+        name="TEST CURRENT 01",
+        alias="My salary account",
+        color=PaletteColor.TEAL,
+        icon=AccountIcon.BANK,
+    )
+
+    assert account.name == "TEST CURRENT 01"
+    assert account.alias == "My salary account"
+    assert account.color is PaletteColor.TEAL
+    assert account.icon is AccountIcon.BANK
 
 
 def test_transaction_role_defaults_to_personal() -> None:
@@ -121,6 +147,8 @@ def test_enum_values_are_stable() -> None:
     assert TransactionStatus.REJECTED.value == "rejected"
     assert TransactionRole.REIMBURSEMENT.value == "reimbursement"
     assert KeyStrategy.DERIVED_HASH.value == "derived_hash"
+    assert PaletteColor.SLATE.value == "slate"
+    assert AccountIcon.WALLET.value == "wallet"
 
 
 def test_sync_run_defaults_and_fields() -> None:

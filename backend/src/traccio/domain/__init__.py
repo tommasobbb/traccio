@@ -1,16 +1,19 @@
 """Entities, value objects, and derivation rules; imports nothing."""
 
+from traccio.domain.accounts import display_name
 from traccio.domain.categories import default_categories, effective_category
 from traccio.domain.consent import consent_state, days_until_expiry
 from traccio.domain.dashboard import CategorySummary, CurrencySummary, DaySummary, summarize
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import (
+    AccountIcon,
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
     ConsentState,
     EventStatus,
     KeyStrategy,
+    PaletteColor,
     ParticipantStatus,
     RuleMatchKind,
     SyncRunOutcome,
@@ -39,6 +42,7 @@ from traccio.domain.sync_schedule import SyncDecision, next_sync_eligible_at, sy
 
 __all__ = [
     "Account",
+    "AccountIcon",
     "AccountKind",
     "Advance",
     "AdvanceStatus",
@@ -54,6 +58,7 @@ __all__ = [
     "EventStatus",
     "KeyStrategy",
     "Money",
+    "PaletteColor",
     "Participant",
     "ParticipantStatus",
     "Reimbursement",
@@ -71,6 +76,7 @@ __all__ = [
     "consent_state",
     "days_until_expiry",
     "default_categories",
+    "display_name",
     "effective_amount",
     "effective_category",
     "event_total",

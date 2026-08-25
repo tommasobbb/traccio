@@ -120,6 +120,17 @@ is not a bug to fix in Traccio.
 consents. Match accounts across `Connections` using a derived
 `identification_hash`, not the provider's account ID.
 
+**Display name, colour, and icon are user-owned appearance, separate from the
+provider's own name** (ADR 0017). `name` is the bank's product name
+(`details["product"]`), overwritten on every sync — there is no way for it to
+carry a user's preference. `alias`, `color`, and `icon` are set only by
+`POST /accounts/{id}/rename` and `POST /accounts/{id}/appearance`, and
+`upsert_account` never touches them on re-sync. `display_name` (`alias` if
+set, else `name`, else `null`) is resolved once, server-side, in
+`domain/accounts.py::display_name` — the single place this fallback exists.
+`color`/`icon` are a fixed vocabulary (`ColorToken`/`AccountIcon`), not free
+hex or SF Symbol strings — see ADR 0017 for why.
+
 ---
 
 ## Transaction

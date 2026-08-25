@@ -16,12 +16,22 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     public let id: UUID
     /// Connection currently exposing this account.
     public let connectionID: UUID
-    /// `current`, `savings`, or `card`.
+    /// `current`, `savings`, `card`, or `wallet`.
     public let kind: AccountKind
     /// The account's ISO 4217 currency.
     public let currency: String
-    /// Optional display name.
+    /// Provider-supplied display name (overwritten on every sync).
     public let name: String?
+    /// User-chosen display name (ADR 0017), or `nil` if unset.
+    public let alias: String?
+    /// The one name the client should actually show — `alias` if set, else
+    /// `name`, else `nil` — resolved once by the backend so the client does
+    /// not reimplement the fallback.
+    public let displayName: String?
+    /// User-chosen colour, or `nil` if unset.
+    public let color: PaletteColor?
+    /// User-chosen icon, or `nil` if unset.
+    public let icon: AccountIcon?
     /// When the account was first recorded.
     public let createdAt: Date
 
@@ -31,6 +41,10 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
         case kind
         case currency
         case name
+        case alias
+        case displayName = "display_name"
+        case color
+        case icon
         case createdAt = "created_at"
     }
 
@@ -40,6 +54,10 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
         kind: AccountKind,
         currency: String,
         name: String?,
+        alias: String?,
+        displayName: String?,
+        color: PaletteColor?,
+        icon: AccountIcon?,
         createdAt: Date
     ) {
         self.id = id
@@ -47,6 +65,10 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
         self.kind = kind
         self.currency = currency
         self.name = name
+        self.alias = alias
+        self.displayName = displayName
+        self.color = color
+        self.icon = icon
         self.createdAt = createdAt
     }
 }

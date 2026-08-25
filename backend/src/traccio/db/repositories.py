@@ -56,9 +56,11 @@ from traccio.db.models import (
 )
 from traccio.domain.categories import default_categories
 from traccio.domain.enums import (
+    AccountIcon,
     AdvanceStatus,
     ConnectionStatus,
     EventStatus,
+    PaletteColor,
     RuleMatchKind,
     TransactionRole,
     TransactionStatus,
@@ -303,6 +305,14 @@ def upsert_account(session: Session, *, account: Account) -> Account:
     read-then-write pattern (no dialect-specific upsert) so it behaves the same
     on SQLite and PostgreSQL. The caller owns the transaction boundary and commits.
 
+    Deliberately does **not** touch ``alias``, ``color``, or ``icon`` on an
+    existing row — those are user-owned appearance fields (ADR 0017), and a
+    sync overwriting them would silently discard whatever the user chose the
+    next time their bank refreshes. This is the load-bearing line of the whole
+    account-appearance feature: :func:`set_account_alias` and
+    :func:`set_account_appearance` are the *only* writers of those three
+    columns.
+
     Parameters
     ----------
     session : Session
@@ -331,7 +341,98 @@ def upsert_account(session: Session, *, account: Account) -> Account:
     existing.kind = account.kind
     existing.currency = account.currency
     existing.name = account.name
+    # existing.alias / .color / .icon: never written here — see the docstring.
     return row_to_account(existing)
+
+
+def get_account(session: Session, *, user_id: UUID, account_id: UUID) -> Account | None:
+    """Return a single account by id, scoped by ``user_id``.
+
+    Returns ``None`` when no account with that id belongs to the user, so a
+    request naming another user's (or an unknown) account cannot read or
+    mutate it — the same cross-user gate :func:`get_category` provides.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the query is scoped to it.
+    account_id : UUID
+        The account to fetch.
+
+    Returns
+    -------
+    Account or None
+        The domain account, or ``None`` if not found for this user.
+    """
+    row = session.scalars(
+        select(AccountRow).where(AccountRow.id == account_id, AccountRow.user_id == user_id)
+    ).one_or_none()
+    return None if row is None else row_to_account(row)
+
+
+def set_account_alias(
+    session: Session, *, user_id: UUID, account_id: UUID, alias: str | None
+) -> None:
+    """Set (or, with ``None``, clear) an account's user-chosen alias.
+
+    Scoped by ``user_id``; a no-op if no row matches. The caller normalizes
+    ``alias`` (see :func:`~traccio.domain.accounts.normalize_account_alias`)
+    before calling this. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the update is scoped to it.
+    account_id : UUID
+        The account to rename.
+    alias : str or None
+        The new alias, or ``None`` to clear it and fall back to the provider
+        name.
+    """
+    session.execute(
+        update(AccountRow)
+        .where(AccountRow.id == account_id, AccountRow.user_id == user_id)
+        .values(alias=alias)
+    )
+
+
+def set_account_appearance(
+    session: Session,
+    *,
+    user_id: UUID,
+    account_id: UUID,
+    color: PaletteColor | None,
+    icon: AccountIcon | None,
+) -> None:
+    """Set an account's colour and icon tokens (a full replace, not a merge).
+
+    Scoped by ``user_id``; a no-op if no row matches. Both tokens are set
+    together — the request schema makes both mandatory-but-nullable, so there
+    is no "leave the other one alone" case to support. The caller owns the
+    transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the update is scoped to it.
+    account_id : UUID
+        The account to restyle.
+    color : PaletteColor or None
+        The new colour token, or ``None`` to clear it.
+    icon : AccountIcon or None
+        The new icon token, or ``None`` to clear it.
+    """
+    session.execute(
+        update(AccountRow)
+        .where(AccountRow.id == account_id, AccountRow.user_id == user_id)
+        .values(color=color, icon=icon)
+    )
 
 
 def upsert_transaction(session: Session, *, transaction: Transaction, now: datetime) -> Transaction:

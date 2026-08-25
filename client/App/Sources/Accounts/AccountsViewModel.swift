@@ -31,6 +31,22 @@ final class AccountsViewModel {
         case generic(connectionID: UUID)
     }
 
+    /// Why an in-flight account rename/appearance update failed, for the
+    /// view to surface. A separate type from `ActionFailure` — that one is
+    /// keyed by `connectionID`, this one has no analogous key (an account
+    /// update is scoped by the sheet presenting it, not a row the list
+    /// itself tracks in-flight state for) — same reasoning as
+    /// `CategorizationViewModel.ActionFailure` being its own type.
+    enum AccountActionFailure: Equatable {
+        /// A `422` on rename: blank alias or too long. `APIError.badStatus`
+        /// carries only the status code, not the `detail` reason
+        /// (`tasks/backlog.md`), so the two causes are not distinguishable
+        /// here — same collapsing `CategorizationViewModel.createCategory`
+        /// already does for its own `422`.
+        case invalidAlias
+        case generic
+    }
+
     /// Current load state, observed by the view. Connections are
     /// authoritative for this screen; accounts below are best-effort.
     private(set) var state: State = .idle
@@ -52,6 +68,12 @@ final class AccountsViewModel {
     /// Increments once per successful manual sync — a `.sensoryFeedback(
     /// .success, trigger:)` trigger, not a count anyone reads.
     private(set) var successTick = 0
+    /// Set while a rename/appearance write is in flight, so the editor
+    /// sheet can disable its controls rather than let two writes race.
+    private(set) var isSavingAccount = false
+    /// The most recent account-update failure, if any, for the editor sheet
+    /// to surface.
+    private(set) var accountActionFailure: AccountActionFailure?
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -146,6 +168,74 @@ final class AccountsViewModel {
         } catch {
             actionFailure = .generic(connectionID: connectionID)
             return nil
+        }
+    }
+
+    /// Set or clear an account's alias.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to rename.
+    /// alias:
+    ///     The new alias, or `nil` to clear it and fall back to the provider
+    ///     name.
+    func renameAccount(id: UUID, alias: String?) async {
+        await performAccountUpdate(onFailure: { $0 == 422 ? .invalidAlias : .generic }) { client in
+            try await client.renameAccount(id: id, alias: alias)
+        }
+    }
+
+    /// Set an account's colour and icon.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to restyle.
+    /// color:
+    ///     The new colour, or `nil` to clear it.
+    /// icon:
+    ///     The new icon, or `nil` to clear it.
+    func setAccountAppearance(id: UUID, color: PaletteColor?, icon: AccountIcon?) async {
+        await performAccountUpdate { client in
+            try await client.setAccountAppearance(id: id, color: color, icon: icon)
+        }
+    }
+
+    /// Shared shape for the two writes above: guard against overlap, run the
+    /// write, and on success replace just the updated account in `accounts`
+    /// with what the backend returned — never a client-computed value, same
+    /// posture as `CategorizationViewModel.performUpdate`, but a targeted
+    /// replace rather than a full `load()` since a rename/appearance change
+    /// cannot affect any connection.
+    ///
+    /// Parameters
+    /// ----------
+    /// mapFailure:
+    ///     Maps a failed request's HTTP status code (`nil` for a non-HTTP
+    ///     failure) to the reason the sheet should show. Defaults to always
+    ///     reporting `.generic`.
+    /// write:
+    ///     The write to perform, given the client; returns the updated
+    ///     account.
+    private func performAccountUpdate(
+        onFailure mapFailure: (Int?) -> AccountActionFailure = { _ in .generic },
+        _ write: (any APIClientProtocol) async throws -> AccountResponse
+    ) async {
+        guard !isSavingAccount else { return }
+        isSavingAccount = true
+        defer { isSavingAccount = false }
+        accountActionFailure = nil
+
+        do {
+            let updated = try await write(client)
+            if let index = accounts.firstIndex(where: { $0.id == updated.id }) {
+                accounts[index] = updated
+            }
+        } catch APIError.badStatus(let code) {
+            accountActionFailure = mapFailure(code)
+        } catch {
+            accountActionFailure = mapFailure(nil)
         }
     }
 }

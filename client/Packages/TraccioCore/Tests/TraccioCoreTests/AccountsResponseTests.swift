@@ -22,6 +22,10 @@ struct AccountsResponseTests {
               "kind": "current",
               "currency": "EUR",
               "name": "Test Current",
+              "alias": "My salary account",
+              "display_name": "My salary account",
+              "color": "teal",
+              "icon": "savings",
               "created_at": "2026-08-10T09:30:00.123456+00:00"
             },
             {
@@ -30,6 +34,10 @@ struct AccountsResponseTests {
               "kind": "card",
               "currency": "EUR",
               "name": null,
+              "alias": null,
+              "display_name": null,
+              "color": null,
+              "icon": null,
               "created_at": "2026-08-11T10:00:00"
             }
           ]
@@ -50,10 +58,84 @@ struct AccountsResponseTests {
         #expect(first.kind == .current)
         #expect(first.currency == "EUR")
         #expect(first.name == "Test Current")
+        #expect(first.alias == "My salary account")
+        #expect(first.displayName == "My salary account")
+        #expect(first.color == .teal)
+        #expect(first.icon == .savings)
 
         let second = response.accounts[1]
         #expect(second.kind == .card)
         #expect(second.name == nil)
+        #expect(second.alias == nil)
+        #expect(second.displayName == nil)
+        #expect(second.color == nil)
+        #expect(second.icon == nil)
+    }
+
+    @Test func decodesWithMissingAppearanceFieldsAsNil() throws {
+        // A response predating alias/color/icon (or a server that omits
+        // null-valued keys) should still decode, with the new fields defaulting
+        // to nil rather than failing.
+        let json = """
+            { "accounts": [ {
+              "id": "44444444-4444-4444-4444-444444444444",
+              "connection_id": "22222222-2222-2222-2222-222222222222",
+              "kind": "current",
+              "currency": "EUR",
+              "name": "Legacy",
+              "created_at": "2026-08-20T12:00:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            AccountsResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.accounts[0].alias == nil)
+        #expect(response.accounts[0].displayName == nil)
+        #expect(response.accounts[0].color == nil)
+        #expect(response.accounts[0].icon == nil)
+    }
+
+    @Test func rejectsUnknownColor() {
+        let json = """
+            { "accounts": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "connection_id": "22222222-2222-2222-2222-222222222222",
+              "kind": "current",
+              "currency": "EUR",
+              "name": null,
+              "color": "mauve",
+              "icon": null,
+              "created_at": "2026-08-10T09:30:00+00:00"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                AccountsResponse.self,
+                from: Data(json.utf8)
+            )
+        }
+    }
+
+    @Test func rejectsUnknownIcon() {
+        let json = """
+            { "accounts": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "connection_id": "22222222-2222-2222-2222-222222222222",
+              "kind": "current",
+              "currency": "EUR",
+              "name": null,
+              "color": null,
+              "icon": "rocket",
+              "created_at": "2026-08-10T09:30:00+00:00"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                AccountsResponse.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
     @Test func decodesBothTimezoneAwareAndNaiveTimestamps() throws {

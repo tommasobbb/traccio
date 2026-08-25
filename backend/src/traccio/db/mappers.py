@@ -82,7 +82,14 @@ def row_to_connection(row: ConnectionRow) -> Connection:
 
 
 def account_to_row(account: Account) -> AccountRow:
-    """Translate a domain :class:`Account` into an :class:`AccountRow`."""
+    """Translate a domain :class:`Account` into an :class:`AccountRow`.
+
+    Used to build the row for a *fresh* sync-time insert. Deliberately
+    includes ``alias``/``color``/``icon`` here (unlike, say, a category id on
+    a transaction) because on a first insert there is nothing to preserve yet;
+    the field that must never be overwritten on an *existing* row is guarded
+    in :func:`traccio.db.repositories.upsert_account` instead, not here.
+    """
     return AccountRow(
         id=account.id,
         user_id=account.user_id,
@@ -91,6 +98,9 @@ def account_to_row(account: Account) -> AccountRow:
         currency=account.currency,
         identification_hash=account.identification_hash,
         name=account.name,
+        alias=account.alias,
+        color=account.color,
+        icon=account.icon,
         created_at=account.created_at,
     )
 
@@ -105,6 +115,9 @@ def row_to_account(row: AccountRow) -> Account:
         currency=row.currency,
         identification_hash=row.identification_hash,
         name=row.name,
+        alias=row.alias,
+        color=row.color,
+        icon=row.icon,
         created_at=row.created_at,
     )
 

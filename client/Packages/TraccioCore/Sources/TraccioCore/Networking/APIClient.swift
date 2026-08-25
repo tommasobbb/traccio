@@ -49,6 +49,55 @@ public struct APIClient: Sendable {
         return envelope.accounts
     }
 
+    /// Set or clear an account's alias.
+    ///
+    /// Mirrors `POST /accounts/{id}/rename`, `200` with the account under its
+    /// new alias. A `404` if the account is unknown or not the caller's; a
+    /// `422` if the alias is blank (pass `nil` to clear it instead) or too
+    /// long — the client does not pre-check either.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to rename.
+    /// alias:
+    ///     The new alias, or `nil` to clear it and fall back to the provider
+    ///     name.
+    ///
+    /// Returns
+    /// -------
+    /// The account under its new alias.
+    public func renameAccount(id: UUID, alias: String?) async throws -> AccountResponse {
+        try await post("accounts/\(id.uuidString)/rename", body: RenameAccountRequest(alias: alias))
+    }
+
+    /// Set an account's colour and icon.
+    ///
+    /// Mirrors `POST /accounts/{id}/appearance`, `200` with the account under
+    /// its new appearance. A full replace: both fields are sent together. A
+    /// `404` if the account is unknown or not the caller's.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to restyle.
+    /// color:
+    ///     The new colour, or `nil` to clear it.
+    /// icon:
+    ///     The new icon, or `nil` to clear it.
+    ///
+    /// Returns
+    /// -------
+    /// The account under its new appearance.
+    public func setAccountAppearance(
+        id: UUID, color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse {
+        try await post(
+            "accounts/\(id.uuidString)/appearance",
+            body: SetAccountAppearanceRequest(color: color, icon: icon)
+        )
+    }
+
     /// Liveness probe; a cheap smoke test of the transport and base URL.
     ///
     /// Returns

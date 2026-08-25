@@ -122,6 +122,38 @@ segment coincidentally, but not linked — this chart has one series, not a
 rotation) and the track reuses `Palette.neutralFill`, same as the donut's own
 track.
 
+## Appearance tokens
+
+The account colour/icon picker (ADR 0017; categories gain the same colour
+vocabulary in a later slice). Unlike "Category chart" above, these are
+**user-chosen and persisted per entity**, not assigned by rank — a `PaletteColor`
+survives regardless of how the list re-sorts. Each of the ten tones ships as
+two colorsets: a solid (`PaletteColor<Name>`, the icon glyph) and a paler tint
+(`PaletteColor<Name>Tint`, the icon tile's background) — see `IconTile.swift`.
+
+| Token   | Hex (light) | Hex (dark) | Swift name (`Palette.color(_:)`) | Wire value |
+| ------- | --------- | --------- | ----------------------------------- | ---------- |
+| Blue    | `#2A78D6` | `#409CFF` | `.color(.blue)`   | `blue`   |
+| Indigo  | `#5856D6` | `#7D7AFF` | `.color(.indigo)` | `indigo` |
+| Purple  | `#AF52DE` | `#BF5AF2` | `.color(.purple)` | `purple` |
+| Pink    | `#E87BA4` | `#FF9EC0` | `.color(.pink)`   | `pink`   |
+| Red     | `#D70015` | `#FF453A` | `.color(.red)`    | `red`    |
+| Orange  | `#EB6834` | `#FF8F66` | `.color(.orange)` | `orange` |
+| Amber   | `#EDA100` | `#FFC53D` | `.color(.amber)`  | `amber`  |
+| Green   | `#248A3D` | `#30D158` | `.color(.green)`  | `green`  |
+| Teal    | `#1C93A6` | `#4DC8DB` | `.color(.teal)`   | `teal`   |
+| Slate   | `#8E8E93` | `#6C6C70` | `.color(.slate)`  | `slate`  |
+
+`.tint(_:)` mirrors the same ten cases, each colorset's paler counterpart
+(light: base blended ~12% toward white; dark: base blended ~24% toward
+black — a systematic default, not the fully hand-tuned pass the rest of this
+file follows; refining one by eye later is a fair follow-up). `slate` is the
+neutral default for anything the user has not deliberately coloured yet.
+
+Icons are a fixed SF Symbol map per entity, kept in `App/Sources/DesignSystem/
+IconTile.swift` (`AccountIcon.systemImageName`) rather than on the wire enum —
+the backend has no notion that SF Symbols exist (ADR 0017).
+
 ## Separators and shadows
 
 | Token             | Value                              | Use                        |
@@ -143,12 +175,17 @@ defines a card's edge once the shadow stops reading.
 
 ## Radii
 
-| Element        | Radius |
-| -------------- | ------ |
-| Card           | 20     |
-| Row            | 16     |
-| Icon tile      | 12     |
-| Pill / chip    | 999 (fully rounded) |
+Named in Swift as `Radius.<name>` (`App/Sources/DesignSystem/Radius.swift`,
+added alongside `Spacing` in ADR 0017 — these values already existed as bare
+literals at each call site; adopted in new/rewritten views only, the rest is
+a tracked cleanup in `tasks/backlog.md`).
+
+| Element        | Radius | Swift name    |
+| -------------- | ------ | ------------- |
+| Card           | 20     | `Radius.card` |
+| Row            | 16     | `Radius.row`  |
+| Icon tile      | 12     | `Radius.tile` |
+| Pill / chip    | 999 (fully rounded) | `Radius.pill` |
 
 ## Typography
 
@@ -163,11 +200,15 @@ defines a card's edge once the shadow stops reading.
 
 ## Spacing
 
-| Token              | Value |
-| ------------------- | ----- |
-| Screen gutter        | 20    |
-| Gap between cards    | 14–16 |
-| Card internal padding| 18–20 |
+Named in Swift as `Spacing.<name>` (`App/Sources/DesignSystem/Spacing.swift`,
+ADR 0017) — same adoption posture as `Radius` above.
+
+| Token              | Value | Swift name           |
+| ------------------- | ----- | --------------------- |
+| Screen gutter        | 20    | `Spacing.gutter`      |
+| Gap between cards    | 16    | `Spacing.cardGap`     |
+| Card internal padding| 20    | `Spacing.cardPadding` |
+| Row internal padding | 9     | `Spacing.rowPadding`  |
 
 ## History
 
@@ -194,3 +235,11 @@ Apple's dark `systemIndigo`/`systemGreen`/`systemOrange`/`systemRed`), and a
 luminosity-raised version of the light hex elsewhere (ink scale, category
 chart rank colors) — never a straight opacity-flip of the light value, which
 tends to read muddy on a near-black background.
+
+**Appearance tokens, `Spacing`, and `Radius` added 2026-08-25** (ADR 0017,
+the account alias/colour/icon slice of the "Daily driver, davvero"
+milestone): ten new colour tones for the account (and, later, category)
+picker, each with a paler tint for an icon tile background; `Spacing`/`Radius`
+give the gutter/card/row/tile values from this file's own tables a Swift
+name for the first time. The "Category chart" section above is untouched for
+now — it still powers the dashboard donut until that redesign lands.

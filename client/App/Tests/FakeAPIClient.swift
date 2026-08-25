@@ -22,6 +22,10 @@ actor FakeAPIClient: APIClientProtocol {
 
     var accountsToReturn: [AccountResponse] = []
     var accountsError: Error?
+    var renameAccountToReturn: AccountResponse?
+    var renameAccountError: Error?
+    var accountAppearanceToReturn: AccountResponse?
+    var accountAppearanceError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
@@ -130,12 +134,27 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var reopenEventCallCount = 0
     private(set) var assignedEventMembers: [RecordedEventMember] = []
     private(set) var unassignedEventMembers: [RecordedEventMember] = []
+    private(set) var renamedAccounts: [RecordedAccountRename] = []
+    private(set) var accountAppearanceUpdates: [RecordedAccountAppearance] = []
 
     /// A recorded `renameCategory(id:name:)` call, for asserting exactly
     /// which category was renamed to what.
     struct RecordedRename: Equatable {
         let id: UUID
         let name: String
+    }
+
+    /// A recorded `renameAccount(id:alias:)` call.
+    struct RecordedAccountRename: Equatable {
+        let id: UUID
+        let alias: String?
+    }
+
+    /// A recorded `setAccountAppearance(id:color:icon:)` call.
+    struct RecordedAccountAppearance: Equatable {
+        let id: UUID
+        let color: PaletteColor?
+        let icon: AccountIcon?
     }
 
     /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
@@ -154,8 +173,28 @@ actor FakeAPIClient: APIClientProtocol {
 
     // MARK: Configuration (actor-isolated setters, `await`ed from a test)
 
+    func setAccounts(_ accounts: [AccountResponse]) {
+        accountsToReturn = accounts
+    }
+
     func setAccountsError(_ error: Error) {
         accountsError = error
+    }
+
+    func setRenameAccountResult(_ account: AccountResponse) {
+        renameAccountToReturn = account
+    }
+
+    func setRenameAccountError(_ error: Error) {
+        renameAccountError = error
+    }
+
+    func setAccountAppearanceResult(_ account: AccountResponse) {
+        accountAppearanceToReturn = account
+    }
+
+    func setAccountAppearanceError(_ error: Error) {
+        accountAppearanceError = error
     }
 
     func setHealthError(_ error: Error) {
@@ -402,6 +441,22 @@ actor FakeAPIClient: APIClientProtocol {
     func accounts() async throws -> [AccountResponse] {
         if let accountsError { throw accountsError }
         return accountsToReturn
+    }
+
+    func renameAccount(id: UUID, alias: String?) async throws -> AccountResponse {
+        if let renameAccountError { throw renameAccountError }
+        renamedAccounts.append(RecordedAccountRename(id: id, alias: alias))
+        guard let renameAccountToReturn else { throw NotConfigured() }
+        return renameAccountToReturn
+    }
+
+    func setAccountAppearance(
+        id: UUID, color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse {
+        if let accountAppearanceError { throw accountAppearanceError }
+        accountAppearanceUpdates.append(RecordedAccountAppearance(id: id, color: color, icon: icon))
+        guard let accountAppearanceToReturn else { throw NotConfigured() }
+        return accountAppearanceToReturn
     }
 
     func health() async throws -> HealthResponse {

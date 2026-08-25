@@ -34,6 +34,10 @@ struct ConnectionGroupTests {
             kind: .current,
             currency: "EUR",
             name: "Test Current",
+            alias: nil,
+            displayName: "Test Current",
+            color: nil,
+            icon: nil,
             createdAt: Date(timeIntervalSince1970: 0)
         )
     }

@@ -10,6 +10,7 @@ import TraccioCore
 /// institution-listing endpoint that does not exist yet (`tasks/backlog.md`).
 struct AccountsView: View {
     @State private var model = AccountsViewModel()
+    @State private var editingAccount: AccountResponse?
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -32,6 +33,29 @@ struct AccountsView: View {
                 Task { await model.load() }
             }
         }
+        .sheet(item: $editingAccount) { account in
+            AccountEditorSheet(
+                account: account,
+                isSaving: model.isSavingAccount,
+                failureMessage: model.accountActionFailure != nil ? accountFailureMessage : nil,
+                onSave: { alias, color, icon in
+                    Task {
+                        await model.renameAccount(id: account.id, alias: alias)
+                        if model.accountActionFailure == nil {
+                            await model.setAccountAppearance(id: account.id, color: color, icon: icon)
+                        }
+                        if model.accountActionFailure == nil {
+                            editingAccount = nil
+                        }
+                    }
+                },
+                onCancel: { editingAccount = nil }
+            )
+        }
+    }
+
+    private var accountFailureMessage: String {
+        "Non è stato possibile salvare le modifiche. Riprova."
     }
 
     /// A cheap discriminator for `.animation(_:value:)` — see
@@ -240,23 +264,35 @@ struct AccountsView: View {
     }
 
     private func accountRow(_ account: AccountResponse) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: account.kind == .wallet ? "person.2" : "creditcard")
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(Palette.inkSecondary)
-                .frame(width: 28, height: 28)
-                .background(Palette.neutralFill)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .accessibilityHidden(true)
-            Text(account.name ?? "Conto senza nome")
-                .font(Typography.body.weight(.semibold))
-                .foregroundStyle(Palette.ink)
-            Spacer()
-            Text(account.currency)
-                .font(Typography.caption.weight(.semibold))
-                .foregroundStyle(Palette.inkTertiary)
+        Button {
+            editingAccount = account
+        } label: {
+            HStack(spacing: 10) {
+                IconTile(
+                    systemImage: (account.icon ?? defaultIcon(for: account.kind)).systemImageName,
+                    color: account.color ?? .slate
+                )
+                Text(account.displayName ?? "Conto")
+                    .font(Typography.body.weight(.semibold))
+                    .foregroundStyle(Palette.ink)
+                Spacer()
+                Text(account.currency)
+                    .font(Typography.caption.weight(.semibold))
+                    .foregroundStyle(Palette.inkTertiary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.inkQuaternary)
+            }
+            .padding(.vertical, Spacing.rowPadding)
         }
-        .padding(.vertical, 9)
+        .buttonStyle(.plain)
+    }
+
+    /// The icon an account falls back to before the user has chosen one —
+    /// mirrors `AccountKind`'s old hardcoded glyph choice (wallet vs.
+    /// everything else) rather than defaulting every kind to the same icon.
+    private func defaultIcon(for kind: AccountKind) -> AccountIcon {
+        kind == .wallet ? .wallet : .bank
     }
 }
 

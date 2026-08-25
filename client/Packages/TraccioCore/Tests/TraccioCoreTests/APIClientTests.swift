@@ -69,6 +69,122 @@ struct APIClientTests {
         #expect(accounts[1].name == nil)
     }
 
+    @Test func renameAccountPostsToTheRenameEndpointAndDecodesTheDisplayName() async throws {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/accounts/\(accountID.uuidString)/rename")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["alias"] == "My salary account")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(accountID.uuidString)",
+                  "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
+                  "alias": "My salary account", "display_name": "My salary account",
+                  "color": null, "icon": null,
+                  "created_at": "2026-08-25T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.renameAccount(id: accountID, alias: "My salary account")
+        #expect(account.alias == "My salary account")
+        #expect(account.displayName == "My salary account")
+    }
+
+    @Test func renameAccountWithNilAliasSendsExplicitNull() async throws {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            // A JSON `null` round-trips through `JSONSerialization` as
+            // `NSNull`, not a missing key — this is what proves the client
+            // sent an explicit `"alias": null` rather than omitting the field.
+            #expect(body?["alias"] is NSNull)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(accountID.uuidString)",
+                  "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
+                  "alias": null, "display_name": "TEST CURRENT 01",
+                  "color": null, "icon": null,
+                  "created_at": "2026-08-25T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.renameAccount(id: accountID, alias: nil)
+        #expect(account.alias == nil)
+        #expect(account.displayName == "TEST CURRENT 01")
+    }
+
+    @Test func setAccountAppearancePostsColorAndIconAndDecodesThem() async throws {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/accounts/\(accountID.uuidString)/appearance")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["color"] == "teal")
+            #expect(body?["icon"] == "savings")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(accountID.uuidString)",
+                  "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
+                  "alias": null, "display_name": "TEST CURRENT 01",
+                  "color": "teal", "icon": "savings",
+                  "created_at": "2026-08-25T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.setAccountAppearance(
+            id: accountID, color: .teal, icon: .savings
+        )
+        #expect(account.color == .teal)
+        #expect(account.icon == .savings)
+    }
+
+    @Test func setAccountAppearanceWithNilValuesSendsExplicitNulls() async throws {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            // Both keys must be explicit JSON `null`, not omitted — the
+            // backend requires them present (mandatory-but-nullable), and
+            // Swift's synthesized encoder would otherwise silently drop a
+            // `nil` Optional field. See `SetAccountAppearanceRequest`'s doc
+            // comment.
+            #expect(body?["color"] is NSNull)
+            #expect(body?["icon"] is NSNull)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(accountID.uuidString)",
+                  "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
+                  "alias": null, "display_name": "TEST CURRENT 01",
+                  "color": null, "icon": null,
+                  "created_at": "2026-08-25T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.setAccountAppearance(id: accountID, color: nil, icon: nil)
+        #expect(account.color == nil)
+        #expect(account.icon == nil)
+    }
+
     @Test func authorizationHeaderIsSentWhenAnApiTokenIsConfigured() async throws {
         let client = Self.makeClient(apiToken: "TEST-TOKEN-01") { request in
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer TEST-TOKEN-01")

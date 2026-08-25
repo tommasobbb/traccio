@@ -13,6 +13,10 @@ import Foundation
 /// methods for behavior.
 public protocol APIClientProtocol: Sendable {
     func accounts() async throws -> [AccountResponse]
+    func renameAccount(id: UUID, alias: String?) async throws -> AccountResponse
+    func setAccountAppearance(
+        id: UUID, color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse
     func health() async throws -> HealthResponse
     func dashboardSummary(start: Date?, end: Date?) async throws -> DashboardSummaryResponse
     func transaction(id: UUID) async throws -> TransactionResponse

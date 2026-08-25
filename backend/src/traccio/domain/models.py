@@ -16,11 +16,13 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from traccio.domain.enums import (
+    AccountIcon,
     AccountKind,
     AdvanceStatus,
     ConnectionStatus,
     EventStatus,
     KeyStrategy,
+    PaletteColor,
     RuleMatchKind,
     SyncRunOutcome,
     SyncTrigger,
@@ -130,7 +132,19 @@ class Account(BaseModel):
         Derived stable identity used to match the account across consents.
         Bank-assigned account IDs are not stable, so they are not used here.
     name : str or None
-        Optional display name.
+        Provider-supplied display name (e.g. the bank's product name).
+        Overwritten on every sync — see
+        :func:`~traccio.db.repositories.upsert_account`. Never set by the
+        user; contrast with ``alias``.
+    alias : str or None
+        User-chosen display name (ADR 0017). Survives sync — the one field
+        ``upsert_account`` deliberately never touches. ``None`` until the user
+        sets one, in which case :func:`~traccio.domain.accounts.display_name`
+        falls back to ``name``.
+    color : PaletteColor or None
+        User-chosen colour token, or ``None`` before the user has picked one.
+    icon : AccountIcon or None
+        User-chosen icon token, or ``None`` before the user has picked one.
     created_at : datetime
         When the account was first recorded (timezone-aware, UTC).
     """
@@ -144,6 +158,9 @@ class Account(BaseModel):
     currency: CurrencyCode
     identification_hash: str
     name: str | None = None
+    alias: str | None = None
+    color: PaletteColor | None = None
+    icon: AccountIcon | None = None
     created_at: datetime = Field(default_factory=_now)
 
 
