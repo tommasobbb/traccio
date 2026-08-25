@@ -37,6 +37,7 @@ from traccio.db.repositories import (
 from traccio.db.session import get_session
 from traccio.domain.enums import TransactionRole
 from traccio.domain.models import Advance
+from traccio.domain.search import MAX_SEARCH_TERM_LENGTH, normalize_search_term
 from traccio.services.advances import spending_shares
 
 logger = get_logger(__name__)
@@ -52,6 +53,9 @@ def transactions(
     event_id: Annotated[UUID | None, Query()] = None,
     category_id: Annotated[UUID | None, Query()] = None,
     uncategorized: Annotated[bool, Query()] = False,
+    q: Annotated[str | None, Query()] = None,
+    start: Annotated[datetime | None, Query()] = None,
+    end: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionsResponse:
@@ -81,6 +85,18 @@ def transactions(
     uncategorized : bool, optional
         When true, restrict to transactions with no effective category.
         Mutually exclusive with ``category_id``.
+    q : str or None, optional
+        Free-text search term, matched case-insensitively against
+        ``description`` or the cleaned-up ``display_description``. Blank or
+        whitespace-only is treated as absent. Longer than
+        :data:`~traccio.domain.search.MAX_SEARCH_TERM_LENGTH` is a ``422``.
+        Never logged — it is counterparty text
+        (``.claude/rules/data-safety.md``).
+    start : datetime or None, optional
+        Inclusive lower bound on ``coalesce(booked_at, value_date)``.
+    end : datetime or None, optional
+        Exclusive upper bound on the same expression (half-open ``[start,
+        end)``), the same period semantics as ``GET /dashboard/summary``.
     limit : int, optional
         Page size, between 1 and 200 (default 50).
     offset : int, optional
@@ -93,6 +109,9 @@ def transactions(
     """
     if category_id is not None and uncategorized:
         raise HTTPException(status_code=422, detail="conflicting_category_filter")
+    search_term = normalize_search_term(q)
+    if search_term is not None and len(search_term) > MAX_SEARCH_TERM_LENGTH:
+        raise HTTPException(status_code=422, detail="search_too_long")
     category_ids: list[UUID] | None = None
     if category_id is not None:
         # Expand a root into itself + its children (a no-op list if
@@ -109,6 +128,9 @@ def transactions(
         event_id=event_id,
         category_ids=category_ids,
         uncategorized=uncategorized,
+        q=search_term,
+        start=start,
+        end=end,
         limit=limit,
         offset=offset,
     )

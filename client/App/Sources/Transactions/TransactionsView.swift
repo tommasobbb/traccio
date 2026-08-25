@@ -67,7 +67,7 @@ struct TransactionsView: View {
                 if !model.accountsByID.isEmpty {
                     Divider()
                     ForEach(sortedAccounts) { account in
-                        Button(account.name ?? "Conto") { applyAccountFilter(account.id) }
+                        Button(account.displayName ?? "Conto") { applyAccountFilter(account.id) }
                     }
                 }
             } label: {
@@ -101,12 +101,12 @@ struct TransactionsView: View {
     }
 
     private var sortedAccounts: [AccountResponse] {
-        model.accountsByID.values.sorted { ($0.name ?? "") < ($1.name ?? "") }
+        model.accountsByID.values.sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
     }
 
     private var accountFilterTitle: String {
         guard let accountID = model.filter.accountID else { return "Tutti i conti" }
-        return model.accountsByID[accountID]?.name ?? "Conto"
+        return model.accountsByID[accountID]?.displayName ?? "Conto"
     }
 
     private var categoryFilterTitle: String {
@@ -211,6 +211,7 @@ struct TransactionsView: View {
                         transaction: transaction,
                         categories: model.categories,
                         categoryNames: model.categoryNames,
+                        categoriesByID: model.categoriesByID,
                         advancesByTransactionID: model.advancesByTransactionID,
                         transfersByTransactionID: model.transfersByTransactionID,
                         accountsByID: model.accountsByID,

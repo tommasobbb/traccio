@@ -33,6 +33,10 @@ final class TransactionsViewModel {
     /// than failing the whole screen, since the transaction list is the
     /// primary content.
     private(set) var categoryNames: [UUID: String] = [:]
+    /// Category id → the full category, for `TransactionRow`'s leading
+    /// `IconTile` (needs the colour/icon, not just the name). Best-effort,
+    /// same reasoning as `categoryNames`.
+    private(set) var categoriesByID: [UUID: CategoryResponse] = [:]
     /// Transaction id → its advance, for an advance-role row's "quota"
     /// caption and the advance cards on `TransactionDetailView`. Best-effort,
     /// same reasoning as `categoryNames`.
@@ -123,6 +127,7 @@ final class TransactionsViewModel {
         if let fetchedCategories = try? await categoriesResult {
             categories = fetchedCategories
             categoryNames = Dictionary(uniqueKeysWithValues: fetchedCategories.map { ($0.id, $0.name) })
+            categoriesByID = Dictionary(uniqueKeysWithValues: fetchedCategories.map { ($0.id, $0) })
         }
         if let advances = try? await advancesResult {
             advancesByTransactionID = Dictionary(

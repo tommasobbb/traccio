@@ -4002,7 +4002,7 @@
     },
     "/transactions": {
       "get": {
-        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one \u2014 or, if it names a root category, one of its children too (a\n    two-level rollup, so a Panoramica drill-down through a root shows\n    every transaction the chart above it counted). Mutually exclusive\n    with ``uncategorized`` \u2014 combining both is a ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
+        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one \u2014 or, if it names a root category, one of its children too (a\n    two-level rollup, so a Panoramica drill-down through a root shows\n    every transaction the chart above it counted). Mutually exclusive\n    with ``uncategorized`` \u2014 combining both is a ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nq : str or None, optional\n    Free-text search term, matched case-insensitively against\n    ``description`` or the cleaned-up ``display_description``. Blank or\n    whitespace-only is treated as absent. Longer than\n    :data:`~traccio.domain.search.MAX_SEARCH_TERM_LENGTH` is a ``422``.\n    Never logged \u2014 it is counterparty text\n    (``.claude/rules/data-safety.md``).\nstart : datetime or None, optional\n    Inclusive lower bound on ``coalesce(booked_at, value_date)``.\nend : datetime or None, optional\n    Exclusive upper bound on the same expression (half-open ``[start,\n    end)``), the same period semantics as ``GET /dashboard/summary``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
         "operationId": "transactions_transactions_get",
         "parameters": [
           {
@@ -4064,6 +4064,56 @@
               "default": false,
               "title": "Uncategorized",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
             }
           },
           {

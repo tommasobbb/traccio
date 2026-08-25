@@ -36,6 +36,7 @@ def _tx(
     last_synced_at: datetime | None = None,
     event_id: UUID | None = None,
     confirmed_category_id: UUID | None = None,
+    display_description: str | None = None,
 ) -> TransactionRow:
     """Build a synthetic transaction row for ``user_id``."""
     return TransactionRow(
@@ -47,7 +48,7 @@ def _tx(
         booked_at=booked_at,
         value_date=value_date,
         description=description,
-        display_description=None,
+        display_description=display_description,
         status=status,
         role=role,
         entry_reference=stable_key,
@@ -593,6 +594,225 @@ def test_transactions_rejects_conflicting_category_filters() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"] == "conflicting_category_filter"
+
+
+# --- GET /transactions?q= -----------------------------------------------------
+
+
+def test_transactions_search_is_case_insensitive() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-MATCH",
+                    description="TEST MERCHANT ESSELUNGA",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-NOMATCH",
+                    description="TEST MERCHANT OTHER",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"q": "esselunga"})
+
+    assert response.status_code == 200
+    assert [t["description"] for t in response.json()["transactions"]] == [
+        "TEST MERCHANT ESSELUNGA"
+    ]
+
+
+def test_transactions_search_matches_display_description_too() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=account_id,
+                stable_key="TX-CLEANED",
+                description="RAW TEXT WITH REFS 998877",
+                display_description="TEST MERCHANT CLEANED",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"q": "cleaned"})
+
+    assert response.status_code == 200
+    assert len(response.json()["transactions"]) == 1
+
+
+def test_transactions_search_treats_percent_and_underscore_as_literal() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-PERCENT",
+                    description="TEST MERCHANT 50% OFF",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-OTHER",
+                    description="TEST MERCHANT FULL PRICE",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"q": "50%"})
+
+    # "%" is a literal here, not a wildcard — only the row that actually
+    # contains "50%" matches, not every row (which an unescaped LIKE would).
+    assert response.status_code == 200
+    assert [t["description"] for t in response.json()["transactions"]] == [
+        "TEST MERCHANT 50% OFF"
+    ]
+
+
+def test_transactions_blank_search_term_is_ignored() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add(
+            _tx(
+                user_id=dev_user_id,
+                account_id=account_id,
+                stable_key="TX-ANY",
+                description="TEST MERCHANT ANY",
+                booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                value_date=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+    response = _client(engine).get("/transactions", params={"q": "   "})
+
+    assert response.status_code == 200
+    assert len(response.json()["transactions"]) == 1
+
+
+def test_transactions_search_combines_with_account_filter() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_a = uuid4()
+    account_b = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_a,
+                    stable_key="TX-A",
+                    description="TEST MERCHANT SHARED",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_b,
+                    stable_key="TX-B",
+                    description="TEST MERCHANT SHARED",
+                    booked_at=datetime(2026, 1, 2, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 2, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get(
+        "/transactions", params={"q": "shared", "account_id": str(account_a)}
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["transactions"]) == 1
+
+
+def test_transactions_rejects_search_term_too_long() -> None:
+    response = _client(_sqlite_engine()).get("/transactions", params={"q": "x" * 101})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "search_too_long"
+
+
+# --- GET /transactions?start=&end= -------------------------------------------
+
+
+def test_transactions_period_filter_is_half_open() -> None:
+    dev_user_id = get_settings().dev_user_id
+    account_id = uuid4()
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-JAN",
+                    description="TEST MERCHANT JAN",
+                    booked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 1, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-FEB-BOUNDARY",
+                    description="TEST MERCHANT FEB BOUNDARY",
+                    booked_at=datetime(2026, 2, 1, tzinfo=UTC),
+                    value_date=datetime(2026, 2, 1, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=account_id,
+                    stable_key="TX-JAN-15",
+                    description="TEST MERCHANT JAN 15",
+                    booked_at=datetime(2026, 1, 15, tzinfo=UTC),
+                    value_date=datetime(2026, 1, 15, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+
+    response = _client(engine).get(
+        "/transactions",
+        params={
+            "start": datetime(2026, 1, 1, tzinfo=UTC).isoformat(),
+            "end": datetime(2026, 2, 1, tzinfo=UTC).isoformat(),
+        },
+    )
+
+    assert response.status_code == 200
+    # start is inclusive, end is exclusive: the row exactly on `end` is out.
+    assert [t["description"] for t in response.json()["transactions"]] == [
+        "TEST MERCHANT JAN 15",
+        "TEST MERCHANT JAN",
+    ]
 
 
 # --- GET /transactions/{transaction_id} --------------------------------------

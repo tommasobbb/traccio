@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
-    from sqlalchemy import CursorResult
+    from sqlalchemy import ColumnElement, CursorResult
 
 from traccio.db.mappers import (
     account_to_row,
@@ -79,6 +79,25 @@ from traccio.domain.models import (
     Transfer,
 )
 from traccio.domain.money import Money
+from traccio.domain.search import escape_like
+
+
+def _transaction_when() -> "ColumnElement[datetime | None]":
+    """The single "when did this happen" expression for a transaction row.
+
+    ``coalesce(booked_at, value_date)`` — a pending row with no ``booked_at``
+    falls back to its ``value_date``. Every query that orders or filters
+    transactions by date uses this same expression, so a period filter (e.g.
+    :func:`list_transactions`'s ``start``/``end``) can never disagree with the
+    ordering, or with another query's own period filter, about which date a
+    row belongs to.
+
+    Returns
+    -------
+    ColumnElement[datetime | None]
+        A SQL expression usable in ``.where()``/``.order_by()``.
+    """
+    return func.coalesce(TransactionRow.booked_at, TransactionRow.value_date)
 
 
 def create_connection(session: Session, *, connection: Connection, auth_state: str) -> None:
@@ -648,10 +667,7 @@ def list_all_transactions(session: Session, user_id: UUID) -> list[Transaction]:
     rows = session.scalars(
         select(TransactionRow)
         .where(TransactionRow.user_id == user_id)
-        .order_by(
-            func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
-            TransactionRow.id,
-        )
+        .order_by(_transaction_when().desc(), TransactionRow.id)
     ).all()
     return [row_to_transaction(row) for row in rows]
 
@@ -664,6 +680,9 @@ def list_transactions(
     event_id: UUID | None = None,
     category_ids: Sequence[UUID] | None = None,
     uncategorized: bool = False,
+    q: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Transaction]:
@@ -699,6 +718,21 @@ def list_transactions(
     uncategorized : bool, optional
         When true, restrict to transactions with no effective category (the
         same ``coalesce`` expression, ``IS NULL``).
+    q : str or None, optional
+        Free-text search term, already normalized by the caller (see
+        :func:`traccio.domain.search.normalize_search_term`). Matches
+        case-insensitively against ``description`` **or**
+        ``display_description`` — unlike a rule's ``description``-only match
+        (ADR 0005), search is a person looking, not an automated write, so it
+        may as well search the cleaned-up text too when one exists.
+    start : datetime or None, optional
+        Inclusive lower bound on ``coalesce(booked_at, value_date)``, the same
+        expression :func:`list_transactions_in_period` filters on — a
+        chart drill-down and this list must never disagree about which rows a
+        period contains.
+    end : datetime or None, optional
+        Exclusive upper bound on the same expression (half-open ``[start,
+        end)``).
     limit : int, optional
         Maximum number of rows to return. The caller (``api/``) validates the
         bounds; the default matches one page.
@@ -722,14 +756,20 @@ def list_transactions(
         query = query.where(effective_category.in_(category_ids))
     if uncategorized:
         query = query.where(effective_category.is_(None))
-    query = (
-        query.order_by(
-            func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
-            TransactionRow.id,
+    if q is not None:
+        pattern = f"%{escape_like(q.lower())}%"
+        query = query.where(
+            func.lower(TransactionRow.description).like(pattern, escape="\\")
+            | func.lower(func.coalesce(TransactionRow.display_description, "")).like(
+                pattern, escape="\\"
+            )
         )
-        .limit(limit)
-        .offset(offset)
-    )
+    when = _transaction_when()
+    if start is not None:
+        query = query.where(when >= start)
+    if end is not None:
+        query = query.where(when < end)
+    query = query.order_by(when.desc(), TransactionRow.id).limit(limit).offset(offset)
     rows = session.scalars(query).all()
     return [row_to_transaction(row) for row in rows]
 
@@ -770,7 +810,7 @@ def list_transactions_in_period(
         Domain transactions owned by ``user_id`` within the period (empty if
         none), newest first.
     """
-    when = func.coalesce(TransactionRow.booked_at, TransactionRow.value_date)
+    when = _transaction_when()
     query = select(TransactionRow).where(TransactionRow.user_id == user_id)
     if start is not None:
         query = query.where(when >= start)
@@ -1672,10 +1712,7 @@ def list_event_members(session: Session, *, user_id: UUID, event_id: UUID) -> li
     rows = session.scalars(
         select(TransactionRow)
         .where(TransactionRow.user_id == user_id, TransactionRow.event_id == event_id)
-        .order_by(
-            func.coalesce(TransactionRow.booked_at, TransactionRow.value_date).desc(),
-            TransactionRow.id,
-        )
+        .order_by(_transaction_when().desc(), TransactionRow.id)
     ).all()
     return [row_to_transaction(row) for row in rows]
 

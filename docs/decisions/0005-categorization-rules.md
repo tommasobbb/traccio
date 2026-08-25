@@ -106,3 +106,11 @@ a live suggestion is already waiting rather than `None`.
 - Rule application is wired into the sync pipeline as a non-fatal detection
   step, once background sync scheduling (M3) makes "run it automatically"
   worth the added write path inside sync.
+
+**Note (2026-08-26)**: `GET /transactions`'s free-text `q` filter matches
+against `description` **or** `display_description`, unlike a rule's
+`description`-only match above. This is not a reopening of the "revisit when"
+item above — a rule is an automated write whose behavior must not shift the
+day description cleanup lands; search is a person looking, with no persisted
+effect, so matching the cleaner text too costs nothing. The two stay
+deliberately different scopes.

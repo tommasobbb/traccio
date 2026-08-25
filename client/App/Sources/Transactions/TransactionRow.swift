@@ -16,6 +16,10 @@ struct TransactionRow: View {
     let categories: [CategoryResponse]
     /// Category id → name, from `TransactionsViewModel.categoryNames`.
     let categoryNames: [UUID: String]
+    /// Category id → the full category, from
+    /// `TransactionsViewModel.categoriesByID` — the leading `IconTile` needs
+    /// the colour/icon, not just the name `categoryNames` carries.
+    let categoriesByID: [UUID: CategoryResponse]
     /// Transaction id → its advance, from
     /// `TransactionsViewModel.advancesByTransactionID`.
     let advancesByTransactionID: [UUID: AdvanceResponse]
@@ -66,6 +70,7 @@ struct TransactionRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
+            IconTile(systemImage: categoryTileIcon, color: categoryTileColor, diameter: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text(transaction.displayDescription ?? transaction.description)
                     .font(Typography.body.weight(.semibold))
@@ -94,8 +99,29 @@ struct TransactionRow: View {
         return advancesByTransactionID[transaction.id]
     }
 
+    /// The account this row belongs to, when the fetch resolved it — the
+    /// source for both the subtitle's account dot and its name.
+    private var account: AccountResponse? {
+        accountsByID[transaction.accountID]
+    }
+
     private var categoryName: String? {
         transaction.effectiveCategoryID.flatMap { categoryNames[$0] }
+    }
+
+    /// The full effective category, for the leading `IconTile` — falls back
+    /// to `nil` (rendered as the shared "uncategorized" tile) rather than a
+    /// placeholder category, since `nil` is a real, distinct state.
+    private var effectiveCategory: CategoryResponse? {
+        transaction.effectiveCategoryID.flatMap { categoriesByID[$0] }
+    }
+
+    private var categoryTileIcon: String {
+        (effectiveCategory?.tileIcon ?? .other).systemImageName
+    }
+
+    private var categoryTileColor: PaletteColor {
+        effectiveCategory?.color ?? .slate
     }
 
     /// A row is muted when it does not read as a plain, settled personal
@@ -105,32 +131,69 @@ struct TransactionRow: View {
         transaction.status == .pending || transaction.effectiveAmount == 0
     }
 
+    /// The subtitle is one truncating line, not the old mutually-exclusive
+    /// branches — a role/pending badge, the account (a 6pt dot, deliberately
+    /// too small to compete with the category tile's colour claim — the
+    /// account/category colour hierarchy described in the milestone plan),
+    /// and the category or advance caption can now all appear together.
     @ViewBuilder
     private var subtitle: some View {
         HStack(spacing: 5) {
-            if transaction.role != .personal {
-                Badge(text: roleLabel, style: roleBadgeStyle)
-                if let advance {
-                    Text(
-                        "quota \(TraccioCore.formatMoney(amount: advance.ownShare, currencyCode: transaction.currency)) di \(TraccioCore.formatMoney(amount: abs(transaction.amount), currencyCode: transaction.currency))"
-                    )
+            if let leadingBadge {
+                Badge(text: leadingBadge.text, style: leadingBadge.style)
+            }
+            if let account {
+                Circle()
+                    .fill(Palette.color(account.tileColor))
+                    .frame(width: 6, height: 6)
+            }
+            if !captionText.isEmpty {
+                Text(captionText)
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkTertiary)
-                }
-            } else if transaction.status == .pending {
-                Badge(text: "In lavorazione", style: .warning)
-            } else if let categoryName {
-                // A rule-generated suggestion must not read like a confirmed
-                // category — appended rather than styled differently, to
-                // avoid a second color claim for one caption.
-                Text(
-                    transaction.confirmedCategoryID == nil
-                        ? "\(categoryName) · suggerita" : categoryName
-                )
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
+                    .lineLimit(1)
             }
         }
+    }
+
+    /// The one badge this row shows, if any — role takes precedence over the
+    /// pending marker (a pending transfer/advance still reads as that role
+    /// first), and a plain personal, settled row shows neither.
+    private var leadingBadge: (text: String, style: Badge.Style)? {
+        if transaction.role != .personal {
+            return (roleLabel, roleBadgeStyle)
+        }
+        if transaction.status == .pending {
+            return ("In lavorazione", .warning)
+        }
+        return nil
+    }
+
+    /// The account name, then either the advance quota or the category name
+    /// — joined into the single trailing caption `subtitle` renders after the
+    /// badge and the account dot.
+    private var captionPieces: [String] {
+        var pieces: [String] = []
+        if let account {
+            pieces.append(account.displayName ?? "Conto")
+        }
+        if let advance {
+            pieces.append(
+                "quota \(TraccioCore.formatMoney(amount: advance.ownShare, currencyCode: transaction.currency)) di \(TraccioCore.formatMoney(amount: abs(transaction.amount), currencyCode: transaction.currency))"
+            )
+        } else if let categoryName {
+            // A rule-generated suggestion must not read like a confirmed
+            // category — appended rather than styled differently, to avoid a
+            // second color claim for one caption.
+            pieces.append(
+                transaction.confirmedCategoryID == nil ? "\(categoryName) · suggerita" : categoryName
+            )
+        }
+        return pieces
+    }
+
+    private var captionText: String {
+        captionPieces.joined(separator: " · ")
     }
 
     private var roleLabel: String {

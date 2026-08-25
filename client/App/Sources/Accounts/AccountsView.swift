@@ -269,8 +269,8 @@ struct AccountsView: View {
         } label: {
             HStack(spacing: 10) {
                 IconTile(
-                    systemImage: (account.icon ?? defaultIcon(for: account.kind)).systemImageName,
-                    color: account.color ?? .slate
+                    systemImage: account.tileIcon.systemImageName,
+                    color: account.tileColor
                 )
                 Text(account.displayName ?? "Conto")
                     .font(Typography.body.weight(.semibold))
@@ -286,13 +286,6 @@ struct AccountsView: View {
             .padding(.vertical, Spacing.rowPadding)
         }
         .buttonStyle(.plain)
-    }
-
-    /// The icon an account falls back to before the user has chosen one —
-    /// mirrors `AccountKind`'s old hardcoded glyph choice (wallet vs.
-    /// everything else) rather than defaulting every kind to the same icon.
-    private func defaultIcon(for kind: AccountKind) -> AccountIcon {
-        kind == .wallet ? .wallet : .bank
     }
 }
 
