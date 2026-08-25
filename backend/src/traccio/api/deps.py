@@ -5,10 +5,14 @@ close over request-scoped values the way the old single-file factory did; the
 dependencies they share are declared here instead.
 """
 
+import secrets
 from collections.abc import Iterator
+from typing import Annotated
 from uuid import UUID
 
-from traccio.core.config import get_settings
+from fastapi import Depends, Header, HTTPException, status
+
+from traccio.core.config import Settings, get_settings
 from traccio.core.crypto import TokenCipher, get_token_cipher
 from traccio.providers.enable_banking.auth import load_private_key_pem
 from traccio.providers.enable_banking.client import EnableBankingClient
@@ -29,6 +33,52 @@ def current_user_id() -> UUID:
         The current user's id.
     """
     return get_settings().dev_user_id
+
+
+def require_api_token(
+    settings: Annotated[Settings, Depends(get_settings)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> None:
+    """Reject a request that doesn't carry ``Settings.api_token`` as a bearer token.
+
+    A no-op when ``api_token`` is unset — the app keeps booting with no
+    ``.env`` and every request stays unauthenticated, same as before this
+    dependency existed. Set only for a deployment reachable from outside
+    localhost (see ``docs/decisions/0014-api-token.md`` for why a shared
+    token rather than real per-user auth, which is blocked on the M4
+    decision). Compared with :func:`secrets.compare_digest` so response
+    timing can't be used to guess the token a character at a time.
+
+    Wired via ``dependencies=[Depends(require_api_token)]`` on a parent
+    router in ``api/main.py`` covering every resource router except
+    ``GET /health`` and ``GET /connections/callback`` — the latter is called
+    by the bank's browser redirect, which cannot carry a bearer header, and
+    is instead protected by its own unpredictable ``state`` value
+    (``docs/openbanking.md``).
+
+    Parameters
+    ----------
+    authorization : str or None
+        The raw ``Authorization`` header, expected as ``Bearer <token>``.
+    settings : Settings
+        Injected so a test can override ``get_settings`` rather than
+        mutating process-wide state.
+
+    Raises
+    ------
+    HTTPException
+        401 if ``api_token`` is set and the header is missing, malformed, or
+        does not match.
+    """
+    if settings.api_token is None:
+        return
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(token, settings.api_token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid or missing API token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:

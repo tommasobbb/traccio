@@ -1550,6 +1550,24 @@
       "get": {
         "description": "List the current user's accounts.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`).\nThe query itself is already written ``scoped by user_id``; only the source\nof the id changes when auth arrives.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose accounts to return.\n\nReturns\n-------\nAccountsResponse\n    The user's accounts, oldest first.",
         "operationId": "accounts_accounts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1560,6 +1578,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Accounts"
@@ -1569,6 +1597,24 @@
       "get": {
         "description": "List the current user's advances, oldest first.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\n\nReturns\n-------\nAdvancesResponse\n    The user's advances, oldest first (empty if none).",
         "operationId": "advances_advances_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1579,6 +1625,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Advances"
@@ -1586,6 +1642,24 @@
       "post": {
         "description": "Create an advance on a transaction.\n\nValidates the transaction (the user's, ``personal``, not ``rejected``,\noutgoing) and the declared ``own_share`` (in range, in the transaction's\ncurrency), records the advance and its participants, and sets the\ntransaction's ``role`` to ``advance``. Scoped to the current user.\n\nParameters\n----------\nbody : CreateAdvanceRequest\n    The transaction, the user's own share, and optional participants.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.\n\nReturns\n-------\nAdvanceResponse\n    The created advance, with derived receivable/outstanding.",
         "operationId": "create_advance_endpoint_advances_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1635,6 +1709,22 @@
               "title": "Advance Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -1666,6 +1756,22 @@
               "format": "uuid",
               "title": "Advance Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -1708,6 +1814,22 @@
               "title": "Advance Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -1746,6 +1868,22 @@
               "format": "uuid",
               "title": "Advance Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -1808,6 +1946,22 @@
               "title": "Reimbursement Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -1841,6 +1995,22 @@
               "format": "uuid",
               "title": "Advance Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -1883,6 +2053,22 @@
               "title": "Advance Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -1914,6 +2100,24 @@
       "get": {
         "description": "List the current user's categories, alphabetically by name.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose categories to return.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories, alphabetically (empty if none).",
         "operationId": "categories_categories_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1924,6 +2128,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Categories"
@@ -1931,6 +2145,24 @@
       "post": {
         "description": "Create a category.\n\nScoped to the current user. A ``409`` if the (normalized) name collides\nwith one of the user's existing categories; a ``422`` if the name is blank\nor too long.\n\nParameters\n----------\nbody : CreateCategoryRequest\n    The category's name.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the category belongs to.\n\nReturns\n-------\nCategoryResponse\n    The created category.",
         "operationId": "create_category_endpoint_categories_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1970,6 +2202,24 @@
       "post": {
         "description": "Seed the shared default categories, then return the user's full list.\n\nIdempotent: inserts the default set only when the user currently has zero\ncategories (see :func:`~traccio.db.repositories.seed_default_categories`),\nso calling it again after the user has renamed or deleted some is a no-op,\nnever a resurrection.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user to seed.\n\nReturns\n-------\nCategoriesResponse\n    The user's categories after seeding (the defaults, or whatever they\n    already had).",
         "operationId": "seed_defaults_categories_defaults_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1980,6 +2230,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Seed Defaults"
@@ -1998,6 +2258,22 @@
               "format": "uuid",
               "title": "Category Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2032,6 +2308,22 @@
               "format": "uuid",
               "title": "Category Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2074,6 +2366,24 @@
       "get": {
         "description": "List the current user's bank connections, oldest first.\n\nScoped to the current user. Secret material never leaves ``db/``, so the\nprojection cannot expose the consent secret or ``auth_state`` (see\n``.claude/rules/data-safety.md``).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose connections to return.\n\nReturns\n-------\nConnectionsResponse\n    The user's connections, oldest first.",
         "operationId": "connections_connections_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2084,6 +2394,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Connections"
@@ -2091,6 +2411,24 @@
       "post": {
         "description": "Begin authorizing a bank connection.\n\nCreates a pending connection and returns the URL to open in the system\nbrowser for SCA. Scoped to the current user.\n\nParameters\n----------\nbody : StartConnectionRequest\n    The bank to authorize (institution + country).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the connection belongs to.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\n\nReturns\n-------\nStartConnectionResponse\n    The pending connection id and the authorization url.",
         "operationId": "start_connection_connections_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2235,6 +2573,22 @@
               "title": "Connection Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2275,6 +2629,22 @@
               "format": "uuid",
               "title": "Connection Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2341,6 +2711,22 @@
               ],
               "title": "End"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2372,6 +2758,24 @@
       "get": {
         "description": "List the current user's events, oldest first.\n\nScoped to the current user. Each event carries its derived net total and\nmember count.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose events to return.\n\nReturns\n-------\nEventsResponse\n    The user's events, oldest first (empty if none).",
         "operationId": "events_events_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2382,6 +2786,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Events"
@@ -2389,6 +2803,24 @@
       "post": {
         "description": "Create an event.\n\nRecords the occasion's name and optional date range; it starts ``active``\nwith no members and a zero total. Scoped to the current user.\n\nParameters\n----------\nbody : CreateEventRequest\n    The event's name and optional start/end dates.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The created event, with an empty total.",
         "operationId": "create_event_endpoint_events_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2438,6 +2870,22 @@
               "title": "Event Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2469,6 +2917,22 @@
               "format": "uuid",
               "title": "Event Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2511,6 +2975,22 @@
               "title": "Event Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2551,6 +3031,22 @@
               "format": "uuid",
               "title": "Event Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2593,6 +3089,22 @@
               "title": "Event Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2631,6 +3143,22 @@
               "format": "uuid",
               "title": "Event Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2686,6 +3214,22 @@
               "title": "Transaction Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2729,6 +3273,24 @@
       "get": {
         "description": "List the current user's rules, in evaluation order.\n\nThe order they are shown in is the order they actually fire in (see\n:func:`~traccio.services.categorization.evaluation_order`).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose rules to return.\n\nReturns\n-------\nRulesResponse\n    The user's rules, most specific first (empty if none).",
         "operationId": "rules_rules_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2739,6 +3301,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Rules"
@@ -2746,6 +3318,24 @@
       "post": {
         "description": "Create a rule.\n\nScoped to the current user. A ``404`` if the target category is unknown or\nnot the caller's; a ``409`` if the (normalized) ``(match_kind, pattern)``\ncollides with one of the user's existing rules; a ``422`` if the pattern is\nblank or too long.\n\nParameters\n----------\nbody : CreateRuleRequest\n    The target category, predicate, and pattern.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the rule belongs to.\n\nReturns\n-------\nRuleResponse\n    The created rule.",
         "operationId": "create_rule_endpoint_rules_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2785,6 +3375,24 @@
       "post": {
         "description": "Recompute every rule against the user's transactions.\n\nA full, idempotent recompute \u2014 not incremental: every transaction's\n``suggested_category_id`` is set to the first matching rule's category, or\ncleared to ``None`` if no rule matches (see\n:func:`~traccio.services.categorization.suggest_categories`). Never touches\n``confirmed_category_id``. Detection only suggests\n(``docs/architecture.md``); a transaction with a confirmed category still\nreceives a suggestion underneath it.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose rules and transactions to use.\n\nReturns\n-------\nApplyRulesResponse\n    How many rules were evaluated, and how many transactions were matched\n    vs. cleared.",
         "operationId": "apply_rules_rules_apply_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2795,6 +3403,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Apply Rules"
@@ -2813,6 +3431,22 @@
               "format": "uuid",
               "title": "Rule Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -2922,6 +3556,22 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -2953,6 +3603,24 @@
       "post": {
         "description": "Delete abandoned pending transactions, per ``docs/domain.md``.\n\n\"Pending transactions that neither settle nor reappear within a defined\nwindow are dropped, not kept as ghosts.\" Explicit and on-demand \u2014 like\n``POST /rules/apply`` (ADR 0005) \u2014 rather than wired into sync, until a\nbackground scheduler (M3) makes that worth the added write path inside\nsync. Never touches a row the user has acted on: see\n:func:`~traccio.db.repositories.prune_stale_pending_transactions` for the\nfull eligibility rule (still ``pending``, unseen by a sync for\n``Settings.pending_transaction_ttl_days``, still ``personal``, not in an\nevent, no confirmed category).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose pending transactions to prune.\n\nReturns\n-------\nPrunePendingResponse\n    How many rows were deleted.",
         "operationId": "prune_pending_transactions_transactions_prune_pending_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -2963,6 +3631,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Prune Pending Transactions"
@@ -2981,6 +3659,22 @@
               "format": "uuid",
               "title": "Transaction Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -3023,6 +3717,22 @@
               "title": "Transaction Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
           }
         ],
         "responses": {
@@ -3054,6 +3764,22 @@
               "format": "uuid",
               "title": "Transaction Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -3089,6 +3815,24 @@
       "get": {
         "description": "List the current user's confirmed transfers, oldest first.\n\nScoped to the current user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transfers to return.\n\nReturns\n-------\nTransfersResponse\n    The user's confirmed transfers, oldest first (empty if none).",
         "operationId": "transfers_transfers_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3099,6 +3843,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Transfers"
@@ -3108,6 +3862,24 @@
       "post": {
         "description": "Confirm two transactions as a transfer.\n\nThe explicit user action that turns a suggestion into a persisted link: it\nvalidates the pair (same invariants detection uses, minus the tolerance and\nwindow \u2014 a user may link any structurally valid pair), records the\n:class:`~traccio.domain.models.Transfer`, and sets both legs' ``role`` to\n``transfer`` so their ``effective_amount`` becomes zero. Scoped to the\ncurrent user.\n\nParameters\n----------\nbody : ConfirmTransferRequest\n    The outgoing (negative) and incoming (positive) legs to link.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.\n\nReturns\n-------\nTransferResponse\n    The created transfer.",
         "operationId": "confirm_transfer_transfers_confirm_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3147,6 +3919,24 @@
       "post": {
         "description": "Reject a suggested pair so it is not suggested again.\n\nRecords an order-independent dismissal for the two legs. Idempotent: rejecting\nthe same pair twice changes nothing. Both legs must belong to the caller.\nScoped to the current user.\n\nParameters\n----------\nbody : RejectTransferRequest\n    The two legs of the rejected suggestion.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.",
         "operationId": "reject_transfer_transfers_reject_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -3179,6 +3969,24 @@
       "get": {
         "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). Pairs the user has rejected are\nexcluded via stored dismissals, so a rejected suggestion does not reappear.\nScoped to the current user; the tolerance and window come from settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
         "operationId": "transfer_suggestions_transfers_suggestions_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3189,6 +3997,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Transfer Suggestions"
@@ -3207,6 +4025,22 @@
               "format": "uuid",
               "title": "Transfer Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],

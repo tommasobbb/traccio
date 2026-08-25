@@ -10,13 +10,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 
-from traccio.api.deps import build_bank_provider
+from traccio.api.deps import build_bank_provider, require_api_token
 from traccio.api.routers import (
     accounts_router,
     advances_router,
     categories_router,
+    connections_callback_router,
     connections_router,
     dashboard_router,
     events_router,
@@ -100,17 +101,29 @@ def create_app() -> FastAPI:
 
     # Log identifiers only, never financial data (see data-safety rules).
     logger.info("app.startup", environment=settings.environment, version=app_version)
+    if settings.api_token is None:
+        logger.warning("auth.disabled")
+
+    # Every resource router except health and the consent callback requires
+    # Settings.api_token (ADR 0014) — gated once here on a parent router
+    # rather than on each include_router call. health has no data to protect;
+    # the callback is reached by the bank's browser redirect, which cannot
+    # carry a bearer header, and is protected by its own state value instead
+    # (api/routers/connections.py).
+    protected = APIRouter()
+    protected.include_router(accounts_router)
+    protected.include_router(connections_router)
+    protected.include_router(transactions_router)
+    protected.include_router(transfers_router)
+    protected.include_router(advances_router)
+    protected.include_router(events_router)
+    protected.include_router(categories_router)
+    protected.include_router(rules_router)
+    protected.include_router(dashboard_router)
 
     app.include_router(health_router)
-    app.include_router(accounts_router)
-    app.include_router(connections_router)
-    app.include_router(transactions_router)
-    app.include_router(transfers_router)
-    app.include_router(advances_router)
-    app.include_router(events_router)
-    app.include_router(categories_router)
-    app.include_router(rules_router)
-    app.include_router(dashboard_router)
+    app.include_router(connections_callback_router)
+    app.include_router(protected, dependencies=[Depends(require_api_token)])
 
     return app
 

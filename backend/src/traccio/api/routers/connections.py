@@ -9,6 +9,12 @@ Two steps of one flow (see ``docs/openbanking.md`` §Consent flow):
   after SCA; the code is exchanged for a session and the consent secret is
   encrypted at rest.
 
+Two ``APIRouter`` instances, not one: ``router`` holds every endpoint that
+needs ``api/deps.py::require_api_token`` (ADR 0014), while ``callback_router``
+holds only the callback — the bank's browser redirect cannot carry a bearer
+header, so ``api/main.py`` includes it without that dependency. The callback
+stays protected by its own unpredictable ``state`` value instead.
+
 Data safety (``.claude/rules/data-safety.md``): these handlers log only the
 ``connection_id`` and outcome — never the ``code``, ``state``, ``session_id``,
 or the authorization url (which embeds ``state``).
@@ -61,6 +67,7 @@ from traccio.services.sync import (
 logger = get_logger(__name__)
 
 router = APIRouter()
+callback_router = APIRouter()
 
 _SUCCESS_PAGE = """<!doctype html>
 <html lang="it"><head><meta charset="utf-8"><title>Traccio</title></head>
@@ -123,7 +130,7 @@ def start_connection(
     )
 
 
-@router.get("/connections/callback", response_class=HTMLResponse)
+@callback_router.get("/connections/callback", response_class=HTMLResponse)
 def connection_callback(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],

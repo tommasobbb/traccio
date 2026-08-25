@@ -8,6 +8,7 @@ pydantic-settings.
 from functools import lru_cache
 from uuid import UUID
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -118,6 +119,13 @@ class Settings(BaseSettings):
         needs one of the missing ones refuses with
         ``PSU_HEADER_NOT_PROVIDED`` regardless. Built and tested, deliberately
         not turned on.
+    api_token : str or None
+        Shared bearer secret gating every request except ``GET /health`` and
+        ``GET /connections/callback`` (``api/deps.py::require_api_token``,
+        ADR 0014). ``None`` by default so the app keeps booting with no
+        ``.env`` and every existing test keeps passing unauthenticated; set
+        this only for a deployment reachable from outside localhost — see
+        the ADR for why a shared token rather than real per-user auth.
     """
 
     model_config = SettingsConfigDict(
@@ -176,6 +184,10 @@ class Settings(BaseSettings):
     # header set this codebase can honestly send is incomplete — see the
     # class docstring.
     send_psu_headers: bool = False
+    # Shared bearer secret (ADR 0014). None by default — auth stays off until
+    # a deployment deliberately sets it. repr=False like every other secret
+    # so a whole-Settings log/repr can't leak it.
+    api_token: str | None = Field(default=None, repr=False)
 
 
 @lru_cache
