@@ -88,4 +88,34 @@ struct CalendarDateTests {
         #expect(formatted.contains("2026"))
         #expect(formatted.contains("1") || formatted.contains("01"))
     }
+
+    // MARK: date(calendar:)
+
+    @Test func dateReconstructsMidnightInTheGivenCalendar() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let calendarDate = CalendarDate(year: 2026, month: 8, day: 10)
+
+        let reconstructed = calendarDate.date(calendar: calendar)
+
+        #expect(reconstructed != nil)
+        #expect(CalendarDate(date: reconstructed!, calendar: calendar) == calendarDate)
+    }
+
+    @Test func dateRoundTripsThroughInitDate() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        var components = DateComponents()
+        components.year = 2026
+        components.month = 8
+        components.day = 10
+        components.hour = 12
+        let original = calendar.date(from: components)!
+
+        let calendarDate = CalendarDate(date: original, calendar: calendar)
+        let reconstructed = calendarDate.date(calendar: calendar)
+
+        #expect(reconstructed != nil)
+        #expect(CalendarDate(date: reconstructed!, calendar: calendar) == calendarDate)
+    }
 }

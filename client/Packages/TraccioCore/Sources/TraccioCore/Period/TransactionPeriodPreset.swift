@@ -5,10 +5,11 @@ import Foundation
 /// `[start, end)` shape `TransactionFilter.start`/`.end` and
 /// `GET /dashboard/summary` already use.
 ///
-/// Deliberately minimal: only calendar-month-based presets plus "all time".
-/// Longer or custom periods (quarter/year pickers, a scrubbable range) are
-/// M3 backlog item 6 ("Panoramica redesign part 2") — this type is the seam
-/// that extends, not a final design.
+/// Deliberately minimal: only calendar-month-based presets plus "all time" —
+/// Movimenti's own period filter, distinct from Panoramica's
+/// `CalendarPeriod` (month/quarter/year picker, "Daily driver, davvero"
+/// milestone task 6). A custom arbitrary range is still not built here;
+/// this type is the seam that extends, not a final design.
 ///
 /// Display copy (e.g. "Questo mese") is not this type's job — the client is
 /// officially Italian-only with hardcoded literals in the presentation layer
@@ -25,7 +26,8 @@ public enum TransactionPeriodPreset: CaseIterable, Sendable, Equatable {
     /// The half-open `[start, end)` bound this preset represents.
     ///
     /// `calendar`/`now` are injectable so tests don't depend on the wall
-    /// clock or the device's calendar, mirroring `MonthPeriod.current(calendar:now:)`.
+    /// clock or the device's calendar, mirroring
+    /// `CalendarPeriod.current(unit:calendar:now:)`.
     ///
     /// Parameters
     /// ----------
@@ -43,13 +45,13 @@ public enum TransactionPeriodPreset: CaseIterable, Sendable, Equatable {
         case .all:
             return (nil, nil)
         case .thisMonth:
-            let month = MonthPeriod.current(calendar: calendar, now: now)
+            let month = CalendarPeriod.current(unit: .month, calendar: calendar, now: now)
             return (month.start, month.end)
         case .lastMonth:
-            let month = MonthPeriod.current(calendar: calendar, now: now).previous()
+            let month = CalendarPeriod.current(unit: .month, calendar: calendar, now: now).previous()
             return (month.start, month.end)
         case .last3Months:
-            let currentMonth = MonthPeriod.current(calendar: calendar, now: now)
+            let currentMonth = CalendarPeriod.current(unit: .month, calendar: calendar, now: now)
             // Step back two more months from the current month's start, so
             // the window covers this month plus the two before it — three
             // calendar months total, ending at the current month's end.

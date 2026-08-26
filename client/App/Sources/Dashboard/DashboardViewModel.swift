@@ -32,9 +32,10 @@ final class DashboardViewModel {
 
     /// Current load state, observed by the view.
     private(set) var state: State = .idle
-    /// The month currently shown. Changing it and calling `load()` again is
-    /// how the period picker in `DashboardView` works.
-    private(set) var period: MonthPeriod
+    /// The period currently shown — a month, quarter, or year. Changing it
+    /// (`goToPrevious()`/`goToNext()`/`changeUnit(_:)`) and reloading is how
+    /// the period picker in `DashboardView` works.
+    private(set) var period: CalendarPeriod
     /// The donut/breakdown-list selection — reset to `.none` on every
     /// `load()`, since a selected id from a previous period's category set
     /// carries no meaning in a new one.
@@ -42,6 +43,11 @@ final class DashboardViewModel {
     /// Root category ids currently expanded in the breakdown list — reset on
     /// every `load()`, same reasoning as `selectedCategoryID`.
     private(set) var expandedRootIDs: Set<UUID> = []
+    /// The trend chart's scrubbed/tapped bucket, or `nil` when nothing is
+    /// selected — reset on every `load()`, since a bucket index from a
+    /// previous period's (possibly differently-sized) series carries no
+    /// meaning in a new one.
+    private(set) var selectedBucketIndex: Int?
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`: "a view model
@@ -57,26 +63,34 @@ final class DashboardViewModel {
     ///     The API client to fetch the summary through. Defaults to a client
     ///     pointed at the local dev backend.
     /// period:
-    ///     The month to load initially. Defaults to the current month.
-    init(client: any APIClientProtocol = APIClient.current, period: MonthPeriod = .current()) {
+    ///     The period to load initially. Defaults to the current month.
+    init(client: any APIClientProtocol = APIClient.current, period: CalendarPeriod = .current()) {
         self.client = client
         self.period = period
     }
 
     /// Fetch the summary for `period` and publish the outcome.
     ///
+    /// Requests a comparison against `period.previous()` unconditionally —
+    /// `ComparisonCard` always has something to show — and sends
+    /// `period.granularity` and the device's own time zone, so `by_bucket`
+    /// is bucketed the way the trend chart actually needs (day/week/month
+    /// per unit) and in the zone the user actually reads dates in, not UTC.
+    ///
     /// A failure is surfaced as `.failed` without carrying the error into the
     /// UI — error details may reference the response and must not be shown
-    /// or logged. Also clears `selectedCategoryID`/`expandedRootIDs`, since
-    /// either can reload with a different category set.
+    /// or logged. Also clears `selectedCategoryID`/`expandedRootIDs`/
+    /// `selectedBucketIndex`, since any can reload with different data.
     func load() async {
         state = .loading
         selectedCategoryID = .none
         expandedRootIDs = []
+        selectedBucketIndex = nil
         do {
+            let compare = period.previous()
             let summary = try await client.dashboardSummary(
-                start: period.start, end: period.end, granularity: .day, tz: nil,
-                compareStart: nil, compareEnd: nil
+                start: period.start, end: period.end, granularity: period.granularity,
+                tz: TimeZone.current.identifier, compareStart: compare.start, compareEnd: compare.end
             )
             state = .loaded(summary)
         } catch {
@@ -84,15 +98,33 @@ final class DashboardViewModel {
         }
     }
 
-    /// Step to the previous month and reload.
-    func goToPreviousMonth() async {
+    /// Step to the previous period (same unit) and reload.
+    func goToPrevious() async {
         period = period.previous()
         await load()
     }
 
-    /// Step to the next month and reload.
-    func goToNextMonth() async {
+    /// Step to the next period (same unit) and reload.
+    func goToNext() async {
         period = period.next()
+        await load()
+    }
+
+    /// Switch the period picker's unit (Mese/Trimestre/Anno) and reload.
+    ///
+    /// Jumps to the *current* period of the new unit — e.g. switching from a
+    /// month in March to "Trimestre" shows the quarter containing today, not
+    /// an equivalent-length window around March — rather than trying to
+    /// preserve some notion of "the same point in time" across units that
+    /// don't align. A no-op when `unit` is already the active one.
+    ///
+    /// Parameters
+    /// ----------
+    /// unit:
+    ///     The unit to switch to.
+    func changeUnit(_ unit: CalendarPeriod.Unit) async {
+        guard unit != period.unit else { return }
+        period = .current(unit: unit)
         await load()
     }
 
@@ -149,5 +181,41 @@ final class DashboardViewModel {
             start: period.start,
             end: period.end
         )
+    }
+
+    /// Select or deselect a bar on the trend chart.
+    ///
+    /// Unlike `selectCategory(_:)`, this never toggles — a scrub gesture
+    /// reports the bucket currently under the finger on every move, and a
+    /// released/cancelled gesture reports `nil`; there is no "already
+    /// selected, so turn it off" case to collapse.
+    ///
+    /// Parameters
+    /// ----------
+    /// index:
+    ///     The bucket index to select, or `nil` to clear the selection.
+    func selectBucket(_ index: Int?) {
+        selectedBucketIndex = index
+    }
+
+    /// The filter a drill-through to Movimenti should apply for a tapped
+    /// trend-chart bucket.
+    ///
+    /// Parameters
+    /// ----------
+    /// start:
+    ///     The bucket's inclusive start, as returned in `by_bucket`.
+    /// end:
+    ///     The bucket's exclusive end.
+    ///
+    /// Returns
+    /// -------
+    /// A filter scoped to `[start, end)`, or `nil` if either calendar date
+    /// cannot be reconstructed into an instant (not expected in practice —
+    /// the backend never sends an invalid date, but `CalendarDate.date(calendar:)`
+    /// is honestly optional).
+    func drillThroughFilter(bucketStart: CalendarDate, bucketEnd: CalendarDate) -> TransactionFilter? {
+        guard let start = bucketStart.date(), let end = bucketEnd.date() else { return nil }
+        return TransactionFilter(start: start, end: end)
     }
 }

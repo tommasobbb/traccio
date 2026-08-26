@@ -48,55 +48,127 @@ struct DashboardViewModelTests {
 
     @Test func loadSendsThePeriodsStartAndEnd() async throws {
         let client = FakeAPIClient()
-        let period = MonthPeriod.current(now: Self.fixedNow)
+        let period = CalendarPeriod.current(now: Self.fixedNow)
         let model = DashboardViewModel(client: client, period: period)
 
         await model.load()
 
-        let periods = await client.receivedDashboardSummaryPeriods
-        #expect(periods.count == 1)
-        #expect(periods[0].start == period.start)
-        #expect(periods[0].end == period.end)
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests.count == 1)
+        #expect(requests[0].start == period.start)
+        #expect(requests[0].end == period.end)
     }
 
-    @Test func goToPreviousMonthStepsBackAndReloads() async throws {
+    @Test func loadSendsTheGranularityMatchingThePeriodsUnit() async throws {
         let client = FakeAPIClient()
-        let period = MonthPeriod.current(now: Self.fixedNow)
+        let period = CalendarPeriod.current(unit: .quarter, now: Self.fixedNow)
         let model = DashboardViewModel(client: client, period: period)
 
-        await model.goToPreviousMonth()
+        await model.load()
+
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests[0].granularity == .week)
+    }
+
+    @Test func loadSendsTheDevicesTimeZoneIdentifier() async throws {
+        let client = FakeAPIClient()
+        let model = DashboardViewModel(client: client, period: .current(now: Self.fixedNow))
+
+        await model.load()
+
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests[0].tz == TimeZone.current.identifier)
+    }
+
+    @Test func loadSendsAComparisonWindowFromThePreviousPeriod() async throws {
+        let client = FakeAPIClient()
+        let period = CalendarPeriod.current(now: Self.fixedNow)
+        let model = DashboardViewModel(client: client, period: period)
+
+        await model.load()
+
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests[0].compareStart == period.previous().start)
+        #expect(requests[0].compareEnd == period.previous().end)
+    }
+
+    @Test func goToPreviousStepsBackAndReloads() async throws {
+        let client = FakeAPIClient()
+        let period = CalendarPeriod.current(now: Self.fixedNow)
+        let model = DashboardViewModel(client: client, period: period)
+
+        await model.goToPrevious()
 
         #expect(model.period == period.previous())
-        let periods = await client.receivedDashboardSummaryPeriods
-        #expect(periods.last?.start == period.previous().start)
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests.last?.start == period.previous().start)
     }
 
-    @Test func goToNextMonthStepsForwardAndReloads() async throws {
+    @Test func goToNextStepsForwardAndReloads() async throws {
         let client = FakeAPIClient()
-        let period = MonthPeriod.current(now: Self.fixedNow)
+        let period = CalendarPeriod.current(now: Self.fixedNow)
         let model = DashboardViewModel(client: client, period: period)
 
-        await model.goToNextMonth()
+        await model.goToNext()
 
         #expect(model.period == period.next())
-        let periods = await client.receivedDashboardSummaryPeriods
-        #expect(periods.last?.start == period.next().start)
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests.last?.start == period.next().start)
     }
 
-    @Test func loadResetsSelectionAndExpansion() async throws {
+    // MARK: changeUnit
+
+    @Test func changeUnitSwitchesToTheCurrentPeriodOfTheNewUnit() async throws {
+        let client = FakeAPIClient()
+        let model = DashboardViewModel(client: client, period: .current(unit: .month, now: Self.fixedNow))
+
+        await model.changeUnit(.year)
+
+        #expect(model.period.unit == .year)
+        #expect(model.period == .current(unit: .year, now: Date()))
+    }
+
+    @Test func changeUnitToTheAlreadyActiveUnitIsANoOp() async throws {
+        let client = FakeAPIClient()
+        let period = CalendarPeriod.current(unit: .month, now: Self.fixedNow)
+        let model = DashboardViewModel(client: client, period: period)
+        await model.load()
+        let requestCountAfterLoad = await client.receivedDashboardSummaryRequests.count
+
+        await model.changeUnit(.month)
+
+        #expect(model.period == period)
+        let requestCountAfterNoOp = await client.receivedDashboardSummaryRequests.count
+        #expect(requestCountAfterNoOp == requestCountAfterLoad)
+    }
+
+    @Test func changeUnitReloads() async throws {
+        let client = FakeAPIClient()
+        let model = DashboardViewModel(client: client, period: .current(unit: .month, now: Self.fixedNow))
+
+        await model.changeUnit(.quarter)
+
+        let requests = await client.receivedDashboardSummaryRequests
+        #expect(requests.last?.granularity == .week)
+    }
+
+    @Test func loadResetsSelectionExpansionAndBucketSelection() async throws {
         let client = FakeAPIClient()
         await client.setDashboardSummaryResult(Self.makeSummary())
         let model = DashboardViewModel(client: client, period: .current(now: Self.fixedNow))
         let categoryID = UUID()
         model.selectCategory(categoryID)
         model.toggleExpanded(categoryID)
+        model.selectBucket(2)
         #expect(model.selectedCategoryID == .category(categoryID))
         #expect(model.expandedRootIDs.contains(categoryID))
+        #expect(model.selectedBucketIndex == 2)
 
         await model.load()
 
         #expect(model.selectedCategoryID == .none)
         #expect(model.expandedRootIDs.isEmpty)
+        #expect(model.selectedBucketIndex == nil)
     }
 
     // MARK: selectCategory
@@ -157,10 +229,27 @@ struct DashboardViewModelTests {
         #expect(!model.expandedRootIDs.contains(rootID))
     }
 
-    // MARK: drillThroughFilter
+    // MARK: selectBucket
+
+    @Test func selectBucketSetsTheIndexAndNeverToggles() {
+        let model = DashboardViewModel(client: FakeAPIClient(), period: .current(now: Self.fixedNow))
+
+        model.selectBucket(3)
+        #expect(model.selectedBucketIndex == 3)
+
+        // Unlike selectCategory, selecting the same index again stays set —
+        // a scrub gesture reports the same bucket on every unmoved frame.
+        model.selectBucket(3)
+        #expect(model.selectedBucketIndex == 3)
+
+        model.selectBucket(nil)
+        #expect(model.selectedBucketIndex == nil)
+    }
+
+    // MARK: drillThroughFilter(categoryID:)
 
     @Test func drillThroughFilterScopesToACategoryAndThePeriod() {
-        let period = MonthPeriod.current(now: Self.fixedNow)
+        let period = CalendarPeriod.current(now: Self.fixedNow)
         let model = DashboardViewModel(client: FakeAPIClient(), period: period)
         let categoryID = UUID()
 
@@ -177,5 +266,21 @@ struct DashboardViewModelTests {
         let filter = model.drillThroughFilter(categoryID: nil)
 
         #expect(filter.category == .uncategorized)
+    }
+
+    // MARK: drillThroughFilter(bucketStart:bucketEnd:)
+
+    @Test func bucketDrillThroughFilterScopesToTheBucketsInterval() {
+        let model = DashboardViewModel(client: FakeAPIClient(), period: .current(now: Self.fixedNow))
+        let start = CalendarDate(year: 2026, month: 8, day: 10)
+        let end = CalendarDate(year: 2026, month: 8, day: 11)
+
+        let filter = model.drillThroughFilter(bucketStart: start, bucketEnd: end)
+
+        #expect(filter != nil)
+        #expect(filter?.start == start.date())
+        #expect(filter?.end == end.date())
+        // No category constraint — only the period narrows the result.
+        #expect(filter?.category == .any)
     }
 }

@@ -30,9 +30,15 @@ actor FakeAPIClient: APIClientProtocol {
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
     var dashboardSummaryError: Error?
-    /// `(start, end)` from every `dashboardSummary` call, in order — lets a
-    /// test assert the period a reload actually requested.
-    private(set) var receivedDashboardSummaryPeriods: [(start: Date?, end: Date?)] = []
+    /// Every `dashboardSummary` call's full argument set, in order — lets a
+    /// test assert the period, granularity, time zone, and comparison window
+    /// a reload actually requested.
+    private(set) var receivedDashboardSummaryRequests: [
+        (
+            start: Date?, end: Date?, granularity: BucketGranularity, tz: String?, compareStart: Date?,
+            compareEnd: Date?
+        )
+    ] = []
     var transactionToReturn: TransactionResponse?
     /// Per-id overrides for `transaction(id:)`, checked before
     /// `transactionToReturn` — needed wherever a test fetches two different
@@ -524,7 +530,7 @@ actor FakeAPIClient: APIClientProtocol {
         start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
         compareStart: Date?, compareEnd: Date?
     ) async throws -> DashboardSummaryResponse {
-        receivedDashboardSummaryPeriods.append((start, end))
+        receivedDashboardSummaryRequests.append((start, end, granularity, tz, compareStart, compareEnd))
         if let dashboardSummaryError { throw dashboardSummaryError }
         return dashboardSummaryToReturn
     }

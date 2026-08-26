@@ -90,14 +90,17 @@ back to `Palette.color(.slate)`, same default `IconTile` uses everywhere else.
 The donut's background ring still reuses `Palette.neutralFill`, same track as
 every other chart on this screen.
 
-## Daily bars
+## Trend bars
 
-The dashboard's "Spesa giornaliera" bar chart (`docs/design/canvas/Main.dc.html`,
-badge removed once `by_day` shipped —
+The dashboard's trend chart (`docs/design/canvas/Main.dc.html`'s "Spesa
+giornaliera", badge removed once `by_day` shipped —
 `docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25 revision; renamed
-`by_bucket` in the third revision). No new tokens: the fill reuses
-`Palette.accent` and the track reuses `Palette.neutralFill`, same as the
-donut's own track.
+`by_bucket` in the third revision; scrubbable across day/week/month buckets,
+`BucketBarsChart`, in ADR 0008's 2026-08-26 revision). No new tokens: the
+fill reuses `Palette.accent` (dimmed to ~0.35 on every bar but the one
+currently scrubbed/selected, same convention `DonutChart` uses for its own
+selection) and the track reuses `Palette.neutralFill`, same as the donut's
+own track.
 
 ## Appearance tokens
 

@@ -68,6 +68,30 @@ public struct CalendarDate: Codable, Sendable, Equatable, Comparable, Hashable {
         String(format: "%04d-%02d-%02d", year, month, day)
     }
 
+    /// Reconstruct a `Date` at local midnight for this calendar date, in
+    /// `calendar` — the counterpart to `init(date:calendar:)`, needed
+    /// wherever a calendar date must round-trip back into an instant (e.g. a
+    /// dashboard bucket boundary becoming a `TransactionFilter.start`/`.end`
+    /// for a drill-through).
+    ///
+    /// Defaults to `.current` (the device's own calendar/time zone), not
+    /// `.iso8601`/UTC like `init(date:calendar:)`'s default — a dashboard
+    /// bucket is computed in the device's local time zone
+    /// (`GET /dashboard/summary`'s `tz` parameter), so reconstructing its
+    /// boundary must use that same zone, not UTC.
+    ///
+    /// - Parameter calendar: The calendar to interpret this date in.
+    /// - Returns: The instant, or `nil` if `year`/`month`/`day` do not form a
+    ///   valid date in `calendar` (e.g. a malformed `day` value the backend
+    ///   never actually sends).
+    public func date(calendar: Calendar = .current) -> Date? {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        return calendar.date(from: components)
+    }
+
     public static func < (lhs: CalendarDate, rhs: CalendarDate) -> Bool {
         (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day)
     }

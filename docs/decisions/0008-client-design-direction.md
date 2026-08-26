@@ -244,3 +244,74 @@ backend change, no `make openapi`. Manual: still needed before calling this
 done — dark/light, Dynamic Type AX3/AX5 (a breakdown row must reflow rather
 than truncate its amount), and VoiceOver reading each breakdown row's name,
 amount, and percentage.
+
+## 2026-08-26 revision: longer periods, a scrubbable trend chart, comparison, per-account
+
+Task 6/6 of the "Daily driver, davvero" milestone — the last task, closing
+that milestone out. Client-only, no backend change (Task 4 already shipped
+everything `GET /dashboard/summary` needed: `granularity`, `tz`,
+`compare_start`/`compare_end`, `by_account`).
+
+**`MonthPeriod` becomes `CalendarPeriod{start, end, unit}`, one type for
+month/quarter/year rather than three in parallel** — there is exactly one
+client, so switching `unit` (the new Mese/Trimestre/Anno segmented control
+next to the existing arrows) is far cheaper against a single type. `previous()`/
+`next()` step by re-deriving "the period of this same unit containing
+`start - 1 day` / `end`", the same generic technique `MonthPeriod` already
+used for months, so it needed no new logic to also work for quarters and
+years. `granularity` is a computed property on the period
+(month→day, quarter→week, year→month) — coarse enough that a year view
+renders 12 bars, not 365.
+
+**Correcting the previous revision's own prediction**: the Task 5 revision
+above said a future chart "must follow the same shape" as the donut
+(`.accessibilityHidden(true)` plus a separate accessible list). The trend
+chart does not, deliberately — a bar chart has an idiomatic VoiceOver
+interaction a donut's sectors do not
+(`accessibilityAdjustableAction`, swipe up/down to move the selection and
+hear the bucket's date/amount/count), so `BucketBarsChart` (renamed from
+`DailyBarsChart`) is accessible *itself* rather than needing a list built
+alongside it. The rule from the previous revision still holds — an
+interactive chart needs a real accessible representation — it just has two
+valid shapes now, and a chart earns the simpler one when it has its own
+natural adjustable interaction.
+
+**Scrub-to-preview, tap-to-drill-through, same split as the donut's
+tap-to-select**: `TraccioCore.bucketIndex(atFraction:count:)` (pure, tested)
+maps a drag position to a bucket index; `BucketBarsChart` calls it on every
+`DragGesture` frame to drive a floating tooltip (date, spending, transaction
+count), and on release — only when the drag barely moved, so scrubbing to
+read values never accidentally navigates — drills through to Movimenti for
+that bucket's exact `[start, end)`. This is the payoff of Task 3 reusing
+`list_transactions_in_period`'s own `coalesce(booked_at, value_date)`
+expression for the client's period filter: the drill-through's `start`/`end`
+and the bucket's own boundary are guaranteed to agree.
+
+**Two new cards, closing out backend capability that shipped in Task 4 with
+no client surface yet**: `ComparisonCard` renders `ComparisonSummaryResponse`
+(now requested unconditionally — every `load()` sends
+`compareStart`/`compareEnd` from `period.previous()`) — a signed delta with
+its own two-color rule (warning red for more spending, accent for less),
+deliberately not routed through `AmountText.Kind`, since none of its four
+existing cases mean "spending changed versus another period" (`.net`'s
+"accent when positive" is the wrong valence: a *positive* delta here means
+spending went *up*, not up in the good sense `.net` implies for income).
+`AccountBreakdownCard` renders `by_account` flat (accounts have no
+hierarchy) with each account's own alias/colour/icon — closing the loop with
+ADR 0017: an account's identity finally shows up on the dashboard, not just
+Conti and Movimenti.
+
+**Hero card's arrows plus the new segmented unit control replace the single
+month title** — switching units jumps to *the current period of the new
+unit* (this quarter, this year), not an attempt to preserve some
+equivalent-length window around the old selection, since months, quarters,
+and years don't align to make that a well-defined operation.
+
+**Verified**: `swift test` (316, +20: `CalendarPeriodTests` replacing
+`MonthPeriodTests`, `BucketScrubTests`, `SpendingBarsTests` replacing
+`DailyBarsTests`, two new `CalendarDate.date(calendar:)` cases) and
+`make test-app` (164, +8: `DashboardViewModelTests` gains unit-change,
+granularity, time-zone, comparison-window, and bucket-drill-through cases).
+No backend change, no `make openapi`. Manual: still needed — dark/light,
+Dynamic Type, VoiceOver on the scrubber's adjustable action, and confirming
+a year period renders 12 bars, not 365.

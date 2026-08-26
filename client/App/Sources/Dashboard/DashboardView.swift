@@ -80,28 +80,69 @@ struct DashboardView: View {
     }
 
     private var periodPicker: some View {
-        HStack(spacing: 8) {
-            Button {
-                Task { await model.goToPreviousMonth() }
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .accessibilityLabel("Mese precedente")
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Button {
+                    Task { await model.goToPrevious() }
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .accessibilityLabel("Periodo precedente")
 
-            Text(model.period.title)
-                .font(Typography.cardTitle)
-                .foregroundStyle(Palette.ink)
-                .frame(maxWidth: .infinity)
+                Text(title(for: model.period))
+                    .font(Typography.cardTitle)
+                    .foregroundStyle(Palette.ink)
+                    .frame(maxWidth: .infinity)
 
-            Button {
-                Task { await model.goToNextMonth() }
-            } label: {
-                Image(systemName: "chevron.right")
+                Button {
+                    Task { await model.goToNext() }
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .accessibilityLabel("Periodo successivo")
             }
-            .accessibilityLabel("Mese successivo")
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.inkTertiary)
+
+            Picker("Unità", selection: unitBinding) {
+                Text("Mese").tag(CalendarPeriod.Unit.month)
+                Text("Trimestre").tag(CalendarPeriod.Unit.quarter)
+                Text("Anno").tag(CalendarPeriod.Unit.year)
+            }
+            .pickerStyle(.segmented)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(Palette.inkTertiary)
+    }
+
+    private var unitBinding: Binding<CalendarPeriod.Unit> {
+        Binding(
+            get: { model.period.unit },
+            set: { newUnit in Task { await model.changeUnit(newUnit) } }
+        )
+    }
+
+    /// A display title for `period`, e.g. "agosto 2026" (month), "T3 2026"
+    /// (quarter), "2026" (year) — locale-formatted where `DateFormatter` can
+    /// do that (month, year), and a small Italian-only literal for the
+    /// quarter label ("T" for "Trimestre"), consistent with the client being
+    /// officially Italian-only (`client/CLAUDE.md`). Lives here, not on
+    /// `CalendarPeriod` itself, per the same "display copy stays in the
+    /// view" rule `TransactionPeriodPreset` and `TransactionsView.title(for:)`
+    /// already follow.
+    private func title(for period: CalendarPeriod) -> String {
+        let formatter = DateFormatter()
+        switch period.unit {
+        case .month:
+            formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
+            return formatter.string(from: period.start).capitalized
+        case .quarter:
+            let calendar = Calendar.current
+            let quarter = (calendar.component(.month, from: period.start) - 1) / 3 + 1
+            let year = calendar.component(.year, from: period.start)
+            return "T\(quarter) \(year)"
+        case .year:
+            formatter.setLocalizedDateFormatFromTemplate("yyyy")
+            return formatter.string(from: period.start)
+        }
     }
 
     @ViewBuilder
@@ -126,6 +167,21 @@ struct DashboardView: View {
             // the same reason: a bar mixing currencies would misrepresent
             // magnitudes Traccio never converts between (ADR 0007).
             dailySpendingCard(primary)
+
+            // `comparison` is always requested (`DashboardViewModel.load()`),
+            // but still optional on the wire — absent only if the backend
+            // genuinely could not compute one, which should not happen given
+            // `compareStart`/`compareEnd` are always both sent together.
+            if let comparison = primary.comparison {
+                ComparisonCard(
+                    comparison: comparison, currency: primary.currency,
+                    previousPeriodLabel: title(for: model.period.previous())
+                )
+            }
+
+            AccountBreakdownCard(
+                accounts: primary.byAccount, currency: primary.currency, totalSpending: primary.spending
+            )
         } else {
             Card {
                 EyebrowLabel(text: "Speso questo periodo")
@@ -316,33 +372,38 @@ struct DashboardView: View {
         .frame(maxWidth: donutDiameter - 32)
     }
 
-    /// The "Spesa giornaliera" card (`docs/design/canvas/Main.dc.html`'s
-    /// "Andamento netto" slot, rebuilt as a spending bar chart rather than a
-    /// net line — the 2026-08-25 revision to ADR 0007). Renders nothing when
-    /// there is nothing to show, same posture as `heroCard`'s and
-    /// `categoryBreakdownCard`'s own empty branches.
+    /// The trend card (`docs/design/canvas/Main.dc.html`'s "Andamento netto"
+    /// slot, rebuilt as a spending bar chart rather than a net line — ADR
+    /// 0007's 2026-08-25 revision). Renders nothing when there is nothing to
+    /// show, same posture as `heroCard`'s and `categoryBreakdownCard`'s own
+    /// empty branches.
     ///
     /// Uses the same period the rest of the screen shows — no independent
-    /// selector. The backend now gap-fills `by_bucket` across the whole
-    /// requested period itself (`docs/decisions/
-    /// 0007-dashboard-aggregation.md`'s third revision), so unlike the old
-    /// `dailyBars(_:)`, `spendingBars(_:)` no longer needs to reconcile a
-    /// mismatch between the axis and `model.period`.
+    /// selector. Bucketed at `period.granularity` (day/week/month per unit,
+    /// Task 6), and the backend gap-fills `by_bucket` across the whole
+    /// requested period since both bounds are always sent, so
+    /// `spendingBars(_:)` never needs to reconcile a mismatch between the
+    /// axis and `model.period`.
     @ViewBuilder
     private func dailySpendingCard(_ summary: CurrencySummaryResponse) -> some View {
         let bars = TraccioCore.spendingBars(summary.byBucket)
 
-        if let first = bars.first, let last = bars.last {
+        if !bars.isEmpty {
             Card {
-                EyebrowLabel(text: "Spesa giornaliera")
-                DailyBarsChart(bars: bars)
-                HStack {
-                    Text(TraccioCore.formatCalendarDate(first.day))
-                    Spacer()
-                    Text(TraccioCore.formatCalendarDate(last.day))
-                }
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
+                EyebrowLabel(text: "Andamento spesa")
+                BucketBarsChart(
+                    bars: bars,
+                    currency: summary.currency,
+                    selectedIndex: model.selectedBucketIndex,
+                    onScrub: { model.selectBucket($0) },
+                    onDrillThrough: { index in
+                        guard bars.indices.contains(index) else { return }
+                        let bar = bars[index]
+                        if let filter = model.drillThroughFilter(bucketStart: bar.start, bucketEnd: bar.end) {
+                            drillThrough.request(filter)
+                        }
+                    }
+                )
             }
         }
     }
