@@ -53,4 +53,29 @@ struct TransactionFilterTests {
             ]
         )
     }
+
+    @Test func searchTermProducesOneItem() {
+        let items = TransactionFilter(searchTerm: "esselunga").queryItems
+        #expect(items == [URLQueryItem(name: "q", value: "esselunga")])
+    }
+
+    @Test func nilSearchTermProducesNoItem() {
+        #expect(TransactionFilter(searchTerm: nil).queryItems.isEmpty)
+    }
+
+    @Test func blankSearchTermProducesNoItem() {
+        #expect(TransactionFilter(searchTerm: "   ").queryItems.isEmpty)
+    }
+
+    @Test func startAndEndProduceISO8601Items() {
+        let start = Date(timeIntervalSince1970: 0)
+        let end = Date(timeIntervalSince1970: 86400)
+        let items = TransactionFilter(start: start, end: end).queryItems
+        #expect(
+            items == [
+                URLQueryItem(name: "start", value: TraccioCore.iso8601String(from: start)),
+                URLQueryItem(name: "end", value: TraccioCore.iso8601String(from: end)),
+            ]
+        )
+    }
 }

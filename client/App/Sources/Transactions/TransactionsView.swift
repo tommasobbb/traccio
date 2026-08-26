@@ -15,6 +15,10 @@ import TraccioCore
 /// an already-fetched page.
 struct TransactionsView: View {
     @State private var model = TransactionsViewModel()
+    /// Bound to `.searchable`. Kept separate from `model.filter.searchTerm`
+    /// so every keystroke updates the field instantly while the debounced
+    /// request lags behind it — see `TransactionsViewModel.updateSearchTerm(_:)`.
+    @State private var searchText = ""
     /// `.transactions` is bumped by a write on another tab that can change
     /// *which* rows should appear or how many — applying rules, deleting a
     /// category (`CategorizationViewModel`). A single row's own fields stay
@@ -31,6 +35,8 @@ struct TransactionsView: View {
             }
             .background(Palette.background)
             .navigationTitle("Movimenti")
+            .searchable(text: $searchText, prompt: "Cerca nei movimenti")
+            .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
             .animation(.easeInOut(duration: 0.2), value: stateTag)
             .refreshable { await model.load() }
             .toolbar {
@@ -93,11 +99,49 @@ struct TransactionsView: View {
             } label: {
                 FilterChip(title: categoryFilterTitle, isActive: model.filter.category != .any)
             }
+            Menu {
+                ForEach(TransactionPeriodPreset.allCases, id: \.self) { preset in
+                    Button(title(for: preset)) { applyPeriodFilter(preset) }
+                }
+            } label: {
+                FilterChip(title: periodFilterTitle, isActive: selectedPeriodPreset != .all)
+            }
             Spacer()
         }
         .padding(.horizontal, 20)
         .padding(.top, 12)
         .padding(.bottom, 4)
+    }
+
+    /// The preset last applied via the period chip. Not derived from
+    /// `model.filter.start`/`.end` — those are plain `Date?` and can't be
+    /// mapped back to a preset unambiguously — so this is its own state,
+    /// defaulting to `.all` (no bound), matching a fresh `TransactionFilter`.
+    @State private var selectedPeriodPreset: TransactionPeriodPreset = .all
+
+    private var periodFilterTitle: String { title(for: selectedPeriodPreset) }
+
+    /// Italian labels for `TransactionPeriodPreset` — display copy belongs in
+    /// the view, not `TraccioCore` (see the type's own doc comment).
+    private func title(for preset: TransactionPeriodPreset) -> String {
+        switch preset {
+        case .thisMonth: "Questo mese"
+        case .lastMonth: "Mese scorso"
+        case .last3Months: "Ultimi 3 mesi"
+        case .thisYear: "Quest'anno"
+        case .all: "Tutto"
+        }
+    }
+
+    private func applyPeriodFilter(_ preset: TransactionPeriodPreset) {
+        selectedPeriodPreset = preset
+        let range = preset.range()
+        Task {
+            var newFilter = model.filter
+            newFilter.start = range.start
+            newFilter.end = range.end
+            await model.applyFilter(newFilter)
+        }
     }
 
     private var sortedAccounts: [AccountResponse] {
@@ -120,21 +164,17 @@ struct TransactionsView: View {
 
     private func applyAccountFilter(_ accountID: UUID?) {
         Task {
-            await model.applyFilter(
-                TransactionFilter(
-                    accountID: accountID, eventID: model.filter.eventID, category: model.filter.category
-                )
-            )
+            var newFilter = model.filter
+            newFilter.accountID = accountID
+            await model.applyFilter(newFilter)
         }
     }
 
     private func applyCategoryFilter(_ category: TransactionFilter.CategoryFilter) {
         Task {
-            await model.applyFilter(
-                TransactionFilter(
-                    accountID: model.filter.accountID, eventID: model.filter.eventID, category: category
-                )
-            )
+            var newFilter = model.filter
+            newFilter.category = category
+            await model.applyFilter(newFilter)
         }
     }
 
@@ -219,7 +259,8 @@ struct TransactionsView: View {
                         client: model.client,
                         onUpdate: { model.replace($0) },
                         onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
-                        onDashboardStale: { freshness.markStale([.dashboard]) }
+                        onDashboardStale: { freshness.markStale([.dashboard]) },
+                        onRulesApplied: { freshness.markStale([.transactions, .dashboard]) }
                     )
                     .onAppear {
                         if isLastGroup, transaction.id == group.transactions.last?.id {

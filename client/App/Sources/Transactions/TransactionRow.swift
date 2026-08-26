@@ -47,6 +47,10 @@ struct TransactionRow: View {
     /// change the dashboard's totals, so the caller can invalidate
     /// `DataFreshness.Scope.dashboard`.
     let onDashboardStale: () -> Void
+    /// Called after "Categorizza sempre così" successfully creates a rule
+    /// and re-applies every rule, so the caller can invalidate
+    /// `DataFreshness.Scope.transactions`/`.dashboard`.
+    let onRulesApplied: () -> Void
 
     var body: some View {
         NavigationLink {
@@ -60,7 +64,8 @@ struct TransactionRow: View {
                 client: client,
                 onUpdate: onUpdate,
                 onAdvanceChange: onAdvanceUpdate,
-                onDashboardStale: onDashboardStale
+                onDashboardStale: onDashboardStale,
+                onRulesApplied: onRulesApplied
             )
         } label: {
             rowContent

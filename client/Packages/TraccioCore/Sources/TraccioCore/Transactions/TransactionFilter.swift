@@ -31,14 +31,38 @@ public struct TransactionFilter: Sendable, Equatable {
     public var eventID: UUID?
     /// How to narrow by effective category.
     public var category: CategoryFilter
+    /// Free-text search term, matched server-side against a transaction's
+    /// description (`GET /transactions`'s `q`). `nil` or blank means no
+    /// search filtering — the caller is not required to pre-trim, but a
+    /// blank string is sent as `nil` in `queryItems` since the backend treats
+    /// them identically anyway.
+    public var searchTerm: String?
+    /// Inclusive lower bound on the same period expression
+    /// `GET /dashboard/summary` filters on, or `nil` for no lower bound.
+    public var start: Date?
+    /// Exclusive upper bound (half-open `[start, end)`), or `nil` for no
+    /// upper bound.
+    public var end: Date?
 
     /// No filtering at all — every transaction the caller can see.
-    public static let none = TransactionFilter(accountID: nil, eventID: nil, category: .any)
+    public static let none = TransactionFilter(
+        accountID: nil, eventID: nil, category: .any, searchTerm: nil, start: nil, end: nil
+    )
 
-    public init(accountID: UUID? = nil, eventID: UUID? = nil, category: CategoryFilter = .any) {
+    public init(
+        accountID: UUID? = nil,
+        eventID: UUID? = nil,
+        category: CategoryFilter = .any,
+        searchTerm: String? = nil,
+        start: Date? = nil,
+        end: Date? = nil
+    ) {
         self.accountID = accountID
         self.eventID = eventID
         self.category = category
+        self.searchTerm = searchTerm
+        self.start = start
+        self.end = end
     }
 
     /// The query items `GET /transactions` expects for this filter.
@@ -61,6 +85,15 @@ public struct TransactionFilter: Sendable, Equatable {
             items.append(URLQueryItem(name: "uncategorized", value: "true"))
         case .some(let categoryID):
             items.append(URLQueryItem(name: "category_id", value: categoryID.uuidString))
+        }
+        if let searchTerm, !searchTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            items.append(URLQueryItem(name: "q", value: searchTerm))
+        }
+        if let start {
+            items.append(URLQueryItem(name: "start", value: TraccioCore.iso8601String(from: start)))
+        }
+        if let end {
+            items.append(URLQueryItem(name: "end", value: TraccioCore.iso8601String(from: end)))
         }
         return items
     }

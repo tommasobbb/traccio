@@ -80,6 +80,15 @@ final class TransactionsViewModel {
     /// Guards `loadMore()` against a second call while one is already
     /// in flight (e.g. two rows crossing the trigger in the same scroll).
     private var isLoadingMore = false
+    /// The in-flight debounce for `updateSearchTerm(_:)`, cancelled and
+    /// replaced by every call so only the last keystroke within the window
+    /// actually reaches the backend.
+    private var searchDebounceTask: Task<Void, Never>?
+    /// How long `updateSearchTerm(_:)` waits for typing to pause before
+    /// applying the filter — long enough to coalesce a fast typist's
+    /// keystrokes into one request, short enough that the list still feels
+    /// live.
+    private static let searchDebounceNanoseconds: UInt64 = 300_000_000
 
     /// Create the view model.
     ///
@@ -90,9 +99,18 @@ final class TransactionsViewModel {
     ///     the local dev backend.
     /// pageSize:
     ///     Transactions requested per page.
-    init(client: any APIClientProtocol = APIClient.current, pageSize: Int = 50) {
+    /// initialFilter:
+    ///     The filter to load with, before any user interaction — lets a
+    ///     drill-through from another screen (e.g. a future Panoramica
+    ///     category/period tap) open Movimenti already filtered.
+    init(
+        client: any APIClientProtocol = APIClient.current,
+        pageSize: Int = 50,
+        initialFilter: TransactionFilter = .none
+    ) {
         self.client = client
         self.pageSize = pageSize
+        self.filter = initialFilter
     }
 
     /// Fetch the first page of transactions plus the category/advance/account
@@ -212,6 +230,31 @@ final class TransactionsViewModel {
     func applyFilter(_ newFilter: TransactionFilter) async {
         filter = newFilter
         await load()
+    }
+
+    /// Update the search term, debounced ~300ms so a fast typist fires one
+    /// request per pause rather than one per keystroke.
+    ///
+    /// Cancels any debounce already waiting; only the most recent call
+    /// within the window survives to actually change `filter`. Lives here
+    /// rather than in the view (`.claude/rules/swift.md`: view models do
+    /// orchestration, views stay thin) so it is testable without SwiftUI.
+    ///
+    /// Parameters
+    /// ----------
+    /// term:
+    ///     The raw text from the search field, not yet trimmed —
+    ///     `TransactionFilter.queryItems` already treats a blank term as
+    ///     absent.
+    func updateSearchTerm(_ term: String) {
+        searchDebounceTask?.cancel()
+        searchDebounceTask = Task {
+            try? await Task.sleep(nanoseconds: Self.searchDebounceNanoseconds)
+            guard !Task.isCancelled else { return }
+            var newFilter = filter
+            newFilter.searchTerm = term
+            await applyFilter(newFilter)
+        }
     }
 
     /// Set or clear `advancesByTransactionID`'s entry for one transaction.

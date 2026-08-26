@@ -31,6 +31,7 @@ struct TransactionDetailView: View {
     @State private var isPresentingCreateAdvanceSheet = false
     @State private var isPresentingAddReimbursementSheet = false
     @State private var isPresentingEventPickerSheet = false
+    @State private var isPresentingCreateRuleSheet = false
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -81,6 +82,11 @@ struct TransactionDetailView: View {
     ///     Called after any successful write that can change the dashboard's
     ///     totals, so the caller can invalidate `DataFreshness.Scope.dashboard`.
     ///     Defaults to a no-op.
+    /// onRulesApplied:
+    ///     Called after "Categorizza sempre così" successfully creates a rule
+    ///     and re-applies every rule, so the caller can invalidate
+    ///     `DataFreshness.Scope.transactions`/`.dashboard`. Defaults to a
+    ///     no-op.
     init(
         transaction: TransactionResponse,
         categories: [CategoryResponse],
@@ -91,13 +97,14 @@ struct TransactionDetailView: View {
         client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
-        onDashboardStale: @escaping () -> Void = {}
+        onDashboardStale: @escaping () -> Void = {},
+        onRulesApplied: @escaping () -> Void = {}
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
                 transaction: transaction, advance: advance, categories: categories, transfer: transfer,
                 client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange,
-                onDashboardStale: onDashboardStale
+                onDashboardStale: onDashboardStale, onRulesApplied: onRulesApplied
             )
         )
         self.account = account
@@ -191,6 +198,26 @@ struct TransactionDetailView: View {
                 onCancel: { isPresentingAddReimbursementSheet = false }
             )
         }
+        .sheet(isPresented: $isPresentingCreateRuleSheet) {
+            CreateRuleFromTransactionSheet(
+                categoryName: categoryName ?? "",
+                initialPattern: model.transaction.displayDescription ?? model.transaction.description,
+                isCreating: model.isUpdating,
+                failureMessage: createRuleFailureMessage,
+                onCreate: { matchKind, pattern in
+                    guard let categoryID = model.transaction.confirmedCategoryID else { return }
+                    Task {
+                        await model.createRuleAndApplyRules(
+                            categoryID: categoryID, matchKind: matchKind, pattern: pattern
+                        )
+                        if model.actionFailure == nil {
+                            isPresentingCreateRuleSheet = false
+                        }
+                    }
+                },
+                onCancel: { isPresentingCreateRuleSheet = false }
+            )
+        }
         .sheet(isPresented: $isPresentingEventPickerSheet) {
             EventPickerSheet(
                 events: events,
@@ -267,8 +294,19 @@ struct TransactionDetailView: View {
         case nil: nil
         case .transactionInAnotherEvent: "Il movimento è già assegnato a un altro evento."
         case .mixedCurrency: "Questo movimento ha una valuta diversa da quella dell'evento."
+        case .duplicateRule: "Esiste già una regola così."
         case .generic: "Non è stato possibile completare l'operazione. Riprova."
         }
+    }
+
+    /// `CreateRuleFromTransactionSheet`'s own failure copy — separate from
+    /// `bannerMessage` so a duplicate-rule error reads specifically inside
+    /// the sheet that caused it, rather than the screen's generic banner.
+    private var createRuleFailureMessage: String? {
+        guard let failure = model.actionFailure else { return nil }
+        return failure == .duplicateRule
+            ? "Esiste già una regola così."
+            : "Non è stato possibile creare la regola. Riprova."
     }
 
     private var headerSubtitle: String {
@@ -293,6 +331,10 @@ struct TransactionDetailView: View {
                 if model.transaction.confirmedCategoryID != nil {
                     Divider().overlay(Palette.separator)
                     clearCategoryRow
+                    PillButton(
+                        title: "Categorizza sempre così",
+                        action: { isPresentingCreateRuleSheet = true }
+                    )
                 }
             }
         }

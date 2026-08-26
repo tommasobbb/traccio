@@ -197,4 +197,26 @@ struct TransactionsViewModelTests {
         )
         #expect(await client.receivedTransactionsOffsets == [0, 2])
     }
+
+    // MARK: updateSearchTerm
+
+    @Test func updateSearchTermDebouncesRapidCallsIntoOneRequest() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        // Three keystrokes in quick succession, well inside the debounce
+        // window — only the last should ever reach the backend.
+        model.updateSearchTerm("mer")
+        model.updateSearchTerm("merc")
+        model.updateSearchTerm("mercato")
+
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(model.filter.searchTerm == "mercato")
+        let filters = await client.receivedTransactionsFilters
+        // load()'s own request, plus exactly one debounced applyFilter.
+        #expect(filters.count == 2)
+        #expect(filters.last?.searchTerm == "mercato")
+    }
 }

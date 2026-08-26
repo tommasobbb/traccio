@@ -873,4 +873,68 @@ struct TransactionDetailViewModelTests {
         let unassigned = await client.unassignedEventMembers
         #expect(unassigned.isEmpty)
     }
+
+    // MARK: createRuleAndApplyRules — "Categorizza sempre così"
+
+    @Test func createRuleAndApplyRulesSucceedsAndNotifiesOnRulesApplied() async throws {
+        let client = FakeAPIClient()
+        let createdRule = RuleResponse(
+            id: UUID(), categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01",
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        await client.setCreateRuleResult(createdRule)
+
+        var rulesAppliedCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(confirmedCategoryID: Self.categoryID), client: client,
+            onRulesApplied: { rulesAppliedCallCount += 1 }
+        )
+
+        await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(model.actionFailure == nil)
+        #expect(model.successTick == 1)
+        #expect(rulesAppliedCallCount == 1)
+        #expect(await client.applyRulesCallCount == 1)
+    }
+
+    @Test func createRuleAndApplyRulesDuplicateSetsDuplicateRuleAndNeverAppliesRules() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateRuleError(APIError.badStatus(409))
+
+        var rulesAppliedCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(confirmedCategoryID: Self.categoryID), client: client,
+            onRulesApplied: { rulesAppliedCallCount += 1 }
+        )
+
+        await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(model.actionFailure == .duplicateRule)
+        #expect(model.successTick == 0)
+        #expect(rulesAppliedCallCount == 0)
+        #expect(await client.applyRulesCallCount == 0)
+    }
+
+    @Test func createRuleAndApplyRulesGenericFailureNeverNotifies() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateRuleError(FakeAPIError())
+
+        var rulesAppliedCallCount = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(confirmedCategoryID: Self.categoryID), client: client,
+            onRulesApplied: { rulesAppliedCallCount += 1 }
+        )
+
+        await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(model.actionFailure == .generic)
+        #expect(rulesAppliedCallCount == 0)
+    }
 }

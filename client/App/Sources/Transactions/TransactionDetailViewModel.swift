@@ -27,6 +27,9 @@ final class TransactionDetailViewModel {
         /// `422` from the same endpoint — the event and this transaction
         /// don't share a currency.
         case mixedCurrency
+        /// `409` from `POST /rules` — a rule with this exact
+        /// `(matchKind, pattern)` already exists.
+        case duplicateRule
     }
 
     /// This transaction's advance's recorded reimbursements, oldest first —
@@ -108,6 +111,12 @@ final class TransactionDetailViewModel {
     /// `DataFreshness`) bumps `.dashboard` so Panoramica re-fetches rather
     /// than showing a now-stale total — see `DataFreshness`'s doc comment.
     private let onDashboardStale: () -> Void
+    /// Invoked after a successful `createRuleAndApplyRules(...)` — applying
+    /// rules can change `suggested_category_id` (and therefore
+    /// `effectiveCategoryID`) across every transaction, not just this one, so
+    /// the caller invalidates `DataFreshness.Scope.transactions`/`.dashboard`
+    /// rather than this screen trying to know which other rows changed.
+    private let onRulesApplied: () -> Void
 
     /// Create the view model.
     ///
@@ -138,6 +147,10 @@ final class TransactionDetailViewModel {
     ///     Called after any successful write that can change the dashboard's
     ///     totals. Defaults to a no-op for previews and callers that don't
     ///     need it.
+    /// onRulesApplied:
+    ///     Called after a successful `createRuleAndApplyRules(...)`, so the
+    ///     caller can invalidate `DataFreshness.Scope.transactions`/`.dashboard`.
+    ///     Defaults to a no-op.
     init(
         transaction: TransactionResponse,
         advance: AdvanceResponse? = nil,
@@ -146,7 +159,8 @@ final class TransactionDetailViewModel {
         client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
-        onDashboardStale: @escaping () -> Void = {}
+        onDashboardStale: @escaping () -> Void = {},
+        onRulesApplied: @escaping () -> Void = {}
     ) {
         self.transaction = transaction
         self.advance = advance
@@ -156,6 +170,7 @@ final class TransactionDetailViewModel {
         self.onUpdate = onUpdate
         self.onAdvanceChange = onAdvanceChange
         self.onDashboardStale = onDashboardStale
+        self.onRulesApplied = onRulesApplied
     }
 
     /// Fetch categories if none were seeded at `init`.
@@ -199,6 +214,47 @@ final class TransactionDetailViewModel {
     /// Clear the transaction's confirmed category, then re-fetch it.
     func clearCategory() async {
         await performUpdate { try await $0.clearCategory(transactionID: $1) }
+    }
+
+    /// Create a categorization rule, then re-apply every rule so this (and
+    /// any other matching) transaction picks up the resulting suggestion
+    /// immediately — "categorizza sempre così" from
+    /// `CreateRuleFromTransactionSheet`.
+    ///
+    /// A `409` from the create means a rule with this exact
+    /// `(matchKind, pattern)` already exists — surfaced as `.duplicateRule`,
+    /// distinct from `.generic`. `pattern` is never put in a log or error
+    /// message (`.claude/rules/data-safety.md`: it is merchant/counterparty
+    /// text lifted from the bank description).
+    ///
+    /// Parameters
+    /// ----------
+    /// categoryID:
+    ///     The category to assign whenever this rule matches — always this
+    ///     transaction's confirmed category, since the sheet only opens once
+    ///     one exists.
+    /// matchKind:
+    ///     The predicate to apply to a transaction's description.
+    /// pattern:
+    ///     The text to match against.
+    func createRuleAndApplyRules(categoryID: UUID, matchKind: RuleMatchKind, pattern: String) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            _ = try await client.createRule(
+                CreateRuleRequest(categoryID: categoryID, matchKind: matchKind, pattern: pattern)
+            )
+            _ = try await client.applyRules()
+            onRulesApplied()
+            successTick += 1
+        } catch APIError.badStatus(409) {
+            actionFailure = .duplicateRule
+        } catch {
+            actionFailure = .generic
+        }
     }
 
     /// Fetch the counterpart leg's transaction, if this row has a `transfer`
