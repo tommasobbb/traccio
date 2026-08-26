@@ -7,20 +7,28 @@ import Foundation
 /// (0 = the top, going clockwise), not angles — the view converts to degrees
 /// or radians at draw time, keeping this type free of any drawing framework.
 /// `rank` is this segment's 0-based position among the segments actually
-/// drawn (biggest spender first), and is what `Palette.categoryChart(rank:)`
-/// keys its color rotation on — see `docs/design/tokens.md`'s "Category
-/// chart" section.
+/// drawn (biggest spender first) — no longer a color key (the rank-based
+/// `Palette.categoryChart(rank:)` rotation was retired in the
+/// 2026-08-26 revision of ADR 0008: `color` below carries the category's own
+/// token instead), but still useful to a caller for `ForEach`'s `id` or
+/// ordering text.
 public struct DonutSegment: Sendable, Equatable {
     public let categoryID: UUID?
     public let startFraction: Double
     public let endFraction: Double
     public let rank: Int
+    /// This segment's own category colour (`nil` on the backend response
+    /// falls back to `.slate`, same default `IconTile` uses elsewhere).
+    public let color: PaletteColor
 
-    public init(categoryID: UUID?, startFraction: Double, endFraction: Double, rank: Int) {
+    public init(
+        categoryID: UUID?, startFraction: Double, endFraction: Double, rank: Int, color: PaletteColor
+    ) {
         self.categoryID = categoryID
         self.startFraction = startFraction
         self.endFraction = endFraction
         self.rank = rank
+        self.color = color
     }
 }
 
@@ -66,7 +74,8 @@ extension TraccioCore {
                 categoryID: entry.categoryID,
                 startFraction: cursor,
                 endFraction: cursor + fraction,
-                rank: rank
+                rank: rank,
+                color: entry.color ?? .slate
             )
             cursor += fraction
             return segment

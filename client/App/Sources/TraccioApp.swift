@@ -7,6 +7,13 @@ import TraccioCore
 /// All logic lives in the TraccioCore package.
 @main
 struct TraccioApp: App {
+    /// Identifies each tab, for the drill-through's tab switch below —
+    /// `TabView`'s own `.tag(_:)` needs a `Hashable` value distinct from
+    /// each tab's `View` type.
+    private enum Tab: Hashable {
+        case dashboard, transactions, accounts, settings
+    }
+
     /// Shared cross-tab invalidation signal — see `DataFreshness`'s
     /// docstring. Owned here so every tab observes the same instance.
     @State private var freshness = DataFreshness()
@@ -15,6 +22,15 @@ struct TraccioApp: App {
     /// unconditionally so `SettingsView` can read it without conditionally
     /// declaring the environment.
     @State private var lock = AppLock()
+    /// Panoramica's category drill-through into a pre-filtered Movimenti —
+    /// see `TransactionsDrillThrough`'s own doc comment for why this needs a
+    /// tab switch plus an `.id(_:)`-forced rebuild rather than a plain push.
+    @State private var drillThrough = TransactionsDrillThrough()
+    /// Which tab `TabView` shows. Plain `@State`, not part of
+    /// `TransactionsDrillThrough`, since `TraccioApp` is the only thing that
+    /// ever needs to *read* it (as the `TabView` selection binding); every
+    /// other view only ever *requests* a drill-through, never a tab directly.
+    @State private var selectedTab: Tab = .dashboard
     /// Whether `TabView` should render at all. Read once at launch from
     /// `ServerConfigurationStore.isConfigured`, not re-checked continuously —
     /// `OnboardingView` flips it via `onComplete` the moment it saves a
@@ -28,26 +44,33 @@ struct TraccioApp: App {
     var body: some Scene {
         WindowGroup {
             if isConfigured {
-                TabView {
+                TabView(selection: $selectedTab) {
                     DashboardView()
                         .tabItem {
                             Label("Panoramica", systemImage: "square.grid.2x2")
                         }
-                    TransactionsView()
+                        .tag(Tab.dashboard)
+                    TransactionsView(initialFilter: drillThrough.filter)
+                        .id(drillThrough.generation)
                         .tabItem {
                             Label("Movimenti", systemImage: "list.bullet")
                         }
+                        .tag(Tab.transactions)
                     AccountsView()
                         .tabItem {
                             Label("Conti", systemImage: "creditcard")
                         }
+                        .tag(Tab.accounts)
                     SettingsView()
                         .tabItem {
                             Label("Impostazioni", systemImage: "gearshape")
                         }
+                        .tag(Tab.settings)
                 }
                 .environment(freshness)
                 .environment(lock)
+                .environment(drillThrough)
+                .onChange(of: drillThrough.generation) { _, _ in selectedTab = .transactions }
                 #if os(iOS)
                 .appLockOverlay(lock)
                 #endif

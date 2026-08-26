@@ -73,61 +73,40 @@ an amount.
 place accent doubles as a semantic color, because `net` is the one genuinely
 signed figure — see ADR 0007).
 
-## Category chart
+## Category donut and breakdown list
 
-The dashboard's "Per categoria" donut and legend (`docs/design/canvas/Main.dc.html`,
-unblocked once `GET /dashboard/summary` started returning `by_category` —
-`docs/decisions/0007-dashboard-aggregation.md`'s "Revisit when"). A rank-based
-palette, not a per-category one: color is assigned by position in the sorted
-list (biggest spender first), so a category's color can shift between months
-if its rank does. A real per-category color is a separate, deliberately
-deferred decision (`tasks/backlog.md`).
-
-| Token           | Hex (light) | Hex (dark) | Swift name                  | Use                              |
-| ---------------- | --------- | --------- | ----------------------------- | ----------------------------------- |
-| Category chart 1 | `#2A78D6` | `#409CFF` | `Palette.categoryChart1`      | Rank 1 (biggest spender) — blue    |
-| Category chart 2 | `#EDA100` | `#FFC53D` | `Palette.categoryChart2`      | Rank 2 — amber                     |
-| Category chart 3 | `#EB6834` | `#FF8F66` | `Palette.categoryChart3`      | Rank 3 — orange                    |
-| Category chart 4 | `#E87BA4` | `#FF9EC0` | `Palette.categoryChart4`      | Rank 4 — pink                      |
-| Category chart 5 | `#1C93A6` | `#4DC8DB` | `Palette.categoryChart5`      | Rank 5 — teal (new; a fifth rank color the canvas never needed) |
-| Category chart, no category | `#8E8E93` | `#6C6C70` | `Palette.inkTertiary`  | Fixed — the "Senza categoria" bucket never rotates through ranks |
-| Category chart track | `#E5E5EA` | `#2C2C2E` | `Palette.neutralFill`  | Donut background ring |
-
-Dark values are each light value raised in luminosity, same relationship as
-the ink and accent adjustments above: a chart segment this saturated at the
-light hex would read muddy against the near-black dark background.
-
-Green is deliberately excluded from the rotation — it is reserved for
-`income`, and a green donut segment next to a green income figure would read
-as two different things. Ranks beyond 5 (a sixth-or-later category, or the
-"no category" bucket when it isn't the smallest) reuse `categoryChart5` rather
-than growing the palette further; that ambiguity is judged better than adding
-a sixth rank color for a case the four-way canvas mockup never had to solve.
-
-Two corrections from the canvas's first-cut values, made here because ADR 0008
-already rejected the same warm, off-palette instinct once (see History
-below): the canvas's donut track was `#EFEEE9` (a warm off-white) — replaced
-with `Palette.neutralFill`, the cool gray already used for every other track
-and fill; and the canvas's fifth/grey slice `#C7C6CE` — replaced with
-`Palette.inkTertiary`, already the palette's own cool gray rather than an
-unrelated one introduced just for this chart.
+The dashboard's "Per categoria" donut and full-width breakdown list
+(`docs/design/canvas/Main.dc.html`, unblocked once `GET /dashboard/summary`
+started returning `by_category` — `docs/decisions/0007-dashboard-aggregation.md`'s
+"Revisit when"). **Per-category, not rank-based**: since the 2026-08-26
+revision of ADR 0008, a segment and its matching breakdown row use the
+category's own `PaletteColor` (`Palette.color(_:)`, the same ten-tone
+vocabulary `IconTile` already draws from — ADR 0017) rather than a color
+assigned by sorted position. The earlier rank-based rotation
+(`Palette.categoryChart1..5`/`categoryChart(rank:)`) is retired along with the
+position-paired legend it existed for — a category's color no longer shifts
+between periods if its rank does, and an uncategorized/uncolored entry falls
+back to `Palette.color(.slate)`, same default `IconTile` uses everywhere else.
+The donut's background ring still reuses `Palette.neutralFill`, same track as
+every other chart on this screen.
 
 ## Daily bars
 
 The dashboard's "Spesa giornaliera" bar chart (`docs/design/canvas/Main.dc.html`,
 badge removed once `by_day` shipped —
-`docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25 revision). No new
-tokens: the fill reuses `Palette.accent` (the same color as the donut's rank-1
-segment coincidentally, but not linked — this chart has one series, not a
-rotation) and the track reuses `Palette.neutralFill`, same as the donut's own
-track.
+`docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25 revision; renamed
+`by_bucket` in the third revision). No new tokens: the fill reuses
+`Palette.accent` and the track reuses `Palette.neutralFill`, same as the
+donut's own track.
 
 ## Appearance tokens
 
-The account colour/icon picker (ADR 0017; categories gain the same colour
-vocabulary in a later slice). Unlike "Category chart" above, these are
-**user-chosen and persisted per entity**, not assigned by rank — a `PaletteColor`
-survives regardless of how the list re-sorts. Each of the ten tones ships as
+The account and category colour/icon picker (ADR 0017, extended to categories
+by ADR 0018). **User-chosen and persisted per entity**, not assigned by rank
+or sorted position — a `PaletteColor` survives regardless of how a list
+re-sorts, which is exactly why the dashboard donut/breakdown list above draws
+from this same vocabulary rather than its own rank-based one. Each of the ten
+tones ships as
 two colorsets: a solid (`PaletteColor<Name>`, the icon glyph) and a paler tint
 (`PaletteColor<Name>Tint`, the icon tile's background) — see `IconTile.swift`.
 
@@ -221,9 +200,10 @@ accent (distinctive without being a made-up brand color). The category-chart
 palette (blue/amber/orange/pink used in the "Concept" donut) was left
 unchanged at the time — it is a functional categorical palette, not part of
 the app's tone. **Settled 2026-08-24** once the category-breakdown backend
-item shipped: see the "Category chart" section above for the final five
-colors (a teal added for a fifth rank) and the two corrections made to the
-canvas's warm off-palette track and grey.
+item shipped, with a rank-based five-color rotation and the two corrections
+made to the canvas's warm off-palette track and grey — since retired in favor
+of per-category color (see the 2026-08-26 entry below and "Category donut and
+breakdown list" above).
 
 **Dark mode added 2026-08-25** (`docs/decisions/0008-client-design-direction.md`'s
 dark-mode revision, part of the M3 iPhone-trial roadmap's item 6): every
@@ -241,5 +221,12 @@ the account alias/colour/icon slice of the "Daily driver, davvero"
 milestone): ten new colour tones for the account (and, later, category)
 picker, each with a paler tint for an icon tile background; `Spacing`/`Radius`
 give the gutter/card/row/tile values from this file's own tables a Swift
-name for the first time. The "Category chart" section above is untouched for
-now — it still powers the dashboard donut until that redesign lands.
+name for the first time.
+
+**Category chart retired for per-category color, 2026-08-26** (ADR 0008's
+interactive-charts revision, Task 5 of the "Daily driver, davvero"
+milestone): the rank-based `Palette.categoryChart1..5`/`categoryChart(rank:)`
+rotation and its five colorsets are deleted — a category's donut segment and
+breakdown-list row now draw from its own `PaletteColor` (the "Appearance
+tokens" section above), the same token ADR 0017/0018 already made every
+category carry. See "Category donut and breakdown list" above.

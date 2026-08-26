@@ -29,6 +29,10 @@ actor FakeAPIClient: APIClientProtocol {
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
+    var dashboardSummaryError: Error?
+    /// `(start, end)` from every `dashboardSummary` call, in order — lets a
+    /// test assert the period a reload actually requested.
+    private(set) var receivedDashboardSummaryPeriods: [(start: Date?, end: Date?)] = []
     var transactionToReturn: TransactionResponse?
     /// Per-id overrides for `transaction(id:)`, checked before
     /// `transactionToReturn` — needed wherever a test fetches two different
@@ -227,6 +231,14 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setHealthError(_ error: Error) {
         healthError = error
+    }
+
+    func setDashboardSummaryResult(_ summary: DashboardSummaryResponse) {
+        dashboardSummaryToReturn = summary
+    }
+
+    func setDashboardSummaryError(_ error: Error) {
+        dashboardSummaryError = error
     }
 
     func setTransaction(_ transaction: TransactionResponse) {
@@ -512,7 +524,9 @@ actor FakeAPIClient: APIClientProtocol {
         start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
         compareStart: Date?, compareEnd: Date?
     ) async throws -> DashboardSummaryResponse {
-        dashboardSummaryToReturn
+        receivedDashboardSummaryPeriods.append((start, end))
+        if let dashboardSummaryError { throw dashboardSummaryError }
+        return dashboardSummaryToReturn
     }
 
     func transaction(id: UUID) async throws -> TransactionResponse {

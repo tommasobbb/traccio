@@ -53,42 +53,6 @@ enum Palette {
     static let categoryRed = Color("CategoryRed", bundle: .main)
     static let categoryRedTint = Color("CategoryRedTint", bundle: .main)
 
-    // MARK: Category chart
-
-    /// Rank-based colors for the dashboard's "Per categoria" donut and
-    /// legend — assigned by position in the sorted `by_category` list
-    /// (biggest spender first), not per-category, so a category's color can
-    /// shift between periods if its rank does. Green is deliberately absent:
-    /// it is reserved for `income`, and a green segment next to a green
-    /// income figure would read as two different things. The fixed "no
-    /// category" bucket and the donut track reuse `inkTertiary` and
-    /// `neutralFill` rather than a dedicated color — see
-    /// `docs/design/tokens.md`'s "Category chart" section.
-    static let categoryChart1 = Color("CategoryChart1", bundle: .main)
-    static let categoryChart2 = Color("CategoryChart2", bundle: .main)
-    static let categoryChart3 = Color("CategoryChart3", bundle: .main)
-    static let categoryChart4 = Color("CategoryChart4", bundle: .main)
-    static let categoryChart5 = Color("CategoryChart5", bundle: .main)
-
-    /// The rotation `categoryChart(rank:)` cycles through once every color
-    /// has been used once (see its doc comment).
-    private static let categoryChartRotation: [Color] = [
-        categoryChart1, categoryChart2, categoryChart3, categoryChart4, categoryChart5,
-    ]
-
-    /// The color for the category at `rank` (0-based) in a sorted
-    /// `by_category` list, cycling through `categoryChartRotation` once
-    /// exhausted rather than growing the palette for a rank the design never
-    /// had to solve for.
-    ///
-    /// - Parameter rank: 0-based position in the sorted list (0 = biggest
-    ///   spender). Negative values clamp to 0.
-    /// - Returns: The color to render this rank's donut segment and legend dot.
-    static func categoryChart(rank: Int) -> Color {
-        let index = max(0, rank) % categoryChartRotation.count
-        return categoryChartRotation[index]
-    }
-
     // MARK: Separators and shadow
 
     /// Derived from `ink` rather than its own asset: `ink` is near-black in

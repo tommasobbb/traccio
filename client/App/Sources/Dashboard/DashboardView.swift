@@ -22,6 +22,13 @@ struct DashboardView: View {
     /// Keying `.task(id:)` to it triggers a full re-fetch, never a local
     /// recomputation — see `DataFreshness`'s doc comment.
     @Environment(DataFreshness.self) private var freshness
+    /// The channel a breakdown row's drill-through requests through — see
+    /// `TransactionsDrillThrough`'s own doc comment for why this is a tab
+    /// switch, not a `NavigationLink` push.
+    @Environment(TransactionsDrillThrough.self) private var drillThrough
+    /// The donut's fixed size — also the max width for its center label, so
+    /// a category name doesn't overflow the ring's hole.
+    private let donutDiameter: CGFloat = 96
 
     var body: some View {
         NavigationStack {
@@ -138,7 +145,7 @@ struct DashboardView: View {
                 kind: .spending,
                 font: Typography.heroFigure
             )
-            Text("\(summary.transactionCount) movimenti · \(summary.currency)")
+            Text(summary.currency)
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkTertiary)
 
@@ -161,7 +168,41 @@ struct DashboardView: View {
                     AmountText(amount: summary.net, currencyCode: summary.currency, kind: .net)
                 }
             }
+
+            Divider().overlay(Palette.separator)
+
+            HStack(spacing: 16) {
+                statColumn(
+                    title: "Media/giorno",
+                    value: summary.averageDailySpending.map {
+                        TraccioCore.formatMoney(amount: $0, currencyCode: summary.currency)
+                    } ?? "—"
+                )
+                Rectangle().fill(Palette.separator).frame(width: 1)
+                statColumn(title: "Movimenti", value: "\(summary.transactionCount)")
+                Rectangle().fill(Palette.separator).frame(width: 1)
+                statColumn(
+                    title: "Categorie", value: "\(summary.byCategory.filter { $0.spending > 0 }.count)"
+                )
+            }
         }
+    }
+
+    /// One column of the hero card's stats row (media/giorno, movimenti,
+    /// categorie) — all values the backend already computed or a plain
+    /// count of already-fetched entries, never a financial derivation.
+    private func statColumn(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+            Text(value)
+                .font(Typography.compactFigure)
+                .foregroundStyle(Palette.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func otherCurrenciesCard(_ others: [CurrencySummaryResponse]) -> some View {
@@ -203,63 +244,76 @@ struct DashboardView: View {
     /// `GET /dashboard/summary` started returning `by_category`. Renders
     /// nothing when there is nothing to show, rather than an empty donut —
     /// same posture as `heroCard`'s own empty-period branch above.
+    ///
+    /// 2026-08-26 revision (ADR 0008): the donut shrinks and gains tap-to-
+    /// select, its center switches between the selected category and the
+    /// period total, and the old position-paired side legend is replaced by
+    /// `CategoryBreakdownList` — a full-width, expandable, drill-through-able
+    /// list that is also this card's accessible representation of the
+    /// (`.accessibilityHidden(true)`) donut.
     @ViewBuilder
     private func categoryBreakdownCard(_ summary: CurrencySummaryResponse) -> some View {
         let segments = TraccioCore.donutSegments(summary.byCategory)
-        // Mirrors donutSegments' own filter so each segment lines up with
-        // exactly one legend row, in the same order — an income-only entry
-        // (spending == 0) gets neither an arc nor a row.
-        let entries = summary.byCategory.filter { $0.spending > 0 }
 
         if !segments.isEmpty {
             Card {
                 EyebrowLabel(text: "Per categoria")
-                HStack(alignment: .center, spacing: 20) {
+                HStack {
+                    Spacer(minLength: 0)
                     ZStack {
-                        DonutChart(segments: segments)
-                        VStack(spacing: 2) {
-                            AmountText(
-                                amount: summary.spending,
-                                currencyCode: summary.currency,
-                                kind: .spending,
-                                font: Typography.statFigure
-                            )
-                            Text("totale")
-                                .font(Typography.caption)
-                                .foregroundStyle(Palette.inkTertiary)
-                        }
+                        DonutChart(
+                            segments: segments,
+                            selection: model.selectedCategoryID,
+                            onSelect: { model.selectCategory($0) },
+                            diameter: donutDiameter
+                        )
+                        donutCenter(summary)
                     }
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(zip(segments, entries)), id: \.0.rank) { segment, entry in
-                            categoryLegendRow(segment: segment, entry: entry, currency: summary.currency)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 0)
                 }
+                CategoryBreakdownList(
+                    rows: TraccioCore.breakdownRows(
+                        groups: summary.byCategory, expanded: model.expandedRootIDs
+                    ),
+                    currency: summary.currency,
+                    totalSpending: summary.spending,
+                    expandedRootIDs: model.expandedRootIDs,
+                    onToggleExpanded: { model.toggleExpanded($0) },
+                    onDrillThrough: { categoryID in
+                        drillThrough.request(model.drillThroughFilter(categoryID: categoryID))
+                    }
+                )
             }
         }
     }
 
-    private func categoryLegendRow(
-        segment: DonutSegment, entry: CategoryGroupSummaryResponse, currency: String
-    ) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(Palette.categoryChart(rank: segment.rank))
-                .frame(width: 8, height: 8)
-                .accessibilityHidden(true)
-            Text(entry.categoryName ?? "Senza categoria")
-                .font(Typography.caption.weight(.semibold))
-                .foregroundStyle(Palette.ink)
-                .lineLimit(1)
-            Spacer(minLength: 8)
+    /// The donut's center label — the selected category's own name and
+    /// amount, or the period total when nothing is selected. A selection
+    /// whose category no longer resolves against `summary.byCategory` (a
+    /// stale id after a reload race) falls back to the total, same as no
+    /// selection at all.
+    @ViewBuilder
+    private func donutCenter(_ summary: CurrencySummaryResponse) -> some View {
+        let selectedGroup: CategoryGroupSummaryResponse? = {
+            guard case .category(let categoryID) = model.selectedCategoryID else { return nil }
+            return summary.byCategory.first { $0.categoryID == categoryID }
+        }()
+
+        VStack(spacing: 2) {
             AmountText(
-                amount: entry.spending,
-                currencyCode: currency,
+                amount: selectedGroup?.spending ?? summary.spending,
+                currencyCode: summary.currency,
                 kind: .spending,
-                font: Typography.caption.weight(.bold)
+                font: Typography.compactFigure
             )
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
+            Text(selectedGroup.map { $0.categoryName ?? "Senza categoria" } ?? "totale")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+                .lineLimit(1)
         }
+        .frame(maxWidth: donutDiameter - 32)
     }
 
     /// The "Spesa giornaliera" card (`docs/design/canvas/Main.dc.html`'s

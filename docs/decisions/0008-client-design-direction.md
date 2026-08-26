@@ -188,3 +188,59 @@ nothing here is logic. No screenshot of the running app, same reasoning as
 every prior M3 client slice — the icon/launch-mark images themselves
 (`App/Resources/Assets.xcassets/`) are safe to view directly, since they
 carry no user data.
+
+## 2026-08-26 revision: interactive charts, legend pattern retired
+
+Task 5 of the "Daily driver, davvero" milestone — the dashboard donut and
+"Spesa giornaliera" bars were the only two decorative-only,
+`.accessibilityHidden(true)` visuals in the app; this is the first time
+either becomes interactive.
+
+**The donut is now tap-to-select**, backed by a pure hit test
+(`TraccioCore.fraction(forPoint:in:)`/`segment(atFraction:in:)`, tested
+without SwiftUI) rather than anything computed in the view — same split this
+ADR's original decision already drew between drawing (`DonutChart`) and the
+arithmetic behind it (`TraccioCore`). The selected segment gets a thicker
+stroke and full opacity; every other segment dims to ~0.35; a
+`.sensoryFeedback(.selection, trigger:)` haptic fires on change. The donut's
+own color source changes too: it now draws each category's own `PaletteColor`
+(ADR 0017/0018) instead of a rank-based rotation — see `docs/design/tokens.md`'s
+"Category donut and breakdown list" for why that retires
+`Palette.categoryChart(rank:)`.
+
+**The position-paired side legend (`zip(segments, entries)`) is retired
+outright**, replaced by `CategoryBreakdownList` — a full-width, expandable
+list below the (now smaller, 116→96pt) donut, one row per
+`TraccioCore.CategoryBreakdownRow`. A root with children gets a chevron to
+expand them in place (ADR 0018's two-level hierarchy landing in the UI, not
+just the aggregation); a row's body drills through to Movimenti pre-filtered
+to that category and the period currently shown. The legend pattern itself —
+pairing a chart's visual order to a side list by array position — is retired
+as a rule for this codebase, not just this one chart: a `zip` of two
+independently-filtered/sorted arrays is exactly the kind of implicit coupling
+`.claude/rules/swift.md`'s "make illegal states unrepresentable" warns against
+one array reordering out from under the other silently produced a
+mismatched row.
+
+**New accessibility rule: an interactive chart that stays
+`.accessibilityHidden(true)` must have a textual, focusable, activatable
+representation alongside it, not fewer capabilities than the chart it
+represents.** Rendering the donut's *arcs* individually accessible was
+considered and rejected — a circle sector has no natural focus order or
+activation gesture VoiceOver users expect, and would still need the same
+name/amount/percentage text a list row already carries for free.
+`CategoryBreakdownList` **is** that representation: every row it renders is
+already a real, tappable view (unlike the old legend, which was purely
+decorative text), so nothing new had to be built to satisfy this — the rule
+is written down here because a future chart (the scrubbable bucket bars, Task
+6) must follow the same shape, not because this one needed extra work to
+comply.
+
+**Verified**: `swift test` (296, +21: `DonutHitTestTests`,
+`CategoryBreakdownRowsTests`) and `make test-app` (156, +13:
+`DashboardViewModelTests`, new — the view model's selection/expansion/
+drill-through state had no dedicated test file before this slice). No
+backend change, no `make openapi`. Manual: still needed before calling this
+done — dark/light, Dynamic Type AX3/AX5 (a breakdown row must reflow rather
+than truncate its amount), and VoiceOver reading each breakdown row's name,
+amount, and percentage.

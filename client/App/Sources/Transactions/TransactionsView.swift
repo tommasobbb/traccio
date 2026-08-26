@@ -14,11 +14,11 @@ import TraccioCore
 /// (`TransactionFilter`, `TransactionsViewModel.applyFilter(_:)`), never on
 /// an already-fetched page.
 struct TransactionsView: View {
-    @State private var model = TransactionsViewModel()
+    @State private var model: TransactionsViewModel
     /// Bound to `.searchable`. Kept separate from `model.filter.searchTerm`
     /// so every keystroke updates the field instantly while the debounced
     /// request lags behind it — see `TransactionsViewModel.updateSearchTerm(_:)`.
-    @State private var searchText = ""
+    @State private var searchText: String
     /// `.transactions` is bumped by a write on another tab that can change
     /// *which* rows should appear or how many — applying rules, deleting a
     /// category (`CategorizationViewModel`). A single row's own fields stay
@@ -26,6 +26,19 @@ struct TransactionsView: View {
     /// made from this screen's own `TransactionDetailView` do not bump it —
     /// see `DataFreshness`'s doc comment.
     @Environment(DataFreshness.self) private var freshness
+
+    /// Create the screen.
+    ///
+    /// Parameters
+    /// ----------
+    /// initialFilter:
+    ///     The filter to load with, before any user interaction — lets a
+    ///     drill-through from Panoramica (`TransactionsDrillThrough`) open
+    ///     this tab already filtered. Defaults to no filtering.
+    init(initialFilter: TransactionFilter = .none) {
+        _model = State(wrappedValue: TransactionsViewModel(initialFilter: initialFilter))
+        _searchText = State(wrappedValue: initialFilter.searchTerm ?? "")
+    }
 
     var body: some View {
         NavigationStack {
