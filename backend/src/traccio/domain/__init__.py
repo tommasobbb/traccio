@@ -3,12 +3,23 @@
 from traccio.domain.accounts import display_name
 from traccio.domain.categories import default_categories, effective_category
 from traccio.domain.consent import consent_state, days_until_expiry
-from traccio.domain.dashboard import CategorySummary, CurrencySummary, DaySummary, summarize
+from traccio.domain.dashboard import (
+    AccountSummary,
+    BucketSummary,
+    CategoryGroupSummary,
+    CategorySummary,
+    ComparisonSummary,
+    CurrencySummary,
+    compare,
+    summarize,
+    summarize_comparisons,
+)
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import (
     AccountIcon,
     AccountKind,
     AdvanceStatus,
+    BucketGranularity,
     CategoryIcon,
     ConnectionStatus,
     ConsentState,
@@ -45,17 +56,21 @@ __all__ = [
     "Account",
     "AccountIcon",
     "AccountKind",
+    "AccountSummary",
     "Advance",
     "AdvanceStatus",
+    "BucketGranularity",
+    "BucketSummary",
     "Category",
+    "CategoryGroupSummary",
     "CategoryIcon",
     "CategorySummary",
+    "ComparisonSummary",
     "Connection",
     "ConnectionStatus",
     "ConsentState",
     "CurrencyCode",
     "CurrencySummary",
-    "DaySummary",
     "Event",
     "EventStatus",
     "KeyStrategy",
@@ -75,6 +90,7 @@ __all__ = [
     "TransactionStatus",
     "Transfer",
     "User",
+    "compare",
     "consent_state",
     "days_until_expiry",
     "default_categories",
@@ -85,5 +101,6 @@ __all__ = [
     "next_sync_eligible_at",
     "rule_matches",
     "summarize",
+    "summarize_comparisons",
     "sync_decision",
 ]

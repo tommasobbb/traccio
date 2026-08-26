@@ -1,79 +1,5 @@
 import Foundation
 
-/// Spending and income totals for one category, within one currency, as
-/// returned by `GET /dashboard/summary`.
-///
-/// Mirrors the `CategorySummaryResponse` schema in `docs/api/openapi.json`.
-/// There is no `net` here — unlike `CurrencySummaryResponse`, nothing today
-/// consumes a signed per-category figure.
-public struct CategorySummaryResponse: Codable, Sendable, Equatable {
-    /// The category this entry is for, or `nil` for the "no category" bucket
-    /// — a real, counted entry, never omitted from `byCategory`.
-    public let categoryID: UUID?
-    /// The category's current name, resolved by the backend at read time.
-    /// `nil` iff `categoryID` is `nil`.
-    public let categoryName: String?
-    /// Total spending in this category, a non-negative magnitude, minor units.
-    public let spending: Int
-    /// Total income in this category, a non-negative magnitude, minor units.
-    public let income: Int
-    /// Count of transactions in this category, including zero-`effective_amount`
-    /// ones (transfers, reimbursements).
-    public let transactionCount: Int
-
-    private enum CodingKeys: String, CodingKey {
-        case categoryID = "category_id"
-        case categoryName = "category_name"
-        case spending
-        case income
-        case transactionCount = "transaction_count"
-    }
-
-    public init(
-        categoryID: UUID?, categoryName: String?, spending: Int, income: Int,
-        transactionCount: Int
-    ) {
-        self.categoryID = categoryID
-        self.categoryName = categoryName
-        self.spending = spending
-        self.income = income
-        self.transactionCount = transactionCount
-    }
-}
-
-/// Spending and income totals for one calendar day, within one currency, as
-/// returned by `GET /dashboard/summary`.
-///
-/// Mirrors the `DaySummaryResponse` schema in `docs/api/openapi.json`. There
-/// is no `net` here either, same reasoning as `CategorySummaryResponse`.
-public struct DaySummaryResponse: Codable, Sendable, Equatable {
-    /// The UTC calendar day this entry is for. `CalendarDate`, not `Date` —
-    /// the backend sends a bare `yyyy-MM-dd` with no time component, the same
-    /// convention as `EventResponse.startDate`/`endDate`.
-    public let date: CalendarDate
-    /// Total spending on this day, a non-negative magnitude, minor units.
-    public let spending: Int
-    /// Total income on this day, a non-negative magnitude, minor units.
-    public let income: Int
-    /// Count of transactions on this day, including zero-`effective_amount`
-    /// ones (transfers, reimbursements).
-    public let transactionCount: Int
-
-    private enum CodingKeys: String, CodingKey {
-        case date
-        case spending
-        case income
-        case transactionCount = "transaction_count"
-    }
-
-    public init(date: CalendarDate, spending: Int, income: Int, transactionCount: Int) {
-        self.date = date
-        self.spending = spending
-        self.income = income
-        self.transactionCount = transactionCount
-    }
-}
-
 /// Spending and income totals for one currency over a period, as returned by
 /// `GET /dashboard/summary`.
 ///
@@ -96,16 +22,26 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
     /// Count of transactions contributing to this currency's totals,
     /// including zero-`effective_amount` ones (transfers, reimbursements).
     public let transactionCount: Int
-    /// This currency's totals partitioned by category, sorted by spending
-    /// then income descending. Sums to this entry's own
+    /// `spending` divided by elapsed days in the period, minor units. `nil`
+    /// when it cannot be derived — see the backend's
+    /// `domain/dashboard.py::_average_daily_spending` for when.
+    public let averageDailySpending: Int?
+    /// This currency's totals partitioned by category root, each with its
+    /// children rolled up. Sums to this entry's own
     /// `spending`/`income`/`transactionCount`.
-    public let byCategory: [CategorySummaryResponse]
-    /// This currency's totals partitioned by UTC calendar day, sorted
-    /// chronologically. Unlike `byCategory`, this does **not** always sum
-    /// back to this entry's own totals — a transaction with neither a booked
-    /// nor a value date has nowhere to bucket, per
-    /// `docs/decisions/0007-dashboard-aggregation.md`.
-    public let byDay: [DaySummaryResponse]
+    public let byCategory: [CategoryGroupSummaryResponse]
+    /// This currency's totals partitioned by time bucket, gap-filled across
+    /// the requested period when both `start` and `end` were sent. Unlike
+    /// `byCategory`, this does **not** always sum back to this entry's own
+    /// totals — a transaction with neither a booked nor a value date has
+    /// nowhere to bucket, per `docs/decisions/0007-dashboard-aggregation.md`.
+    public let byBucket: [BucketSummaryResponse]
+    /// This currency's totals partitioned by account. Sums to this entry's
+    /// own totals.
+    public let byAccount: [AccountSummaryResponse]
+    /// The comparison period's totals and the delta, or `nil` when no
+    /// comparison was requested.
+    public let comparison: ComparisonSummaryResponse?
 
     private enum CodingKeys: String, CodingKey {
         case currency
@@ -113,21 +49,29 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
         case income
         case net
         case transactionCount = "transaction_count"
+        case averageDailySpending = "average_daily_spending"
         case byCategory = "by_category"
-        case byDay = "by_day"
+        case byBucket = "by_bucket"
+        case byAccount = "by_account"
+        case comparison
     }
 
     public init(
         currency: String, spending: Int, income: Int, net: Int, transactionCount: Int,
-        byCategory: [CategorySummaryResponse] = [], byDay: [DaySummaryResponse] = []
+        averageDailySpending: Int? = nil, byCategory: [CategoryGroupSummaryResponse] = [],
+        byBucket: [BucketSummaryResponse] = [], byAccount: [AccountSummaryResponse] = [],
+        comparison: ComparisonSummaryResponse? = nil
     ) {
         self.currency = currency
         self.spending = spending
         self.income = income
         self.net = net
         self.transactionCount = transactionCount
+        self.averageDailySpending = averageDailySpending
         self.byCategory = byCategory
-        self.byDay = byDay
+        self.byBucket = byBucket
+        self.byAccount = byAccount
+        self.comparison = comparison
     }
 }
 

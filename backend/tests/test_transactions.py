@@ -690,9 +690,7 @@ def test_transactions_search_treats_percent_and_underscore_as_literal() -> None:
     # "%" is a literal here, not a wildcard — only the row that actually
     # contains "50%" matches, not every row (which an unescaped LIKE would).
     assert response.status_code == 200
-    assert [t["description"] for t in response.json()["transactions"]] == [
-        "TEST MERCHANT 50% OFF"
-    ]
+    assert [t["description"] for t in response.json()["transactions"]] == ["TEST MERCHANT 50% OFF"]
 
 
 def test_transactions_blank_search_term_is_ignored() -> None:

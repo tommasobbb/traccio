@@ -241,7 +241,7 @@ struct DashboardView: View {
     }
 
     private func categoryLegendRow(
-        segment: DonutSegment, entry: CategorySummaryResponse, currency: String
+        segment: DonutSegment, entry: CategoryGroupSummaryResponse, currency: String
     ) -> some View {
         HStack(spacing: 8) {
             Circle()
@@ -269,13 +269,14 @@ struct DashboardView: View {
     /// `categoryBreakdownCard`'s own empty branches.
     ///
     /// Uses the same period the rest of the screen shows — no independent
-    /// selector — but the axis itself is whatever UTC days `dailyBars(_:)`
-    /// returns, which is `by_day`'s own earliest-to-latest span, not
-    /// necessarily every day of `model.period` (see `dailyBars(_:)`'s doc
-    /// comment on why the two are not reconciled).
+    /// selector. The backend now gap-fills `by_bucket` across the whole
+    /// requested period itself (`docs/decisions/
+    /// 0007-dashboard-aggregation.md`'s third revision), so unlike the old
+    /// `dailyBars(_:)`, `spendingBars(_:)` no longer needs to reconcile a
+    /// mismatch between the axis and `model.period`.
     @ViewBuilder
     private func dailySpendingCard(_ summary: CurrencySummaryResponse) -> some View {
-        let bars = TraccioCore.dailyBars(summary.byDay)
+        let bars = TraccioCore.spendingBars(summary.byBucket)
 
         if let first = bars.first, let last = bars.last {
             Card {

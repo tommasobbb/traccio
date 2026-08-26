@@ -262,7 +262,8 @@ struct APIClientTests {
         { "currencies": [
           {
             "currency": "EUR", "spending": 124050, "income": 210000, "net": 85950,
-            "transaction_count": 42, "by_category": [], "by_day": []
+            "transaction_count": 42, "average_daily_spending": null,
+            "by_category": [], "by_bucket": [], "by_account": [], "comparison": null
           }
         ] }
         """
@@ -304,6 +305,48 @@ struct APIClientTests {
         }
 
         _ = try await client.dashboardSummary()
+    }
+
+    @Test func dashboardSummaryEncodesGranularityTzAndComparisonBoundsAsQueryItems() async throws {
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(query.contains("granularity=month"))
+            #expect(query.contains("tz=Europe%2FRome") || query.contains("tz=Europe/Rome"))
+            #expect(query.contains("compare_start=2026-07-01"))
+            #expect(query.contains("compare_end=2026-08-01"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.dashboardEnvelope.utf8))
+        }
+
+        var compareStartComponents = DateComponents()
+        compareStartComponents.year = 2026; compareStartComponents.month = 7
+        compareStartComponents.day = 1
+        compareStartComponents.timeZone = TimeZone(identifier: "UTC")
+        var compareEndComponents = DateComponents()
+        compareEndComponents.year = 2026; compareEndComponents.month = 8; compareEndComponents.day = 1
+        compareEndComponents.timeZone = TimeZone(identifier: "UTC")
+        let calendar = Calendar(identifier: .iso8601)
+        let compareStart = calendar.date(from: compareStartComponents)!
+        let compareEnd = calendar.date(from: compareEndComponents)!
+
+        _ = try await client.dashboardSummary(
+            granularity: .month, tz: "Europe/Rome", compareStart: compareStart, compareEnd: compareEnd
+        )
+    }
+
+    @Test func dashboardSummaryOmitsGranularityWhenItIsTheDefault() async throws {
+        let client = Self.makeClient { request in
+            let query = request.url?.query ?? ""
+            #expect(!query.contains("granularity"))
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.dashboardEnvelope.utf8))
+        }
+
+        _ = try await client.dashboardSummary(granularity: .day)
     }
 
     /// A representative `GET /transactions` envelope: one transaction.

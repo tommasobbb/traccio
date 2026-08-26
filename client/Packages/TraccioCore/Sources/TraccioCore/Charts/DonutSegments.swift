@@ -38,6 +38,11 @@ extension TraccioCore {
     /// orders `by_category` by spending descending), so this function does
     /// not re-sort; it only filters and accumulates.
     ///
+    /// One arc per category **root** (`docs/decisions/
+    /// 0007-dashboard-aggregation.md`'s third revision, ADR 0018's
+    /// hierarchy) — a child's spending is already rolled into its root's
+    /// `spending`, so drawing children separately would double-count.
+    ///
     /// Parameters
     /// ----------
     /// entries:
@@ -49,7 +54,7 @@ extension TraccioCore {
     /// One `DonutSegment` per entry with positive spending, in the same
     /// relative order, covering `0...1` with no gaps or overlaps. Empty if
     /// no entry has any spending at all.
-    public static func donutSegments(_ entries: [CategorySummaryResponse]) -> [DonutSegment] {
+    public static func donutSegments(_ entries: [CategoryGroupSummaryResponse]) -> [DonutSegment] {
         let spending = entries.filter { $0.spending > 0 }
         let total = spending.reduce(0) { $0 + $1.spending }
         guard total > 0 else { return [] }

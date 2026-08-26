@@ -119,6 +119,70 @@
         "title": "AccountResponse",
         "type": "object"
       },
+      "AccountSummaryResponse": {
+        "description": "Spending and income totals for one account, as returned to the client.\n\nAttributes\n----------\naccount_id : UUID\n    The account these totals belong to.\naccount_name : str or None\n    The account's resolved display name, or ``None`` if unset or the\n    account was deleted between aggregation and this read.\ncolor : PaletteColor or None\n    The account's colour, or ``None`` if unset (or the same race).\nicon : AccountIcon or None\n    The account's icon, or ``None`` if unset (or the same race).\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall on this account.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "account_id",
+          "account_name",
+          "color",
+          "icon",
+          "spending",
+          "income",
+          "transaction_count"
+        ],
+        "title": "AccountSummaryResponse",
+        "type": "object"
+      },
       "AccountsResponse": {
         "description": "Envelope for the account list.\n\nA wrapper object rather than a bare array leaves room for pagination or\nmetadata later without breaking the generated Swift client.\n\nAttributes\n----------\naccounts : list[AccountResponse]\n    The caller's accounts, oldest first.",
         "properties": {
@@ -271,6 +335,52 @@
         "title": "AssignTransactionRequest",
         "type": "object"
       },
+      "BucketGranularity": {
+        "description": "How ``GET /dashboard/summary``'s ``by_bucket`` groups transactions in time.\n\nBucketing happens in the request's local timezone (``domain/dashboard.py``'s\n``tz`` parameter), not UTC \u2014 at ``MONTH`` granularity in particular, a\nUTC-bucketed month can visibly misplace the first and last day of a local\nmonth.\n\nAttributes\n----------\nDAY : str\n    One bucket per calendar day.\nWEEK : str\n    One bucket per ISO week, starting Monday.\nMONTH : str\n    One bucket per calendar month.",
+        "enum": [
+          "day",
+          "week",
+          "month"
+        ],
+        "title": "BucketGranularity",
+        "type": "string"
+      },
+      "BucketSummaryResponse": {
+        "description": "Spending and income totals for one time bucket, as returned to the client.\n\nAttributes\n----------\nstart : date\n    The bucket's start, a local calendar date.\nend : date\n    The bucket's exclusive end.\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall in this bucket.",
+        "properties": {
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "spending",
+          "income",
+          "transaction_count"
+        ],
+        "title": "BucketSummaryResponse",
+        "type": "object"
+      },
       "CategoriesResponse": {
         "description": "Envelope for the categories list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncategories : list[CategoryResponse]\n    The user's categories: each root, alphabetically, immediately\n    followed by its own children, also alphabetically (see\n    :func:`~traccio.db.repositories.list_categories`).",
         "properties": {
@@ -286,6 +396,100 @@
           "categories"
         ],
         "title": "CategoriesResponse",
+        "type": "object"
+      },
+      "CategoryGroupSummaryResponse": {
+        "description": "One category root's totals, its children rolled up, as returned to the client.\n\nAttributes\n----------\ncategory_id : UUID or None\n    The root category's id, or ``None`` for the \"no category\" bucket.\ncategory_name : str or None\n    The root's current name, resolved at read time. ``None`` iff\n    ``category_id`` is ``None``, or the same delete race as\n    :class:`CategorySummaryResponse`.\ncolor : PaletteColor or None\n    The root's colour, or ``None`` iff ``category_id`` is ``None``.\nicon : CategoryIcon or None\n    The root's icon, or ``None`` if unset (or ``category_id`` is\n    ``None``).\nspending : int\n    Total spending in minor units (cents), including every child \u2014 a\n    positive magnitude.\nincome : int\n    Total income in minor units (cents), including every child.\ntransaction_count : int\n    Total transaction count, including every child.\ndirect_spending : int\n    Spending from transactions on the root itself, excluding any child.\ndirect_income : int\n    Income from transactions on the root itself, excluding any child.\ndirect_transaction_count : int\n    Transaction count on the root itself, excluding any child.\nchildren : list[CategorySummaryResponse]\n    This root's children with at least one transaction, sorted by\n    spending then income descending.",
+        "properties": {
+          "category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/CategorySummaryResponse"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "direct_income": {
+            "title": "Direct Income",
+            "type": "integer"
+          },
+          "direct_spending": {
+            "title": "Direct Spending",
+            "type": "integer"
+          },
+          "direct_transaction_count": {
+            "title": "Direct Transaction Count",
+            "type": "integer"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category_id",
+          "category_name",
+          "color",
+          "icon",
+          "spending",
+          "income",
+          "transaction_count",
+          "direct_spending",
+          "direct_income",
+          "direct_transaction_count",
+          "children"
+        ],
+        "title": "CategoryGroupSummaryResponse",
         "type": "object"
       },
       "CategoryIcon": {
@@ -373,19 +577,12 @@
         "type": "object"
       },
       "CategorySummaryResponse": {
-        "description": "Spending and income totals for one category, as returned to the client.\n\nAttributes\n----------\ncategory_id : UUID or None\n    The category this entry is for, or ``None`` for the \"no category\"\n    bucket \u2014 a real, counted entry, never omitted.\ncategory_name : str or None\n    The category's current name, resolved by the router at read time (not\n    stored on the domain summary \u2014 see\n    ``api/routers/dashboard.py``). ``None`` iff ``category_id`` is\n    ``None``.\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall in this category.",
+        "description": "One child category's totals, nested inside a\n:class:`CategoryGroupSummaryResponse`.\n\nAttributes\n----------\ncategory_id : UUID\n    The child category's id.\ncategory_name : str or None\n    The child's current name, resolved at read time. ``None`` only if the\n    category was deleted between aggregation and this read \u2014 a rare race,\n    degraded gracefully rather than raised.\ncolor : PaletteColor or None\n    The child's colour, or ``None`` in the same rare race as\n    ``category_name``.\nicon : CategoryIcon or None\n    The child's icon, or ``None`` if unset (or the same race).\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions carry this child category.",
         "properties": {
           "category_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Category Id"
+            "format": "uuid",
+            "title": "Category Id",
+            "type": "string"
           },
           "category_name": {
             "anyOf": [
@@ -397,6 +594,26 @@
               }
             ],
             "title": "Category Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "income": {
             "title": "Income",
@@ -414,11 +631,54 @@
         "required": [
           "category_id",
           "category_name",
+          "color",
+          "icon",
           "spending",
           "income",
           "transaction_count"
         ],
         "title": "CategorySummaryResponse",
+        "type": "object"
+      },
+      "ComparisonSummaryResponse": {
+        "description": "The comparison period's totals and the delta, as returned to the client.\n\nAttributes\n----------\nspending : int\n    The comparison period's own spending in minor units (cents).\nincome : int\n    The comparison period's own income in minor units (cents).\nnet : int\n    The comparison period's own net, signed, minor units.\nspending_delta : int\n    Current period's spending minus the comparison period's, signed,\n    minor units.\nspending_delta_pct : float or None\n    ``spending_delta`` as a fraction of the comparison period's spending,\n    or ``None`` when that spending was zero. The one float in this\n    schema \u2014 a ratio, not money.",
+        "properties": {
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "net": {
+            "title": "Net",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "spending_delta": {
+            "title": "Spending Delta",
+            "type": "integer"
+          },
+          "spending_delta_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spending Delta Pct"
+          }
+        },
+        "required": [
+          "spending",
+          "income",
+          "net",
+          "spending_delta",
+          "spending_delta_pct"
+        ],
+        "title": "ComparisonSummaryResponse",
         "type": "object"
       },
       "ConfirmCategoryRequest": {
@@ -792,21 +1052,49 @@
         "type": "object"
       },
       "CurrencySummaryResponse": {
-        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.\nby_category : list[CategorySummaryResponse]\n    This currency's totals partitioned by category, sorted by spending\n    then income descending. Sums to this entry's own\n    ``spending``/``income``/``transaction_count``.\nby_day : list[DaySummaryResponse]\n    This currency's totals partitioned by UTC calendar day, sorted\n    chronologically. A transaction with neither ``booked_at`` nor\n    ``value_date`` set is excluded here while still counted in this\n    entry's own totals \u2014 the one field that does not sum back to the\n    parent, unlike ``by_category``.",
+        "description": "Spending and income totals for one currency, as returned to the client.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this summary is expressed in.\nspending : int\n    Total spending in minor units (cents), a positive magnitude \u2014 the sum\n    of every negative ``effective_amount``, negated.\nincome : int\n    Total income in minor units (cents), a positive magnitude \u2014 the sum of\n    every positive ``effective_amount``.\nnet : int\n    ``income - spending`` in minor units (cents), signed.\ntransaction_count : int\n    How many transactions were considered for this currency.\naverage_daily_spending : int or None\n    ``spending`` divided by elapsed days in the period, minor units. See\n    ``domain/dashboard.py::_average_daily_spending`` for when it is\n    ``None``.\nby_category : list[CategoryGroupSummaryResponse]\n    This currency's totals partitioned by category root, each with its\n    children rolled up. Sums to this entry's own totals.\nby_bucket : list[BucketSummaryResponse]\n    This currency's totals partitioned by time bucket, gap-filled across\n    the requested period when both ``start`` and ``end`` were given. A\n    transaction with neither ``booked_at`` nor ``value_date`` set is\n    excluded here while still counted in this entry's own totals.\nby_account : list[AccountSummaryResponse]\n    This currency's totals partitioned by account. Sums to this entry's\n    own totals.\ncomparison : ComparisonSummaryResponse or None\n    The comparison period's totals and the delta, or ``None`` when\n    ``compare_start``/``compare_end`` were not both supplied.",
         "properties": {
+          "average_daily_spending": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Daily Spending"
+          },
+          "by_account": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSummaryResponse"
+            },
+            "title": "By Account",
+            "type": "array"
+          },
+          "by_bucket": {
+            "items": {
+              "$ref": "#/components/schemas/BucketSummaryResponse"
+            },
+            "title": "By Bucket",
+            "type": "array"
+          },
           "by_category": {
             "items": {
-              "$ref": "#/components/schemas/CategorySummaryResponse"
+              "$ref": "#/components/schemas/CategoryGroupSummaryResponse"
             },
             "title": "By Category",
             "type": "array"
           },
-          "by_day": {
-            "items": {
-              "$ref": "#/components/schemas/DaySummaryResponse"
-            },
-            "title": "By Day",
-            "type": "array"
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "currency": {
             "title": "Currency",
@@ -835,8 +1123,11 @@
           "income",
           "net",
           "transaction_count",
+          "average_daily_spending",
           "by_category",
-          "by_day"
+          "by_bucket",
+          "by_account",
+          "comparison"
         ],
         "title": "CurrencySummaryResponse",
         "type": "object"
@@ -856,36 +1147,6 @@
           "currencies"
         ],
         "title": "DashboardSummaryResponse",
-        "type": "object"
-      },
-      "DaySummaryResponse": {
-        "description": "Spending and income totals for one calendar day, as returned to the client.\n\nAttributes\n----------\ndate : date\n    The UTC calendar day this entry is for.\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall on this day.",
-        "properties": {
-          "date": {
-            "format": "date",
-            "title": "Date",
-            "type": "string"
-          },
-          "income": {
-            "title": "Income",
-            "type": "integer"
-          },
-          "spending": {
-            "title": "Spending",
-            "type": "integer"
-          },
-          "transaction_count": {
-            "title": "Transaction Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "date",
-          "spending",
-          "income",
-          "transaction_count"
-        ],
-        "title": "DaySummaryResponse",
         "type": "object"
       },
       "EventResponse": {
@@ -3207,7 +3468,7 @@
     },
     "/dashboard/summary": {
       "get": {
-        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. There is no FX in Traccio, so a period spanning multiple currencies\nreturns one entry per currency rather than a combined total. Scoped to the\ncurrent user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.",
+        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. There is no FX in Traccio, so a period spanning multiple currencies\nreturns one entry per currency rather than a combined total. Scoped to the\ncurrent user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
         "operationId": "dashboard_summary_dashboard_summary_get",
         "parameters": [
           {
@@ -3242,6 +3503,59 @@
                 }
               ],
               "title": "End"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granularity",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/BucketGranularity",
+              "default": "day"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "title": "Tz",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "compare_start",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Compare Start"
+            }
+          },
+          {
+            "in": "query",
+            "name": "compare_end",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Compare End"
             }
           },
           {

@@ -2,7 +2,8 @@ import SwiftUI
 import TraccioCore
 
 /// The dashboard's "Spesa giornaliera" bar chart — pure presentation, drawn
-/// from the geometry `TraccioCore.dailyBars(_:)` already computed and tested.
+/// from the geometry `TraccioCore.spendingBars(_:)` already computed and
+/// tested.
 ///
 /// Hand-drawn (`RoundedRectangle`), not Swift Charts' `BarMark` — same
 /// reasoning as `DonutChart`: the bar/track shape is straightforward here,
@@ -48,17 +49,20 @@ struct DailyBarsChart: View {
 
 #Preview {
     DailyBarsChart(
-        bars: TraccioCore.dailyBars([
-            DaySummaryResponse(
-                date: CalendarDate(year: 2026, month: 8, day: 10), spending: 5500, income: 0,
+        bars: TraccioCore.spendingBars([
+            BucketSummaryResponse(
+                start: CalendarDate(year: 2026, month: 8, day: 10),
+                end: CalendarDate(year: 2026, month: 8, day: 11), spending: 5500, income: 0,
                 transactionCount: 2
             ),
-            DaySummaryResponse(
-                date: CalendarDate(year: 2026, month: 8, day: 11), spending: 1200, income: 0,
+            BucketSummaryResponse(
+                start: CalendarDate(year: 2026, month: 8, day: 11),
+                end: CalendarDate(year: 2026, month: 8, day: 12), spending: 1200, income: 0,
                 transactionCount: 1
             ),
-            DaySummaryResponse(
-                date: CalendarDate(year: 2026, month: 8, day: 13), spending: 8300, income: 0,
+            BucketSummaryResponse(
+                start: CalendarDate(year: 2026, month: 8, day: 13),
+                end: CalendarDate(year: 2026, month: 8, day: 14), spending: 8300, income: 0,
                 transactionCount: 3
             ),
         ])

@@ -10,8 +10,9 @@ import Testing
 /// invented currency mixes.
 struct DashboardSummaryResponseTests {
     /// A representative `GET /dashboard/summary` envelope: two currencies,
-    /// EUR busier than CHF, matching the shape the backend actually returns
-    /// (sorted by currency code, magnitudes for spending/income, a signed net).
+    /// EUR busier than CHF. EUR's `by_category` shows a root with one child
+    /// rolled up (ADR 0018's hierarchy) alongside the "no category" bucket;
+    /// EUR also carries a comparison period.
     private static let envelope = """
         {
           "currencies": [
@@ -21,23 +22,23 @@ struct DashboardSummaryResponseTests {
               "income": 0,
               "net": -18000,
               "transaction_count": 3,
+              "average_daily_spending": null,
               "by_category": [
                 {
-                  "category_id": null,
-                  "category_name": null,
-                  "spending": 18000,
-                  "income": 0,
-                  "transaction_count": 3
+                  "category_id": null, "category_name": null, "color": null, "icon": null,
+                  "spending": 18000, "income": 0, "transaction_count": 3,
+                  "direct_spending": 18000, "direct_income": 0, "direct_transaction_count": 3,
+                  "children": []
                 }
               ],
-              "by_day": [
+              "by_bucket": [
                 {
-                  "date": "2026-08-10",
-                  "spending": 18000,
-                  "income": 0,
-                  "transaction_count": 3
+                  "start": "2026-08-10", "end": "2026-08-11",
+                  "spending": 18000, "income": 0, "transaction_count": 3
                 }
-              ]
+              ],
+              "by_account": [],
+              "comparison": null
             },
             {
               "currency": "EUR",
@@ -45,36 +46,49 @@ struct DashboardSummaryResponseTests {
               "income": 210000,
               "net": 85950,
               "transaction_count": 42,
+              "average_daily_spending": 4135,
               "by_category": [
                 {
                   "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
-                  "category_name": "Groceries",
-                  "spending": 60000,
-                  "income": 0,
-                  "transaction_count": 20
+                  "category_name": "Dining out", "color": "orange", "icon": "dining",
+                  "spending": 60000, "income": 0, "transaction_count": 20,
+                  "direct_spending": 45000, "direct_income": 0, "direct_transaction_count": 15,
+                  "children": [
+                    {
+                      "category_id": "9f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+                      "category_name": "Coffee", "color": "orange", "icon": "coffee",
+                      "spending": 15000, "income": 0, "transaction_count": 5
+                    }
+                  ]
                 },
                 {
-                  "category_id": null,
-                  "category_name": null,
-                  "spending": 64050,
-                  "income": 210000,
-                  "transaction_count": 22
+                  "category_id": null, "category_name": null, "color": null, "icon": null,
+                  "spending": 64050, "income": 210000, "transaction_count": 22,
+                  "direct_spending": 64050, "direct_income": 210000, "direct_transaction_count": 22,
+                  "children": []
                 }
               ],
-              "by_day": [
+              "by_bucket": [
                 {
-                  "date": "2026-08-10",
-                  "spending": 60000,
-                  "income": 100000,
-                  "transaction_count": 21
+                  "start": "2026-08-10", "end": "2026-08-11",
+                  "spending": 60000, "income": 100000, "transaction_count": 21
                 },
                 {
-                  "date": "2026-08-12",
-                  "spending": 64050,
-                  "income": 110000,
-                  "transaction_count": 21
+                  "start": "2026-08-12", "end": "2026-08-13",
+                  "spending": 64050, "income": 110000, "transaction_count": 21
                 }
-              ]
+              ],
+              "by_account": [
+                {
+                  "account_id": "aaaaaaaa-ceea-467e-a63c-58ba7d6c1a9e",
+                  "account_name": "Conto principale", "color": "blue", "icon": "bank",
+                  "spending": 124050, "income": 210000, "transaction_count": 42
+                }
+              ],
+              "comparison": {
+                "spending": 100000, "income": 180000, "net": 80000,
+                "spending_delta": 24050, "spending_delta_pct": 0.2405
+              }
             }
           ]
         }
@@ -94,16 +108,34 @@ struct DashboardSummaryResponseTests {
         #expect(eur.income == 210000)
         #expect(eur.net == 85950)
         #expect(eur.transactionCount == 42)
+        #expect(eur.averageDailySpending == 4135)
         #expect(eur.byCategory.count == 2)
-        #expect(eur.byCategory[0].categoryName == "Groceries")
-        #expect(eur.byCategory[0].spending == 60000)
+
+        let diningOut = eur.byCategory[0]
+        #expect(diningOut.categoryName == "Dining out")
+        #expect(diningOut.spending == 60000)
+        #expect(diningOut.directSpending == 45000)
+        #expect(diningOut.children.count == 1)
+        #expect(diningOut.children[0].categoryName == "Coffee")
+        #expect(diningOut.children[0].spending == 15000)
+
         // The "no category" bucket is a real entry, never omitted.
         #expect(eur.byCategory[1].categoryID == nil)
         #expect(eur.byCategory[1].categoryName == nil)
-        #expect(eur.byDay.count == 2)
-        #expect(eur.byDay[0].date == CalendarDate(year: 2026, month: 8, day: 10))
-        #expect(eur.byDay[0].spending == 60000)
-        #expect(eur.byDay[1].date == CalendarDate(year: 2026, month: 8, day: 12))
+
+        #expect(eur.byBucket.count == 2)
+        #expect(eur.byBucket[0].start == CalendarDate(year: 2026, month: 8, day: 10))
+        #expect(eur.byBucket[0].end == CalendarDate(year: 2026, month: 8, day: 11))
+        #expect(eur.byBucket[0].spending == 60000)
+        #expect(eur.byBucket[1].start == CalendarDate(year: 2026, month: 8, day: 12))
+
+        #expect(eur.byAccount.count == 1)
+        #expect(eur.byAccount[0].accountName == "Conto principale")
+        #expect(eur.byAccount[0].spending == 124050)
+
+        #expect(eur.comparison?.spending == 100000)
+        #expect(eur.comparison?.spendingDelta == 24050)
+        #expect(eur.comparison?.spendingDeltaPct == 0.2405)
 
         let chf = response.currencies[0]
         #expect(chf.currency == "CHF")
@@ -111,19 +143,23 @@ struct DashboardSummaryResponseTests {
         // loss for this currency — only `net` carries the sign.
         #expect(chf.spending == 18000)
         #expect(chf.net == -18000)
+        #expect(chf.averageDailySpending == nil)
         #expect(chf.byCategory.count == 1)
-        #expect(chf.byDay.count == 1)
+        #expect(chf.byBucket.count == 1)
+        #expect(chf.byAccount.isEmpty)
+        #expect(chf.comparison == nil)
     }
 
-    @Test func decodesEmptyByCategoryAndByDayAsAValidState() throws {
-        // A currency summary can legitimately carry no categories or days at
-        // all (e.g. every transaction rejected) — an empty array, not a
-        // missing key.
+    @Test func decodesEmptyPartitionsAsAValidState() throws {
+        // A currency summary can legitimately carry no categories, buckets,
+        // or accounts at all (e.g. every transaction rejected) — an empty
+        // array, not a missing key.
         let json = """
             { "currencies": [
               {
                 "currency": "EUR", "spending": 0, "income": 0, "net": 0,
-                "transaction_count": 0, "by_category": [], "by_day": []
+                "transaction_count": 0, "average_daily_spending": null,
+                "by_category": [], "by_bucket": [], "by_account": [], "comparison": null
               }
             ] }
             """
@@ -132,7 +168,8 @@ struct DashboardSummaryResponseTests {
             from: Data(json.utf8)
         )
         #expect(response.currencies[0].byCategory.isEmpty)
-        #expect(response.currencies[0].byDay.isEmpty)
+        #expect(response.currencies[0].byBucket.isEmpty)
+        #expect(response.currencies[0].byAccount.isEmpty)
     }
 
     @Test func rejectsMissingByCategoryField() {
@@ -141,7 +178,8 @@ struct DashboardSummaryResponseTests {
             { "currencies": [
               {
                 "currency": "EUR", "spending": 100, "income": 0, "net": -100,
-                "transaction_count": 1, "by_day": []
+                "transaction_count": 1, "average_daily_spending": null,
+                "by_bucket": [], "by_account": [], "comparison": null
               }
             ] }
             """
@@ -153,13 +191,14 @@ struct DashboardSummaryResponseTests {
         }
     }
 
-    @Test func rejectsMissingByDayField() {
-        // `by_day` is required on the wire — the backend never omits it.
+    @Test func rejectsMissingByBucketField() {
+        // `by_bucket` is required on the wire — the backend never omits it.
         let json = """
             { "currencies": [
               {
                 "currency": "EUR", "spending": 100, "income": 0, "net": -100,
-                "transaction_count": 1, "by_category": []
+                "transaction_count": 1, "average_daily_spending": null,
+                "by_category": [], "by_account": [], "comparison": null
               }
             ] }
             """
@@ -232,27 +271,45 @@ struct PrimaryCurrencyTests {
     }
 }
 
-/// Decoding tests for `CategorySummaryResponse` in isolation, covering the
-/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
+/// Decoding tests for `CategorySummaryResponse` (the child type) in
+/// isolation, covering the negative cases per `client/CLAUDE.md`'s "a
+/// decoding test per model".
 struct CategorySummaryResponseTests {
-    @Test func decodesTheNoCategoryBucket() throws {
+    @Test func decodesAChildWithColorAndIcon() throws {
         let json = """
             {
-              "category_id": null, "category_name": null,
+              "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+              "category_name": "Coffee", "color": "orange", "icon": "coffee",
               "spending": 5000, "income": 0, "transaction_count": 2
             }
             """
         let entry = try TraccioCore.jsonDecoder().decode(
             CategorySummaryResponse.self, from: Data(json.utf8)
         )
-        #expect(entry.categoryID == nil)
+        #expect(entry.categoryName == "Coffee")
+        #expect(entry.color == .orange)
+        #expect(entry.icon == .coffee)
+    }
+
+    @Test func decodesANullDisplayFromTheDeleteRace() throws {
+        let json = """
+            {
+              "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+              "category_name": null, "color": null, "icon": null,
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            CategorySummaryResponse.self, from: Data(json.utf8)
+        )
         #expect(entry.categoryName == nil)
     }
 
-    @Test func rejectsAMalformedCategoryID() {
+    @Test func rejectsAMissingCategoryID() {
+        // Unlike the root type, a child's category_id is never null.
         let json = """
             {
-              "category_id": "not-a-uuid", "category_name": "Groceries",
+              "category_id": null, "category_name": "Coffee", "color": null, "icon": null,
               "spending": 5000, "income": 0, "transaction_count": 2
             }
             """
@@ -266,7 +323,8 @@ struct CategorySummaryResponseTests {
     @Test func rejectsMissingTransactionCount() {
         let json = """
             {
-              "category_id": null, "category_name": null,
+              "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+              "category_name": null, "color": null, "icon": null,
               "spending": 5000, "income": 0
             }
             """
@@ -278,51 +336,197 @@ struct CategorySummaryResponseTests {
     }
 }
 
-/// Decoding tests for `DaySummaryResponse` in isolation, covering the
-/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
-struct DaySummaryResponseTests {
-    @Test func decodesABareCalendarDate() throws {
+/// Decoding tests for `CategoryGroupSummaryResponse` (the root type) in
+/// isolation.
+struct CategoryGroupSummaryResponseTests {
+    @Test func decodesTheNoCategoryBucketWithNoChildren() throws {
         let json = """
-            { "date": "2026-08-10", "spending": 5000, "income": 0, "transaction_count": 2 }
+            {
+              "category_id": null, "category_name": null, "color": null, "icon": null,
+              "spending": 5000, "income": 0, "transaction_count": 2,
+              "direct_spending": 5000, "direct_income": 0, "direct_transaction_count": 2,
+              "children": []
+            }
             """
-        let entry = try TraccioCore.jsonDecoder().decode(
-            DaySummaryResponse.self, from: Data(json.utf8)
+        let group = try TraccioCore.jsonDecoder().decode(
+            CategoryGroupSummaryResponse.self, from: Data(json.utf8)
         )
-        #expect(entry.date == CalendarDate(year: 2026, month: 8, day: 10))
-        #expect(entry.spending == 5000)
+        #expect(group.categoryID == nil)
+        #expect(group.children.isEmpty)
     }
 
-    @Test func rejectsAMalformedDate() {
+    @Test func decodesARootWithAChildRolledUp() throws {
         let json = """
-            { "date": "10/08/2026", "spending": 5000, "income": 0, "transaction_count": 2 }
+            {
+              "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+              "category_name": "Dining out", "color": "orange", "icon": "dining",
+              "spending": 6000, "income": 0, "transaction_count": 3,
+              "direct_spending": 4000, "direct_income": 0, "direct_transaction_count": 2,
+              "children": [
+                {
+                  "category_id": "9f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+                  "category_name": "Coffee", "color": "orange", "icon": "coffee",
+                  "spending": 2000, "income": 0, "transaction_count": 1
+                }
+              ]
+            }
+            """
+        let group = try TraccioCore.jsonDecoder().decode(
+            CategoryGroupSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(group.spending == 6000)
+        #expect(group.directSpending == 4000)
+        #expect(group.children.count == 1)
+        #expect(group.children[0].spending == 2000)
+    }
+
+    @Test func rejectsMissingDirectSpending() {
+        let json = """
+            {
+              "category_id": null, "category_name": null, "color": null, "icon": null,
+              "spending": 5000, "income": 0, "transaction_count": 2,
+              "direct_income": 0, "direct_transaction_count": 2, "children": []
+            }
             """
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(
-                DaySummaryResponse.self, from: Data(json.utf8)
+                CategoryGroupSummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+}
+
+/// Decoding tests for `BucketSummaryResponse` in isolation, covering the
+/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
+struct BucketSummaryResponseTests {
+    @Test func decodesStartAndEndAsBareCalendarDates() throws {
+        let json = """
+            {
+              "start": "2026-08-10", "end": "2026-08-11",
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            BucketSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.start == CalendarDate(year: 2026, month: 8, day: 10))
+        #expect(entry.end == CalendarDate(year: 2026, month: 8, day: 11))
+        #expect(entry.spending == 5000)
+    }
+
+    @Test func rejectsAMalformedStart() {
+        let json = """
+            { "start": "10/08/2026", "end": "2026-08-11", "spending": 5000, "income": 0, "transaction_count": 2 }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                BucketSummaryResponse.self, from: Data(json.utf8)
             )
         }
     }
 
     @Test func rejectsADateTimeInsteadOfABareDate() {
-        // `date` is a calendar date, not an instant — a full date-time string
-        // must not silently decode and drop its time component.
+        // `start`/`end` are calendar dates, not instants — a full date-time
+        // string must not silently decode and drop its time component.
         let json = """
-            { "date": "2026-08-10T00:00:00Z", "spending": 5000, "income": 0, "transaction_count": 2 }
+            { "start": "2026-08-10T00:00:00Z", "end": "2026-08-11", "spending": 5000, "income": 0, "transaction_count": 2 }
             """
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(
-                DaySummaryResponse.self, from: Data(json.utf8)
+                BucketSummaryResponse.self, from: Data(json.utf8)
             )
         }
     }
 
     @Test func rejectsMissingTransactionCount() {
         let json = """
-            { "date": "2026-08-10", "spending": 5000, "income": 0 }
+            { "start": "2026-08-10", "end": "2026-08-11", "spending": 5000, "income": 0 }
             """
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(
-                DaySummaryResponse.self, from: Data(json.utf8)
+                BucketSummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+}
+
+/// Decoding tests for `AccountSummaryResponse` in isolation.
+struct AccountSummaryResponseTests {
+    @Test func decodesAnAccountWithDisplayFields() throws {
+        let json = """
+            {
+              "account_id": "aaaaaaaa-ceea-467e-a63c-58ba7d6c1a9e",
+              "account_name": "Conto principale", "color": "blue", "icon": "bank",
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            AccountSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.accountName == "Conto principale")
+        #expect(entry.color == .blue)
+        #expect(entry.icon == .bank)
+    }
+
+    @Test func decodesANullDisplayFromTheDeleteRace() throws {
+        let json = """
+            {
+              "account_id": "aaaaaaaa-ceea-467e-a63c-58ba7d6c1a9e",
+              "account_name": null, "color": null, "icon": null,
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            AccountSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.accountName == nil)
+    }
+
+    @Test func rejectsMissingAccountID() {
+        let json = """
+            {
+              "account_name": null, "color": null, "icon": null,
+              "spending": 5000, "income": 0, "transaction_count": 2
+            }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                AccountSummaryResponse.self, from: Data(json.utf8)
+            )
+        }
+    }
+}
+
+/// Decoding tests for `ComparisonSummaryResponse` in isolation.
+struct ComparisonSummaryResponseTests {
+    @Test func decodesASignedDeltaAndAPct() throws {
+        let json = """
+            { "spending": 3000, "income": 1000, "net": -2000, "spending_delta": 2000, "spending_delta_pct": 0.6667 }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            ComparisonSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.spendingDelta == 2000)
+        #expect(entry.spendingDeltaPct == 0.6667)
+    }
+
+    @Test func decodesANullPctOnAZeroBase() throws {
+        let json = """
+            { "spending": 0, "income": 0, "net": 0, "spending_delta": 5000, "spending_delta_pct": null }
+            """
+        let entry = try TraccioCore.jsonDecoder().decode(
+            ComparisonSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(entry.spendingDeltaPct == nil)
+    }
+
+    @Test func rejectsMissingSpendingDelta() {
+        let json = """
+            { "spending": 0, "income": 0, "net": 0, "spending_delta_pct": null }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                ComparisonSummaryResponse.self, from: Data(json.utf8)
             )
         }
     }

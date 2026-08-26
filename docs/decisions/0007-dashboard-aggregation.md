@@ -176,3 +176,92 @@ reinterpretation into local days that the backend never computed.
 The client's Panoramica screen now renders this as "Spesa giornaliera" bars
 (`docs/design/canvas/Main.dc.html`, badge removed), closing the roadmap's M3
 item 4.
+
+## Revision — 2026-08-26: hierarchy, gap-fill, timezone, accounts, comparison
+
+Task 4 of the "Daily driver, davvero" milestone. Backend-only — the previous
+revision's UTC/local mismatch is retired below rather than carried forward,
+and `GET /dashboard/summary` grows four independent, additive capabilities on
+top of the same `effective_amount`-only core Decision 1 established.
+
+**`by_category` becomes hierarchical, following ADR 0018.** A flat
+`CategorySummary` per category id (including a child's own id as a top-level
+entry) no longer reflects how categories are actually organized once a
+two-level hierarchy exists. `CategorySummary` is now the **child** type only,
+always nested inside a new root type, `CategoryGroupSummary`, as one of its
+`children`. `CategoryGroupSummary` carries both a rollup
+(`spending`/`income`/`transaction_count`, the root plus every child) and
+`direct_*` (the root's own transactions only, excluding children) — without
+`direct_*`, expanding a root's children in a client would sum to *less* than
+the parent row, with an unexplained remainder. The invariant `group.spending
+== group.direct_spending + Σ children.spending` holds by construction: a
+single accumulator dict keyed by `(currency, root_id, child_id_or_None)`
+partitions every transaction into either the root's own direct bucket or
+exactly one child bucket, so there is one source of truth to sum, never two
+independently-accumulated totals that could drift. A category id present on a
+transaction but absent from the `parents` mapping (a rare delete race) is
+treated as its own root, degrading gracefully rather than raising — the same
+posture the display-name join already takes for a deleted category.
+
+**`by_day` is renamed `by_bucket` and gains gap-fill, granularity, and
+timezone — retiring the previous revision's "honest UTC reading" acceptance.**
+The client's own zero-fill loop (`TraccioCore.dailyBars`, walking a calendar
+to invent empty bars between the earliest and latest entry) is exactly the
+kind of derivation `client/CLAUDE.md` forbids; it existed only because the
+backend did not yet know the requested period's actual bounds. Now, when both
+`start` and `end` are given, `summarize` emits the **complete** bucket series
+across the whole requested period, zero-value buckets included — the client
+walks nothing. A new `granularity` parameter (`day`/`week`/`month`, default
+`day`) generalizes "bucket" beyond a single day, and each `BucketSummary`
+carries its own `end` (exclusive) rather than making the client compute "the
+last day of this ISO week" — a derivation that could silently disagree with
+how the backend actually bucketed.
+
+Bucketing now happens in a `tz` parameter (an IANA name, default `UTC`,
+rejected with `422 unknown_timezone` if unrecognized) rather than always UTC.
+This is what makes the previous revision's acceptance of the UTC/local
+mismatch obsolete rather than merely superseded: a client that now sends its
+own `TimeZone.current.identifier` gets bucket boundaries that actually match
+its calendar, so "August" no longer shows a day from the end of July at its
+edge. `by_bucket` keeps `by_day`'s one departure from `by_category`'s
+invariant — a transaction with neither `booked_at` nor `value_date` set has
+nowhere to bucket and is excluded, while still counted in the currency's own
+totals.
+
+**`by_account` is a new, flat partition** — spending/income/count per account,
+mirroring `by_category`'s non-hierarchical shape before Task 2 (accounts have
+no hierarchy). Closes the loop with ADR 0017: the dashboard can finally show
+which account spending came from, not just which category.
+
+**`average_daily_spending`** divides a currency's `spending` by *elapsed* days
+in the period, not the period's nominal length, so a month still in progress
+reads "€42/day" rather than a figure diluted by days that have not happened
+yet. Elapsed is `min(now, period_end) - period_start`; `now` is an explicit
+parameter to `summarize`, never read from the system clock inside `domain/`,
+so the function stays pure and testable — the router passes
+`datetime.now(UTC)`. `None` when it cannot be derived (no `period_start`, or
+an open period with no `now` supplied).
+
+**Period comparison is the client's choice of period, not a boolean.** "Same
+length, shifted back" is not well-defined across a calendar: a month is not a
+fixed number of days, so subtracting one silently lands on an arbitrary date
+rather than "last month." The client already has a correct, tested
+`previous()` on its period type, so `compare_start`/`compare_end` are two more
+query parameters naming *which* period to compare against — both given or
+both omitted (`422 incomplete_comparison_period` otherwise). `summarize` itself
+has no notion of comparison; the router calls it a second time for the
+comparison period and pairs the two currency-by-currency via the new
+`compare`/`summarize_comparisons` functions. A `ComparisonSummary` carries the
+comparison period's own totals plus `spending_delta` (signed) and
+`spending_delta_pct` — `None`, never `inf`, when the comparison period spent
+nothing at all. `spending_delta_pct` is the one float in this whole module: a
+ratio, not money, so the integer-cents rule does not constrain it.
+
+**Client scope is deliberately minimal**, per Task 4's own boundary: model
+types renamed/extended to match, `TraccioCore.dailyBars(_:)` loses its
+zero-fill loop (now redundant — the backend already gap-fills) and is renamed
+`spendingBars(_:)`, and `DashboardView` renders the same cards from the new
+types. No redesign — that is Task 5/6, which this revision unblocks (the
+donut/legend rework wants `average_daily_spending` and the interactive
+breakdown; the scrubbable bar chart and comparison card want `by_bucket`'s
+granularity and `comparison`).

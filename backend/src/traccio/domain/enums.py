@@ -405,3 +405,26 @@ class SyncRunOutcome(StrEnum):
     SKIPPED_CONSENT = "skipped_consent"
     SKIPPED_BUDGET = "skipped_budget"
     SKIPPED_INTERVAL = "skipped_interval"
+
+
+class BucketGranularity(StrEnum):
+    """How ``GET /dashboard/summary``'s ``by_bucket`` groups transactions in time.
+
+    Bucketing happens in the request's local timezone (``domain/dashboard.py``'s
+    ``tz`` parameter), not UTC — at ``MONTH`` granularity in particular, a
+    UTC-bucketed month can visibly misplace the first and last day of a local
+    month.
+
+    Attributes
+    ----------
+    DAY : str
+        One bucket per calendar day.
+    WEEK : str
+        One bucket per ISO week, starting Monday.
+    MONTH : str
+        One bucket per calendar month.
+    """
+
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"

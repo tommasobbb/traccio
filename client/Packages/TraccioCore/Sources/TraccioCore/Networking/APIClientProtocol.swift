@@ -18,7 +18,10 @@ public protocol APIClientProtocol: Sendable {
         id: UUID, color: PaletteColor?, icon: AccountIcon?
     ) async throws -> AccountResponse
     func health() async throws -> HealthResponse
-    func dashboardSummary(start: Date?, end: Date?) async throws -> DashboardSummaryResponse
+    func dashboardSummary(
+        start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
+        compareStart: Date?, compareEnd: Date?
+    ) async throws -> DashboardSummaryResponse
     func transaction(id: UUID) async throws -> TransactionResponse
     func confirmCategory(transactionID: UUID, categoryID: UUID) async throws
     func clearCategory(transactionID: UUID) async throws

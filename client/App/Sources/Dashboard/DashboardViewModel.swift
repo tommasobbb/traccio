@@ -54,7 +54,10 @@ final class DashboardViewModel {
     func load() async {
         state = .loading
         do {
-            let summary = try await client.dashboardSummary(start: period.start, end: period.end)
+            let summary = try await client.dashboardSummary(
+                start: period.start, end: period.end, granularity: .day, tz: nil,
+                compareStart: nil, compareEnd: nil
+            )
             state = .loaded(summary)
         } catch {
             state = .failed

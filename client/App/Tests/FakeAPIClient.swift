@@ -508,7 +508,10 @@ actor FakeAPIClient: APIClientProtocol {
         return healthToReturn
     }
 
-    func dashboardSummary(start: Date?, end: Date?) async throws -> DashboardSummaryResponse {
+    func dashboardSummary(
+        start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
+        compareStart: Date?, compareEnd: Date?
+    ) async throws -> DashboardSummaryResponse {
         dashboardSummaryToReturn
     }
 

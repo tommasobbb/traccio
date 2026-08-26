@@ -57,17 +57,19 @@ struct DonutChart: View {
 #Preview {
     DonutChart(
         segments: TraccioCore.donutSegments([
-            CategorySummaryResponse(
-                categoryID: UUID(), categoryName: "Casa", spending: 42000, income: 0,
-                transactionCount: 4
+            CategoryGroupSummaryResponse(
+                categoryID: UUID(), categoryName: "Casa", color: nil, icon: nil, spending: 42000,
+                income: 0, transactionCount: 4, directSpending: 42000, directIncome: 0,
+                directTransactionCount: 4
             ),
-            CategorySummaryResponse(
-                categoryID: UUID(), categoryName: "Alimentari", spending: 31100, income: 0,
-                transactionCount: 12
+            CategoryGroupSummaryResponse(
+                categoryID: UUID(), categoryName: "Alimentari", color: nil, icon: nil, spending: 31100,
+                income: 0, transactionCount: 12, directSpending: 31100, directIncome: 0,
+                directTransactionCount: 12
             ),
-            CategorySummaryResponse(
-                categoryID: nil, categoryName: nil, spending: 26000, income: 0,
-                transactionCount: 5
+            CategoryGroupSummaryResponse(
+                categoryID: nil, categoryName: nil, color: nil, icon: nil, spending: 26000, income: 0,
+                transactionCount: 5, directSpending: 26000, directIncome: 0, directTransactionCount: 5
             ),
         ])
     )
