@@ -1348,6 +1348,30 @@ struct APIClientTests {
         #expect(connections.isEmpty)
     }
 
+    private static let institutionsEnvelope = """
+        { "institutions": [
+          { "name": "TEST BANK 01", "country": "IT" },
+          { "name": "TEST BANK 02", "country": "IT" }
+        ] }
+        """
+
+    @Test func institutionsGetsWithTheCountryQueryItem() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "GET")
+            #expect(request.url?.path == "/connections/institutions")
+            #expect(request.url?.query == "country=IT")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.institutionsEnvelope.utf8))
+        }
+
+        let institutions = try await client.institutions(country: "IT")
+        #expect(institutions.count == 2)
+        #expect(institutions[0].name == "TEST BANK 01")
+        #expect(institutions[0].country == "IT")
+    }
+
     private static let syncEnvelope = """
         { "accounts_synced": 2, "transactions_synced": 5 }
         """
@@ -1405,6 +1429,25 @@ struct APIClientTests {
 
         let result = try await client.reauthorizeConnection(connectionID: connectionID)
         #expect(result.connectionID == connectionID)
+        #expect(result.authorizationURL == "https://sca.example/go")
+    }
+
+    @Test func startConnectionPostsTheInstitutionAndCountryAsSnakeCaseJSON() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/connections")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["institution"] == "TEST BANK 01")
+            #expect(body?["country"] == "IT")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.startConnectionEnvelope.utf8))
+        }
+
+        let result = try await client.startConnection(institution: "TEST BANK 01", country: "IT")
+        #expect(result.connectionID == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
         #expect(result.authorizationURL == "https://sca.example/go")
     }
 

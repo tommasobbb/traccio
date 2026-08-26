@@ -1285,6 +1285,42 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "InstitutionResponse": {
+        "description": "One bank the caller can authorize, as returned to the client.\n\nAttributes\n----------\nname : str\n    The provider-scoped institution identifier \u2014 pass this straight back\n    as ``StartConnectionRequest.institution``.\ncountry : str\n    ISO 3166-1 alpha-2 country the institution is offered in.",
+        "properties": {
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "country"
+        ],
+        "title": "InstitutionResponse",
+        "type": "object"
+      },
+      "InstitutionsResponse": {
+        "description": "Envelope for the institution list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ninstitutions : list[InstitutionResponse]\n    The institutions offered in the requested country, in the provider's\n    own order.",
+        "properties": {
+          "institutions": {
+            "items": {
+              "$ref": "#/components/schemas/InstitutionResponse"
+            },
+            "title": "Institutions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "institutions"
+        ],
+        "title": "InstitutionsResponse",
+        "type": "object"
+      },
       "MoveCategoryRequest": {
         "description": "Body for reparenting a category.\n\nAttributes\n----------\nparent_id : UUID or None\n    The new parent, or ``None`` to make this category a root.",
         "properties": {
@@ -3350,6 +3386,63 @@
           }
         },
         "summary": "Connection Callback"
+      }
+    },
+    "/connections/institutions": {
+      "get": {
+        "description": "List the banks the provider supports authorizing in ``country``.\n\nFeeds a client-side picker for ``POST /connections``'s ``institution``\nfield, so \"Collega un nuovo conto\" no longer needs the user (or the\nclient) to already know a bank's exact provider-scoped name. Public\ninstitution metadata only \u2014 not user-scoped, unlike every other endpoint\non this router.\n\nParameters\n----------\nprovider : BankProvider\n    The bank adapter (Enable Banking).\ncountry : str, optional\n    ISO 3166-1 alpha-2 country code. Defaults to ``\"IT\"``.\n\nReturns\n-------\nInstitutionsResponse\n    The institutions offered in ``country``, in the provider's own order.\n\nRaises\n------\nHTTPException\n    502 if the provider lookup fails.",
+        "operationId": "list_institutions_connections_institutions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "default": "IT",
+              "title": "Country",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Institutions"
       }
     },
     "/connections/{connection_id}/reauthorize": {

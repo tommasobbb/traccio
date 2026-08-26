@@ -6,10 +6,11 @@ speaks Enable Banking's HTTP shapes) and maps its raw payloads to the domain
 DTOs the layers above ``providers/`` understand. Nothing here leaks a
 provider-shaped dict upward.
 
-Implements the full :class:`~traccio.providers.base.BankProvider` contract: the
-consent handshake (``start_authorization`` / ``complete_authorization``), account
-retrieval (``list_accounts``), and transaction retrieval (``fetch_transactions``,
-whose field-by-field normalization lives in
+Implements the full :class:`~traccio.providers.base.BankProvider` contract:
+institution discovery (``list_institutions``), the consent handshake
+(``start_authorization`` / ``complete_authorization``), account retrieval
+(``list_accounts``), and transaction retrieval (``fetch_transactions``, whose
+field-by-field normalization lives in
 :mod:`~traccio.providers.enable_banking.transactions`).
 
 The adapter is **stateless**: it generates the anti-CSRF ``state`` and returns
@@ -37,6 +38,7 @@ from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    Institution,
     ProviderAccount,
     ProviderError,
     SyncContext,
@@ -222,6 +224,17 @@ class EnableBankingProvider(BankProvider):
                 raise ProviderError("Enable Banking transactions paging did not terminate")
             seen_keys.add(continuation_key)
         return transactions
+
+    def list_institutions(self, *, country: str) -> list[Institution]:
+        aspsps = self._client.list_aspsps(country)
+        institutions = []
+        for aspsp in aspsps:
+            name = aspsp.get("name")
+            aspsp_country = aspsp.get("country")
+            if not isinstance(name, str) or not isinstance(aspsp_country, str):
+                raise ProviderError("Enable Banking /aspsps entry is missing 'name' or 'country'")
+            institutions.append(Institution(name=name, country=aspsp_country))
+        return institutions
 
     def _resolve_account_uid(
         self, credentials: str, identification_hash: str, *, extra_headers: dict[str, str] | None

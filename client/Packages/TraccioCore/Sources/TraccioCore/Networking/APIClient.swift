@@ -653,6 +653,44 @@ public struct APIClient: Sendable {
         return envelope.connections
     }
 
+    /// List the banks the caller can start a new connection with.
+    ///
+    /// Parameters
+    /// ----------
+    /// country:
+    ///     ISO 3166-1 alpha-2 country to list institutions for.
+    ///
+    /// Returns
+    /// -------
+    /// The institutions offered in `country`, in the provider's own order.
+    public func institutions(country: String) async throws -> [InstitutionResponse] {
+        let envelope: InstitutionsResponse = try await get(
+            "connections/institutions", query: [URLQueryItem(name: "country", value: country)]
+        )
+        return envelope.institutions
+    }
+
+    /// Start a new bank connection.
+    ///
+    /// Mirrors `POST /connections`: begins a fresh SCA round with the given
+    /// institution rather than re-arming an existing connection.
+    ///
+    /// Parameters
+    /// ----------
+    /// institution:
+    ///     The provider-scoped institution identifier, typically picked from
+    ///     `institutions(country:)`.
+    /// country:
+    ///     ISO 3166-1 alpha-2 country the institution was offered in.
+    ///
+    /// Returns
+    /// -------
+    /// Where to send the user — open `authorizationURL` in the system
+    /// browser, never an in-app `WebView`.
+    public func startConnection(institution: String, country: String) async throws -> StartConnectionResponse {
+        try await post("connections", body: StartConnectionRequest(institution: institution, country: country))
+    }
+
     /// Sync a connection's accounts and transactions with the bank.
     ///
     /// The client's first write action: a real provider call with a real

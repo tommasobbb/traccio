@@ -107,4 +107,56 @@ struct AccountsViewModelTests {
         let recorded = await client.accountAppearanceUpdates
         #expect(recorded == [.init(id: Self.accountID, color: .teal, icon: .savings)])
     }
+
+    @Test func loadInstitutionsPublishesTheInstitutionsForTheGivenCountry() async throws {
+        let client = FakeAPIClient()
+        await client.setInstitutions([InstitutionResponse(name: "TEST BANK 01", country: "IT")])
+        let model = AccountsViewModel(client: client)
+
+        await model.loadInstitutions(country: "IT")
+
+        #expect(model.institutionsLoadFailed == false)
+        #expect(model.institutions.map(\.name) == ["TEST BANK 01"])
+        let recorded = await client.receivedInstitutionsCountries
+        #expect(recorded == ["IT"])
+    }
+
+    @Test func loadInstitutionsOnFailureClearsInstitutionsAndSetsLoadFailed() async throws {
+        let client = FakeAPIClient()
+        await client.setInstitutions([InstitutionResponse(name: "TEST BANK 01", country: "IT")])
+        let model = AccountsViewModel(client: client)
+        await model.loadInstitutions(country: "IT")
+        await client.setInstitutionsError(FakeAPIError())
+
+        await model.loadInstitutions(country: "IT")
+
+        #expect(model.institutionsLoadFailed == true)
+        #expect(model.institutions.isEmpty)
+    }
+
+    @Test func startConnectionReturnsTheAuthorizationURL() async throws {
+        let client = FakeAPIClient()
+        await client.setStartConnectionResult(
+            StartConnectionResponse(connectionID: UUID(), authorizationURL: "https://sca.example.test/go")
+        )
+        let model = AccountsViewModel(client: client)
+
+        let url = await model.startConnection(institution: "TEST BANK 01", country: "IT")
+
+        #expect(url == URL(string: "https://sca.example.test/go"))
+        #expect(model.startConnectionFailed == false)
+        let recorded = await client.startedConnections
+        #expect(recorded == [.init(institution: "TEST BANK 01", country: "IT")])
+    }
+
+    @Test func startConnectionOnFailureSetsStartConnectionFailedAndReturnsNil() async throws {
+        let client = FakeAPIClient()
+        await client.setStartConnectionError(FakeAPIError())
+        let model = AccountsViewModel(client: client)
+
+        let url = await model.startConnection(institution: "TEST BANK 01", country: "IT")
+
+        #expect(url == nil)
+        #expect(model.startConnectionFailed == true)
+    }
 }

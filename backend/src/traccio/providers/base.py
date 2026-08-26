@@ -2,11 +2,11 @@
 
 ``providers/`` is an anti-corruption layer (see ``docs/architecture.md``):
 provider-shaped data stops here, and everything above sees only domain objects.
-Every adapter implements the same interface — start authorization, complete
-authorization, list accounts, fetch transactions — so adding a second provider
-never requires touching ``services/``. Nothing above ``providers/`` may branch
-on which provider or which bank produced a record; if it needs to, the adapter
-failed to normalize.
+Every adapter implements the same interface — list institutions, start
+authorization, complete authorization, list accounts, fetch transactions — so
+adding a second provider never requires touching ``services/``. Nothing above
+``providers/`` may branch on which provider or which bank produced a record;
+if it needs to, the adapter failed to normalize.
 
 Each adapter owns three normalization duties, documented per adapter in
 ``docs/openbanking.md``:
@@ -145,6 +145,30 @@ class ProviderAccount(BaseModel):
     name: str | None = None
 
 
+class Institution(BaseModel):
+    """One bank a provider supports authorizing, in provider-agnostic form.
+
+    Returned by :meth:`BankProvider.list_institutions` — public institution
+    metadata only (no personal or consent data), used to feed
+    :class:`~traccio.api.schemas.connections.StartConnectionRequest`'s
+    ``institution``/``country`` fields from a picker rather than requiring the
+    caller to already know the provider's exact institution name.
+
+    Attributes
+    ----------
+    name : str
+        The provider-scoped institution identifier — pass this straight back
+        as ``StartConnectionRequest.institution``.
+    country : str
+        ISO 3166-1 alpha-2 country the institution is offered in.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    country: str
+
+
 class SyncContext(BaseModel):
     """Whether a user is actively waiting on a sync.
 
@@ -168,7 +192,7 @@ class SyncContext(BaseModel):
 class BankProvider(ABC):
     """Interface every bank adapter implements.
 
-    Concrete adapters live alongside this module (one per provider). The four
+    Concrete adapters live alongside this module (one per provider). The five
     operations below are the only surface the layers above ``providers/`` see;
     they exchange the provider-agnostic DTOs in this module and the domain
     entities, never provider-shaped payloads. See the module docstring for the
@@ -284,4 +308,26 @@ class BankProvider(ABC):
         -------
         list[Transaction]
             Normalized domain transactions.
+        """
+
+    @abstractmethod
+    def list_institutions(self, *, country: str) -> list[Institution]:
+        """List the institutions this provider supports authorizing in ``country``.
+
+        Feeds a client-side picker so the user (and
+        :meth:`start_authorization`'s ``institution`` argument) never has to
+        already know the provider's exact institution name — the same
+        anti-corruption reasoning as every other method here: the caller sees
+        only :class:`Institution`, never a provider-shaped payload.
+
+        Parameters
+        ----------
+        country : str
+            ISO 3166-1 alpha-2 country code (e.g. ``"IT"``).
+
+        Returns
+        -------
+        list[Institution]
+            The institutions offered in ``country``, in the provider's own
+            order.
         """

@@ -38,6 +38,7 @@ from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    Institution,
     ProviderAccount,
     ProviderError,
     SyncContext,
@@ -71,6 +72,9 @@ class FakeProvider(BankProvider):
     def complete_authorization(
         self, *, session_reference: str, callback_payload: Mapping[str, str]
     ) -> AuthorizationResult:
+        raise NotImplementedError
+
+    def list_institutions(self, *, country: str) -> list[Institution]:
         raise NotImplementedError
 
     def list_accounts(self, *, credentials: str, context: SyncContext) -> list[ProviderAccount]:

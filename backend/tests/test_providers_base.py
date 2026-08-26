@@ -24,6 +24,7 @@ from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    Institution,
     ProviderAccount,
     SyncContext,
 )
@@ -73,6 +74,9 @@ class FakeBankProvider(BankProvider):
                 identification_hash="hash-01",
             )
         ]
+
+    def list_institutions(self, *, country: str) -> list[Institution]:
+        return [Institution(name="TEST BANK 01", country=country)]
 
     def fetch_transactions(
         self,
@@ -131,6 +135,17 @@ def test_list_accounts_returns_provider_accounts() -> None:
     assert len(accounts) == 1
     assert isinstance(accounts[0], ProviderAccount)
     assert accounts[0].identification_hash == "hash-01"
+
+
+def test_list_institutions_returns_institutions() -> None:
+    """list_institutions returns provider-agnostic institutions, not raw payloads."""
+    provider = FakeBankProvider()
+
+    institutions = provider.list_institutions(country="IT")
+
+    assert len(institutions) == 1
+    assert isinstance(institutions[0], Institution)
+    assert institutions[0].country == "IT"
 
 
 def test_fetch_transactions_returns_domain_transactions() -> None:

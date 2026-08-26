@@ -74,6 +74,21 @@ final class AccountsViewModel {
     /// The most recent account-update failure, if any, for the editor sheet
     /// to surface.
     private(set) var accountActionFailure: AccountActionFailure?
+    /// Institutions offered for a new connection, as loaded by
+    /// `loadInstitutions(country:)`. Plain best-effort state rather than its
+    /// own `State` enum — a failed load just leaves this empty and
+    /// `institutionsLoadFailed` set, same posture as `accounts`.
+    private(set) var institutions: [InstitutionResponse] = []
+    /// Set while `loadInstitutions(country:)` is in flight.
+    private(set) var isLoadingInstitutions = false
+    /// Whether the most recent `loadInstitutions(country:)` call failed.
+    private(set) var institutionsLoadFailed = false
+    /// Set while `startConnection(institution:country:)` is in flight, so the
+    /// picker can disable its rows rather than let two starts race.
+    private(set) var isStartingConnection = false
+    /// Whether the most recent `startConnection(institution:country:)` call
+    /// failed.
+    private(set) var startConnectionFailed = false
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -167,6 +182,55 @@ final class AccountsViewModel {
             return URL(string: result.authorizationURL)
         } catch {
             actionFailure = .generic(connectionID: connectionID)
+            return nil
+        }
+    }
+
+    /// Load the institutions offered for a new connection in `country`.
+    ///
+    /// Parameters
+    /// ----------
+    /// country:
+    ///     ISO 3166-1 alpha-2 country to list institutions for.
+    func loadInstitutions(country: String) async {
+        isLoadingInstitutions = true
+        defer { isLoadingInstitutions = false }
+        institutionsLoadFailed = false
+
+        do {
+            institutions = try await client.institutions(country: country)
+        } catch {
+            institutions = []
+            institutionsLoadFailed = true
+        }
+    }
+
+    /// Start a new bank connection.
+    ///
+    /// Parameters
+    /// ----------
+    /// institution:
+    ///     The provider-scoped institution identifier, picked from
+    ///     `institutions`.
+    /// country:
+    ///     ISO 3166-1 alpha-2 country the institution was offered in.
+    ///
+    /// Returns
+    /// -------
+    /// The URL to open in the system browser — never an in-app `WebView`
+    /// (`.claude/rules/data-safety.md`) — or `nil` on failure, having already
+    /// recorded `startConnectionFailed`.
+    func startConnection(institution: String, country: String) async -> URL? {
+        guard !isStartingConnection else { return nil }
+        isStartingConnection = true
+        defer { isStartingConnection = false }
+        startConnectionFailed = false
+
+        do {
+            let result = try await client.startConnection(institution: institution, country: country)
+            return URL(string: result.authorizationURL)
+        } catch {
+            startConnectionFailed = true
             return nil
         }
     }

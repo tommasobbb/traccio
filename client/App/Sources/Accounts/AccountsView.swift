@@ -5,12 +5,11 @@ import TraccioCore
 /// consent-expiry warning the roadmap's M3 item calls for, and the client's
 /// first write actions: a manual per-connection sync and re-authorization.
 ///
-/// Follows `docs/design/canvas/Accounts.dc.html`, minus "Collega un nuovo
-/// conto" — `POST /connections` needs an institution picker fed by an
-/// institution-listing endpoint that does not exist yet (`tasks/backlog.md`).
+/// Follows `docs/design/canvas/Accounts.dc.html`.
 struct AccountsView: View {
     @State private var model = AccountsViewModel()
     @State private var editingAccount: AccountResponse?
+    @State private var isPickingInstitution = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -52,6 +51,33 @@ struct AccountsView: View {
                 onCancel: { editingAccount = nil }
             )
         }
+        .sheet(isPresented: $isPickingInstitution) {
+            StartConnectionSheet(
+                institutions: model.institutions,
+                isLoading: model.isLoadingInstitutions,
+                loadFailed: model.institutionsLoadFailed,
+                isStarting: model.isStartingConnection,
+                startFailed: model.startConnectionFailed,
+                onSelect: { institution in Task { await startConnection(institution) } },
+                onRetryLoad: { Task { await model.loadInstitutions(country: Self.institutionCountry) } },
+                onCancel: { isPickingInstitution = false }
+            )
+            .task { await model.loadInstitutions(country: Self.institutionCountry) }
+        }
+    }
+
+    /// The only country institutions are offered in — Italian-only is a
+    /// locked M3 product decision, not a client limitation to lift later.
+    private static let institutionCountry = "IT"
+
+    private func startConnection(_ institution: InstitutionResponse) async {
+        guard
+            let url = await model.startConnection(
+                institution: institution.name, country: institution.country
+            )
+        else { return }
+        isPickingInstitution = false
+        openURL(url)
     }
 
     private var accountFailureMessage: String {
@@ -75,7 +101,12 @@ struct AccountsView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .loaded(let connections) where connections.isEmpty:
-            EmptyState(systemImage: "creditcard", title: "Nessun conto collegato")
+            EmptyState(
+                systemImage: "creditcard",
+                title: "Nessun conto collegato",
+                actionTitle: "Collega un conto",
+                action: { isPickingInstitution = true }
+            )
         case .loaded(let connections):
             list(connections)
         case .failed:
@@ -111,9 +142,33 @@ struct AccountsView: View {
                 ForEach(groups, id: \.groupID) { group in
                     connectionCard(group)
                 }
+                addConnectionCard
             }
             .padding(20)
         }
+    }
+
+    /// The dashed "Collega un nuovo conto" entry point, per
+    /// `docs/design/canvas/Accounts.dc.html`'s `.add-card`.
+    private var addConnectionCard: some View {
+        Button {
+            isPickingInstitution = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 13, weight: .bold))
+                Text("Collega un nuovo conto")
+                    .font(Typography.caption.weight(.bold))
+            }
+            .foregroundStyle(Palette.inkSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// Copy for a failed manual sync or re-authorization

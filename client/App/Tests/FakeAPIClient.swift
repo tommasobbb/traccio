@@ -84,6 +84,12 @@ actor FakeAPIClient: APIClientProtocol {
     var reimbursementsError: Error?
     var deleteReimbursementError: Error?
     var connectionsToReturn: [ConnectionResponse] = []
+    var institutionsToReturn: [InstitutionResponse] = []
+    var institutionsError: Error?
+    var startConnectionToReturn = StartConnectionResponse(
+        connectionID: UUID(), authorizationURL: "https://sca.example.test/go"
+    )
+    var startConnectionError: Error?
     var syncConnectionToReturn = SyncResponse(accountsSynced: 0, transactionsSynced: 0)
     var reauthorizeConnectionToReturn = StartConnectionResponse(
         connectionID: UUID(), authorizationURL: "https://sca.example.test/go"
@@ -153,6 +159,17 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var unassignedEventMembers: [RecordedEventMember] = []
     private(set) var renamedAccounts: [RecordedAccountRename] = []
     private(set) var accountAppearanceUpdates: [RecordedAccountAppearance] = []
+    /// Every `country` passed to `institutions(country:)`, in call order.
+    private(set) var receivedInstitutionsCountries: [String] = []
+    /// Every `startConnection(institution:country:)` call, for asserting
+    /// exactly which institution and country were sent.
+    private(set) var startedConnections: [RecordedStartConnection] = []
+
+    /// A recorded `startConnection(institution:country:)` call.
+    struct RecordedStartConnection: Equatable {
+        let institution: String
+        let country: String
+    }
 
     /// A recorded `renameCategory(id:name:)` call, for asserting exactly
     /// which category was renamed to what.
@@ -498,6 +515,22 @@ actor FakeAPIClient: APIClientProtocol {
         unassignTransactionError = error
     }
 
+    func setInstitutions(_ institutions: [InstitutionResponse]) {
+        institutionsToReturn = institutions
+    }
+
+    func setInstitutionsError(_ error: Error) {
+        institutionsError = error
+    }
+
+    func setStartConnectionResult(_ result: StartConnectionResponse) {
+        startConnectionToReturn = result
+    }
+
+    func setStartConnectionError(_ error: Error) {
+        startConnectionError = error
+    }
+
     // MARK: APIClientProtocol
 
     func accounts() async throws -> [AccountResponse] {
@@ -692,6 +725,18 @@ actor FakeAPIClient: APIClientProtocol {
 
     func connections() async throws -> [ConnectionResponse] {
         connectionsToReturn
+    }
+
+    func institutions(country: String) async throws -> [InstitutionResponse] {
+        receivedInstitutionsCountries.append(country)
+        if let institutionsError { throw institutionsError }
+        return institutionsToReturn
+    }
+
+    func startConnection(institution: String, country: String) async throws -> StartConnectionResponse {
+        startedConnections.append(RecordedStartConnection(institution: institution, country: country))
+        if let startConnectionError { throw startConnectionError }
+        return startConnectionToReturn
     }
 
     func syncConnection(connectionID: UUID) async throws -> SyncResponse {

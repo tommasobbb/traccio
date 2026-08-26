@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from traccio.domain.consent import consent_state, days_until_expiry
 from traccio.domain.enums import ConnectionStatus, ConsentState
 from traccio.domain.models import Connection
+from traccio.providers.base import Institution
 
 
 class StartConnectionRequest(BaseModel):
@@ -42,6 +43,43 @@ class StartConnectionResponse(BaseModel):
 
     connection_id: UUID
     authorization_url: str
+
+
+class InstitutionResponse(BaseModel):
+    """One bank the caller can authorize, as returned to the client.
+
+    Attributes
+    ----------
+    name : str
+        The provider-scoped institution identifier — pass this straight back
+        as ``StartConnectionRequest.institution``.
+    country : str
+        ISO 3166-1 alpha-2 country the institution is offered in.
+    """
+
+    name: str
+    country: str
+
+    @classmethod
+    def from_domain(cls, institution: Institution) -> "InstitutionResponse":
+        """Project a provider :class:`~traccio.providers.base.Institution`."""
+        return cls(name=institution.name, country=institution.country)
+
+
+class InstitutionsResponse(BaseModel):
+    """Envelope for the institution list.
+
+    A wrapper object rather than a bare array leaves room for metadata later
+    without breaking the generated Swift client.
+
+    Attributes
+    ----------
+    institutions : list[InstitutionResponse]
+        The institutions offered in the requested country, in the provider's
+        own order.
+    """
+
+    institutions: list[InstitutionResponse]
 
 
 class SyncResponse(BaseModel):

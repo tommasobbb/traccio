@@ -436,6 +436,63 @@ def test_provider_name_is_stable() -> None:
     assert provider.name == "enable_banking"
 
 
+# --- list_institutions ---
+
+
+def test_list_institutions_maps_aspsps_to_institutions() -> None:
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["country"] = request.url.params.get("country")
+        return httpx.Response(
+            200,
+            json={
+                "aspsps": [
+                    {"name": "Test Bank 01", "country": "IT"},
+                    {"name": "Test Bank 02", "country": "IT"},
+                ]
+            },
+        )
+
+    provider = _provider(httpx.MockTransport(handler))
+
+    institutions = provider.list_institutions(country="IT")
+
+    assert captured["path"] == "/aspsps"
+    assert captured["country"] == "IT"
+    assert [i.name for i in institutions] == ["Test Bank 01", "Test Bank 02"]
+    assert all(i.country == "IT" for i in institutions)
+
+
+def test_list_institutions_returns_empty_for_no_matches() -> None:
+    provider = _provider(
+        httpx.MockTransport(lambda request: httpx.Response(200, json={"aspsps": []}))
+    )
+
+    assert provider.list_institutions(country="FR") == []
+
+
+def test_list_institutions_rejects_an_entry_missing_name_or_country() -> None:
+    provider = _provider(
+        httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"aspsps": [{"name": "Test Bank 01"}]})
+        )
+    )
+
+    with pytest.raises(ProviderError):
+        provider.list_institutions(country="IT")
+
+
+def test_list_institutions_propagates_a_provider_error() -> None:
+    provider = _provider(
+        httpx.MockTransport(lambda request: httpx.Response(500, json={"error": "boom"}))
+    )
+
+    with pytest.raises(ProviderError):
+        provider.list_institutions(country="IT")
+
+
 # --- PSU-present headers (ADR 0011): built and tested, off by default. ---
 
 

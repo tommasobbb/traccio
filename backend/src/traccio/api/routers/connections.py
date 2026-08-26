@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -32,6 +32,8 @@ from traccio.api.deps import current_user_id, get_bank_provider, get_token_ciphe
 from traccio.api.schemas.connections import (
     ConnectionResponse,
     ConnectionsResponse,
+    InstitutionResponse,
+    InstitutionsResponse,
     StartConnectionRequest,
     StartConnectionResponse,
     SyncResponse,
@@ -76,6 +78,50 @@ _SUCCESS_PAGE = """<!doctype html>
 <p>Puoi chiudere questa scheda e tornare all'app.</p>
 </body></html>
 """
+
+
+@router.get("/connections/institutions", response_model=InstitutionsResponse)
+def list_institutions(
+    provider: Annotated[BankProvider, Depends(get_bank_provider)],
+    country: Annotated[str, Query()] = "IT",
+) -> InstitutionsResponse:
+    """List the banks the provider supports authorizing in ``country``.
+
+    Feeds a client-side picker for ``POST /connections``'s ``institution``
+    field, so "Collega un nuovo conto" no longer needs the user (or the
+    client) to already know a bank's exact provider-scoped name. Public
+    institution metadata only — not user-scoped, unlike every other endpoint
+    on this router.
+
+    Parameters
+    ----------
+    provider : BankProvider
+        The bank adapter (Enable Banking).
+    country : str, optional
+        ISO 3166-1 alpha-2 country code. Defaults to ``"IT"``.
+
+    Returns
+    -------
+    InstitutionsResponse
+        The institutions offered in ``country``, in the provider's own order.
+
+    Raises
+    ------
+    HTTPException
+        502 if the provider lookup fails.
+    """
+    try:
+        institutions = provider.list_institutions(country=country)
+    except ProviderError as exc:
+        raise HTTPException(status_code=502, detail="provider institution lookup failed") from exc
+
+    # Log the country and a count only — institution names are public, but
+    # there is nothing this handler needs to log beyond that (data-safety
+    # rules err toward identifiers/counts everywhere on this router).
+    logger.info("connections.institutions", country=country, count=len(institutions))
+    return InstitutionsResponse(
+        institutions=[InstitutionResponse.from_domain(institution) for institution in institutions]
+    )
 
 
 @router.post("/connections", response_model=StartConnectionResponse)

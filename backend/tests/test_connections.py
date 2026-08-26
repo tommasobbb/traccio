@@ -32,6 +32,7 @@ from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
     BankProvider,
+    Institution,
     ProviderAccount,
     ProviderError,
     SyncContext,
@@ -55,6 +56,12 @@ _PROVIDER_ACCOUNTS = [
         name="TEST CARD 01",
     ),
 ]
+# Synthetic institutions the fake adapter reports for `GET /connections/institutions`
+# (see data-safety rules).
+_INSTITUTIONS = [
+    Institution(name="Test Bank 01", country="IT"),
+    Institution(name="Test Bank 02", country="IT"),
+]
 
 
 class FakeProvider(BankProvider):
@@ -63,11 +70,26 @@ class FakeProvider(BankProvider):
     ``start_authorization`` always issues :data:`_STATE`; ``complete_authorization``
     returns :data:`_SESSION_ID` as the credential, or raises
     :class:`ProviderError` if the callback carried a bank error.
+
+    Parameters
+    ----------
+    institutions_error : bool, optional
+        When ``True``, ``list_institutions`` raises :class:`ProviderError`
+        instead of returning :data:`_INSTITUTIONS` — exercises the
+        endpoint's ``502`` path.
     """
+
+    def __init__(self, *, institutions_error: bool = False) -> None:
+        self.institutions_error = institutions_error
 
     @property
     def name(self) -> str:
         return "enable_banking"
+
+    def list_institutions(self, *, country: str) -> list[Institution]:
+        if self.institutions_error:
+            raise ProviderError("provider institution lookup failed")
+        return [institution for institution in _INSTITUTIONS if institution.country == country]
 
     def start_authorization(
         self, *, institution: str, country: str, redirect_url: str
@@ -127,7 +149,9 @@ def _sqlite_engine() -> Engine:
     return engine
 
 
-def _client(engine: Engine, cipher: TokenCipher) -> TestClient:
+def _client(
+    engine: Engine, cipher: TokenCipher, *, provider: BankProvider | None = None
+) -> TestClient:
     """Build a client bound to ``engine`` with the provider and cipher faked."""
 
     def override_get_session() -> Iterator[Session]:
@@ -139,7 +163,7 @@ def _client(engine: Engine, cipher: TokenCipher) -> TestClient:
 
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
-    app.dependency_overrides[get_bank_provider] = lambda: FakeProvider()
+    app.dependency_overrides[get_bank_provider] = lambda: provider or FakeProvider()
     app.dependency_overrides[get_token_cipher_dep] = lambda: cipher
     return TestClient(app)
 
@@ -165,6 +189,55 @@ def _activate_a_connection(client: TestClient) -> str:
     connection_id: str = start.json()["connection_id"]
     client.get("/connections/callback", params={"code": "AUTH-CODE-01", "state": _STATE})
     return connection_id
+
+
+def test_list_institutions_returns_the_providers_institutions() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    response = client.get("/connections/institutions", params={"country": "IT"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "institutions": [
+            {"name": "Test Bank 01", "country": "IT"},
+            {"name": "Test Bank 02", "country": "IT"},
+        ]
+    }
+
+
+def test_list_institutions_defaults_to_italy() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    response = client.get("/connections/institutions")
+
+    assert response.status_code == 200
+    assert len(response.json()["institutions"]) == 2
+
+
+def test_list_institutions_filters_by_country() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    response = client.get("/connections/institutions", params={"country": "FR"})
+
+    assert response.status_code == 200
+    assert response.json() == {"institutions": []}
+
+
+def test_list_institutions_wraps_a_provider_error_as_502() -> None:
+    engine = _sqlite_engine()
+    client = _client(
+        engine,
+        TokenCipher(Fernet.generate_key().decode()),
+        provider=FakeProvider(institutions_error=True),
+    )
+
+    response = client.get("/connections/institutions", params={"country": "IT"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "provider institution lookup failed"
 
 
 def test_start_connection_creates_pending_and_returns_url() -> None:
