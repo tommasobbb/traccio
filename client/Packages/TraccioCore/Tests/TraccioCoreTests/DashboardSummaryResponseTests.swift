@@ -237,6 +237,66 @@ struct DashboardSummaryResponseTests {
             )
         }
     }
+
+    // MARK: converted total (ADR 0021)
+
+    @Test func decodesAMissingConvertedBlockAsNil() throws {
+        // FX off (the default) — the two new keys are absent, not null.
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(Self.envelope.utf8)
+        )
+        #expect(response.converted == nil)
+        #expect(response.conversionUnavailable == nil)
+    }
+
+    @Test func decodesAConvertedTotalWithItsRates() throws {
+        let json = """
+            {
+              "currencies": [
+                {
+                  "currency": "USD", "spending": 12000, "income": 0, "net": -12000,
+                  "transaction_count": 2, "average_daily_spending": null,
+                  "by_category": [], "by_bucket": [], "by_account": [], "comparison": null
+                }
+              ],
+              "converted": {
+                "summary": {
+                  "currency": "EUR", "spending": 10300, "income": 0, "net": -10300,
+                  "transaction_count": 2, "average_daily_spending": null,
+                  "by_category": [], "by_bucket": [], "by_account": [], "comparison": null
+                },
+                "rates": [
+                  { "source_currency": "USD", "rate": "0.857", "rate_date": "2026-08-26" }
+                ],
+                "basis": "historical"
+              },
+              "conversion_unavailable": null
+            }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.conversionUnavailable == nil)
+        let converted = try #require(response.converted)
+        #expect(converted.summary.currency == "EUR")
+        #expect(converted.summary.spending == 10300)
+        #expect(converted.basis == "historical")
+        #expect(converted.rates.count == 1)
+        #expect(converted.rates[0].sourceCurrency == "USD")
+        #expect(converted.rates[0].rate == "0.857")
+        #expect(converted.rates[0].rateDate == CalendarDate(year: 2026, month: 8, day: 26))
+    }
+
+    @Test func decodesAConversionUnavailableReasonWithNoConvertedBlock() throws {
+        let json = """
+            { "currencies": [], "converted": null, "conversion_unavailable": "rates_unavailable" }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.converted == nil)
+        #expect(response.conversionUnavailable == "rates_unavailable")
+    }
 }
 
 /// Tests for `[CurrencySummaryResponse].primary()` — a presentation-only

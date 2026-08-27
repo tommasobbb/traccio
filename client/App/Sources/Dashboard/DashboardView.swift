@@ -147,41 +147,33 @@ struct DashboardView: View {
 
     @ViewBuilder
     private func summaryContent(_ summary: DashboardSummaryResponse) -> some View {
-        if let primary = summary.currencies.primary() {
+        // When the backend converted every currency into one base (ADR 0021,
+        // opt-in), the hero and every breakdown come from that combined
+        // summary; the per-currency figures move to a compact "Per valuta"
+        // card. Otherwise it is the pre-FX behaviour: a chosen primary
+        // currency up front, the rest listed separately and never summed.
+        if let converted = summary.converted {
+            heroCard(converted.summary)
+            conversionCaption(converted)
+
+            if summary.currencies.count > 1 {
+                otherCurrenciesCard(summary.currencies, combined: true)
+            }
+            breakdownCards(converted.summary)
+        } else if let primary = summary.currencies.primary() {
             heroCard(primary)
 
             let others = summary.currencies.filter { $0.currency != primary.currency }
             if !others.isEmpty {
-                otherCurrenciesCard(others)
+                otherCurrenciesCard(others, combined: false)
             }
-
-            // Only the primary currency gets a breakdown — same rule as the
-            // hero card, and for the same reason: a donut mixing currencies
-            // would misrepresent proportions Traccio never converts between
-            // (ADR 0007). Renders nothing at all when this currency's period
-            // was pure income (spending == 0), same as `DonutChart`'s own
-            // empty case.
-            categoryBreakdownCard(primary)
-
-            // Same primary-currency-only rule as the two cards above, for
-            // the same reason: a bar mixing currencies would misrepresent
-            // magnitudes Traccio never converts between (ADR 0007).
-            dailySpendingCard(primary)
-
-            // `comparison` is always requested (`DashboardViewModel.load()`),
-            // but still optional on the wire — absent only if the backend
-            // genuinely could not compute one, which should not happen given
-            // `compareStart`/`compareEnd` are always both sent together.
-            if let comparison = primary.comparison {
-                ComparisonCard(
-                    comparison: comparison, currency: primary.currency,
-                    previousPeriodLabel: title(for: model.period.previous())
-                )
+            if summary.conversionUnavailable != nil {
+                Text("Totale combinato non disponibile al momento.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-
-            AccountBreakdownCard(
-                accounts: primary.byAccount, currency: primary.currency, totalSpending: primary.spending
-            )
+            breakdownCards(primary)
         } else {
             Card {
                 EyebrowLabel(text: "Speso questo periodo")
@@ -190,6 +182,36 @@ struct DashboardView: View {
                     .foregroundStyle(Palette.inkSecondary)
             }
         }
+    }
+
+    /// The donut / trend / comparison / account cards, all read from one
+    /// `CurrencySummaryResponse` — the converted combined summary when FX is
+    /// on, else the primary currency. Each renders nothing when it has
+    /// nothing to show (pure-income period, no comparison, no accounts).
+    @ViewBuilder
+    private func breakdownCards(_ summary: CurrencySummaryResponse) -> some View {
+        categoryBreakdownCard(summary)
+        dailySpendingCard(summary)
+        if let comparison = summary.comparison {
+            ComparisonCard(
+                comparison: comparison, currency: summary.currency,
+                previousPeriodLabel: title(for: model.period.previous())
+            )
+        }
+        AccountBreakdownCard(
+            accounts: summary.byAccount, currency: summary.currency, totalSpending: summary.spending
+        )
+    }
+
+    /// The "convertito in EUR ai tassi BCE · dd/MM" line under the converted
+    /// hero. The date is the most recent rate actually applied.
+    private func conversionCaption(_ converted: ConvertedSummaryResponse) -> some View {
+        let latest = converted.rates.map(\.rateDate).max()
+        let suffix = latest.map { " · \(String(format: "%02d/%02d", $0.day, $0.month))" } ?? ""
+        return Text("Convertito in \(converted.summary.currency) ai tassi BCE\(suffix)")
+            .font(Typography.caption)
+            .foregroundStyle(Palette.inkTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
@@ -261,9 +283,15 @@ struct DashboardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func otherCurrenciesCard(_ others: [CurrencySummaryResponse]) -> some View {
+    /// Per-currency net figures. `combined == false` is the pre-FX card:
+    /// currencies *other* than the primary, explicitly not summed.
+    /// `combined == true` lists *every* currency and notes that they are
+    /// already folded into the converted total above.
+    private func otherCurrenciesCard(
+        _ others: [CurrencySummaryResponse], combined: Bool
+    ) -> some View {
         Card {
-            EyebrowLabel(text: "Altre valute")
+            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute")
             HStack(spacing: 10) {
                 ForEach(others, id: \.currency) { summary in
                     VStack(alignment: .leading, spacing: 3) {
@@ -286,12 +314,13 @@ struct DashboardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
-            // Every currency stands alone — Traccio never converts between
-            // currencies (ADR 0007), so these figures must never read as
-            // parts of one combined total.
-            Text("Non sommate all'importo principale — Traccio non applica cambi tra valute.")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
+            Text(
+                combined
+                    ? "Già incluse nell'importo convertito qui sopra, ai tassi BCE."
+                    : "Non sommate all'importo principale — Traccio non applica cambi tra valute."
+            )
+            .font(Typography.caption)
+            .foregroundStyle(Palette.inkTertiary)
         }
     }
 

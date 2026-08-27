@@ -78,16 +78,38 @@ public struct CurrencySummaryResponse: Codable, Sendable, Equatable {
 /// Envelope returned by `GET /dashboard/summary`.
 ///
 /// Mirrors the `DashboardSummaryResponse` schema in `docs/api/openapi.json`.
-/// Traccio never converts between currencies (no FX, ADR 0007): each entry
-/// in `currencies` stands alone and the entries must never be summed
-/// together to produce a single figure.
+/// The `currencies` entries each stand alone and must never be summed
+/// together by the client. A pre-summed total across all of them, converted
+/// into one base currency, is available on `converted` — but only when the
+/// backend has FX enabled (`TRACCIO_FX_ENABLED`, ADR 0021) and every
+/// currency could be converted; it is additive and never a replacement for
+/// the per-currency breakdown.
 public struct DashboardSummaryResponse: Codable, Sendable, Equatable {
     /// One summary per currency with transactions in the period, sorted by
     /// currency code. Empty when the period has no transactions at all.
     public let currencies: [CurrencySummaryResponse]
+    /// The opt-in combined total in the base currency (ADR 0021), or `nil`
+    /// when the feature is off, the period is empty, or a rate was missing.
+    public let converted: ConvertedSummaryResponse?
+    /// When FX is enabled but `converted` is still `nil`, a stable
+    /// value-free reason (`"rates_unavailable"` / `"missing_rate"`). `nil`
+    /// when the feature is off or conversion succeeded.
+    public let conversionUnavailable: String?
 
-    public init(currencies: [CurrencySummaryResponse]) {
+    private enum CodingKeys: String, CodingKey {
+        case currencies
+        case converted
+        case conversionUnavailable = "conversion_unavailable"
+    }
+
+    public init(
+        currencies: [CurrencySummaryResponse],
+        converted: ConvertedSummaryResponse? = nil,
+        conversionUnavailable: String? = nil
+    ) {
         self.currencies = currencies
+        self.converted = converted
+        self.conversionUnavailable = conversionUnavailable
     }
 }
 
