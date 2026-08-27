@@ -81,21 +81,22 @@ def require_api_token(
         )
 
 
-def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
-    """Construct a bank provider and its underlying client, outside FastAPI's DI.
+def build_enable_banking_client() -> EnableBankingClient:
+    """Construct the Enable Banking HTTP client from settings, outside FastAPI's DI.
 
-    Requires the Enable Banking application id and private-key path to be
-    configured; a missing one is a misconfiguration and fails loudly here
-    rather than deeper down. Returns the client alongside the provider so the
-    caller can close it — the two have different lifecycles depending on the
-    caller: :func:`get_bank_provider` closes it when one request ends, while
-    ``api/main.py``'s lifespan keeps one alive for the whole background
-    scheduler's run (``services/scheduler.py``).
+    Requires the application id and a private key (inline PEM or a path to
+    one) to be configured; a missing one is a misconfiguration and fails
+    loudly here rather than deeper down. Split out of
+    :func:`build_bank_provider` so a caller that needs raw provider access —
+    an operational script under ``scripts/``, not a request handler — can get
+    an authenticated client without also constructing an
+    :class:`EnableBankingProvider`.
 
     Returns
     -------
-    tuple[EnableBankingProvider, EnableBankingClient]
-        The provider, and the client whose ``.close()`` the caller owns.
+    EnableBankingClient
+        A client ready to call the Enable Banking API. The caller owns
+        ``.close()``.
     """
     settings = get_settings()
     if settings.enable_banking_application_id is None:
@@ -110,12 +111,29 @@ def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
             "TRACCIO_ENABLE_BANKING_PRIVATE_KEY_PATH is set"
         )
 
-    client = EnableBankingClient(
+    return EnableBankingClient(
         application_id=settings.enable_banking_application_id,
         private_key_pem=private_key_pem,
         base_url=settings.enable_banking_base_url,
     )
-    provider = EnableBankingProvider(client, send_psu_headers=settings.send_psu_headers)
+
+
+def build_bank_provider() -> tuple[EnableBankingProvider, EnableBankingClient]:
+    """Construct a bank provider and its underlying client, outside FastAPI's DI.
+
+    Returns the client alongside the provider so the caller can close it —
+    the two have different lifecycles depending on the caller:
+    :func:`get_bank_provider` closes it when one request ends, while
+    ``api/main.py``'s lifespan keeps one alive for the whole background
+    scheduler's run (``services/scheduler.py``).
+
+    Returns
+    -------
+    tuple[EnableBankingProvider, EnableBankingClient]
+        The provider, and the client whose ``.close()`` the caller owns.
+    """
+    client = build_enable_banking_client()
+    provider = EnableBankingProvider(client, send_psu_headers=get_settings().send_psu_headers)
     return provider, client
 
 

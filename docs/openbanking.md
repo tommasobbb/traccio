@@ -163,11 +163,19 @@ lands with the background scheduler.
   deterministic across syncs but `KeyStrategy.DERIVED_HASH` (lower confidence: two
   identical coffees on the same day collide). The strategy is stored so dedup can
   tell the cases apart.
-- **Dates.** `booking_date` → `booked_at` (absent while pending), `value_date` →
-  `value_date`; ISO dates parse to tz-aware UTC.
+- **Dates.** `booking_date` → `booked_at` (absent while pending, and no
+  fallback exists for it — `None` is the modelled "not yet settled" signal).
+  `value_date` → `value_date`, falling back to `transaction_date` when the
+  bank sends `value_date` as `null` — found 2026-08-20 debugging PayPal, whose
+  entries carry `booking_date`/`value_date` always `null` but
+  `transaction_date` always present. ISO dates parse to tz-aware UTC.
 - **Description.** The `remittance_information` lines are joined **verbatim** as
   the raw `description` — Enable Banking does not enrich (no clean merchant name).
-  A cleaned `display_description` is produced separately, later.
+  A bare string is also tolerated. When a bank sends no remittance text at all
+  (PayPal sends an always-empty list), the description falls back to the
+  counterparty's name on the side implied by `credit_debit_indicator`: the
+  creditor on a debit, the debtor on a credit. A cleaned `display_description`
+  is produced separately, later.
 - **Status.** `BOOK` → `booked`, `PDNG` → `pending`, `RJCT` → `rejected` (a
   refused/reversed movement, terminal like booked — first seen in the PayPal
   ledger). Any other code (e.g. `INFO`) is still refused, so an unmodelled status
@@ -279,7 +287,7 @@ redacted (`.claude/rules/data-safety.md`).
 | ---- | --------------------- | ----------------------- | ----------------------- |
 | Revolut | No — only `current` accounts, one per currency (EUR/CHF/TRY); no `CARD`/`SVGS` | Good — `remittance_information` populated on every entry (merchant/counterparty text), no enrichment | `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always, hash fallback never used. `product` absent → `Account.name` is `null`. Sign: `DBIT`→negative confirmed, no card inversion. A `pending` entry still carried a `booking_date` (so `booked_at` set while pending); `value_date` absent only on that pending row. First real sync 2026-08-20: 3 accounts, 374 transactions; re-sync added 0 duplicates. The API institution string is `Revolut`. |
 | Isybank | No — one `current` EUR account; no `CARD`/`SVGS` | Good — `remittance_information` populated on every entry, no enrichment | `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always. `product` absent → `Account.name` is `null` (same as Revolut). Every entry had both `booked_at` and `value_date`; no pending in the synced window. First real sync 2026-08-20: 1 account, 14 transactions; re-sync added 0 duplicates. API institution string: `Isybank`. |
-| PayPal | N/A — single `wallet` account | Good — rich entry payload (creditor/debtor, `merchant_category_code`, `remittance_information`) | Exposes one `cash_account_type='OTHR'`, `currency='XXX'` (ISO 4217 "no currency") account → `AccountKind.WALLET` (modelled 2026-08-20); the account-level `XXX` is stored as-is and the per-transaction currency (all `EUR` in the synced window) is authoritative. `product` **present** → `Account.name` is set (unlike Revolut/Isybank). `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always. Surfaced a second modelling gap: 1 entry with status `RJCT` (rejected/reversed) → now `TransactionStatus.REJECTED` (terminal like booked, zero effective spending at M2). Indicators `DBIT`/`CRDT` only, amounts all two-decimal. First real sync 2026-08-20: 1 account, 141 transactions (140 booked, 1 rejected); re-sync added 0 duplicates. API institution string: `PayPal`. |
+| PayPal | N/A — single `wallet` account | Poor as shipped — `booking_date`/`value_date` are always `null` (not absent) and `remittance_information` is always an always-empty list; `merchant_category_code` is also always `null`, contrary to what was originally recorded here. `transaction_date` is the only date PayPal ever sends, and `creditor`/`debtor.name` are the only description source, covering 140/141 entries (found and fixed 2026-08-27, see `docs/decisions/0019-...`; a field census of the raw payload is `scripts/eb_field_census.py`) | Exposes one `cash_account_type='OTHR'`, `currency='XXX'` (ISO 4217 "no currency") account → `AccountKind.WALLET` (modelled 2026-08-20); the account-level `XXX` is stored as-is and the per-transaction currency (all `EUR` in the synced window) is authoritative. `product` **present** → `Account.name` is set (unlike Revolut/Isybank). `entry_reference` on 100% of entries → `KeyStrategy.ENTRY_REFERENCE` always. Surfaced a second modelling gap: 1 entry with status `RJCT` (rejected/reversed) → now `TransactionStatus.REJECTED` (terminal like booked, zero effective spending at M2). Indicators `DBIT`/`CRDT` only, amounts all two-decimal. First real sync 2026-08-20: 1 account, 141 transactions (140 booked, 1 rejected); re-sync added 0 duplicates. API institution string: `PayPal`. |
 
 Coverage note (from ADR `0001`): card-account access was extended in March
 2026 to BPER, Postepay, Fineco, Banco BPM/Bibanca, and Nexi including YAP.

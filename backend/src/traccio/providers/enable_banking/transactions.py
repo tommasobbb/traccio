@@ -5,7 +5,7 @@ HTTP orchestration — uid resolution and paging) so the field-by-field mapping
 stays a set of small, pure, network-free functions that are exhaustively
 testable on their own.
 
-These functions are the anti-corruption boundary for the three transaction-level
+These functions are the anti-corruption boundary for the transaction-level
 normalization duties every adapter owes (``docs/architecture.md``,
 ``docs/domain.md``):
 
@@ -18,7 +18,19 @@ normalization duties every adapter owes (``docs/architecture.md``,
   a hash and record which :class:`~traccio.domain.enums.KeyStrategy` produced the
   key, so fallback-keyed rows can be treated as lower-confidence.
 - **Dates.** ``booked_at`` (when the bank settled it, absent while pending) is
-  distinct from ``value_date`` (when it affects the balance).
+  distinct from ``value_date`` (when it affects the balance). ``value_date``
+  falls back to ``transaction_date`` when the bank sends the former as
+  ``null`` (found 2026-08-27 debugging PayPal, whose entries carry
+  ``booking_date``/``value_date`` always ``null`` but ``transaction_date``
+  always present — see :data:`_DATE_SOURCES_VALUE`). ``booked_at`` gets no
+  such fallback: ``None`` is the modelled "not yet settled" signal, and
+  ``db/repositories.py::_transaction_when()`` already owns the
+  display-level ``coalesce(booked_at, value_date)`` in the right layer.
+- **Description.** Falls back from ``remittance_information`` to the
+  counterparty's name, on the side implied by ``credit_debit_indicator``
+  (see :func:`_to_description`), when the bank sends no remittance text at
+  all — again found on PayPal, which sends ``remittance_information`` as an
+  always-empty list.
 
 Money is integer minor units, never float: the decimal-string ``amount`` is
 parsed with :class:`decimal.Decimal` and scaled, never through ``float`` (root
@@ -61,6 +73,17 @@ _MINOR_UNIT_SCALE = Decimal(100)
 # Separator between hash components: a control char that cannot appear in the
 # joined fields, so distinct inputs cannot collide by concatenation.
 _HASH_SEP = "\x1f"
+# value_date fallback chain, most-specific-first: the bank's own value_date,
+# then transaction_date (ISO 20022's "when the movement occurred" — the
+# right substitute for an instant-ledger account where value_date is absent,
+# found on PayPal). A general chain, not a per-bank branch (`.claude/rules/
+# python.md`): a bank that sends value_date never reaches the second entry.
+_DATE_SOURCES_VALUE = ("value_date", "transaction_date")
+# Which counterparty is the interesting party for a description fallback,
+# keyed by the same credit/debit indicator `_amount_to_cents` already
+# validates: on a debit (money leaving), who was paid; on a credit (money
+# arriving), who paid. Direction-aware, not a per-bank rule.
+_COUNTERPARTY_KEY_FOR_INDICATOR = {_DEBIT: "creditor", _CREDIT: "debtor"}
 
 
 def to_transaction(raw: dict[str, Any], *, account: Account) -> Transaction:
@@ -103,8 +126,8 @@ def to_transaction(raw: dict[str, Any], *, account: Account) -> Transaction:
     cents = _amount_to_cents(amount_raw, indicator=indicator, kind=account.kind)
     status = _map_status(status_raw)
     booked_at = _parse_date(raw.get("booking_date"))
-    value_date = _parse_date(raw.get("value_date"))
-    description = _remittance_to_description(raw.get("remittance_information"))
+    value_date = _first_date(raw, _DATE_SOURCES_VALUE)
+    description = _to_description(raw, indicator=indicator)
     entry_reference = raw.get("entry_reference")
     stable_key, key_strategy = _derive_stable_key(
         entry_reference,
@@ -200,15 +223,69 @@ def _parse_date(raw: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
+def _first_date(raw: dict[str, Any], keys: tuple[str, ...]) -> datetime | None:
+    """Return the first parseable date among ``keys``, in order, or ``None``.
+
+    A general fallback chain over field *names*, not a branch on which bank
+    sent the entry (`.claude/rules/python.md`): a bank whose first key is
+    always populated never reaches the second. Each candidate is parsed with
+    :func:`_parse_date`, so a present-but-malformed value still fails loud.
+    """
+    for key in keys:
+        parsed = _parse_date(raw.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _to_description(raw: dict[str, Any], *, indicator: str) -> str:
+    """Resolve the raw description: remittance text, else the counterparty's name.
+
+    ``remittance_information`` (the bank's own free text) wins when present;
+    when a bank sends none — PayPal sends it as an always-empty list — the
+    counterparty *relative to the direction of the movement* is a reasonable
+    substitute: who was paid on a debit, who paid on a credit
+    (:data:`_COUNTERPARTY_KEY_FOR_INDICATOR`). Falls to ``""`` if neither
+    source has anything, same as before this fallback existed.
+    """
+    remittance = _remittance_to_description(raw.get("remittance_information"))
+    if remittance:
+        return remittance
+    return _counterparty_name(raw, indicator=indicator)
+
+
+def _counterparty_name(raw: dict[str, Any], *, indicator: str) -> str:
+    """The counterparty's name for ``indicator``'s direction, or ``""``.
+
+    Deliberately tolerant of any unexpected shape — unlike
+    :func:`_remittance_to_description`, this is an *optional* fallback, and a
+    malformed value here must not fail an otherwise valid sync.
+    """
+    key = _COUNTERPARTY_KEY_FOR_INDICATOR.get(indicator)
+    if key is None:
+        return ""
+    party = raw.get(key)
+    if not isinstance(party, dict):
+        return ""
+    name = party.get("name")
+    return name if isinstance(name, str) else ""
+
+
 def _remittance_to_description(raw: object) -> str:
     """Join the ``remittance_information`` lines into a raw description.
 
     Enable Banking gives an array of free-text lines (no clean merchant name — it
     does not enrich). They are preserved verbatim as ``description``; producing a
-    cleaned ``display_description`` is separate, later work. Absent → empty.
+    cleaned ``display_description`` is separate, later work. Absent → empty. A
+    bare string is also tolerated and returned verbatim — hardening for a
+    generic JSON-schema variation (a scalar instead of a one-element array),
+    not something observed from any bank so far: PayPal's actual gap is an
+    always-*empty* list, already handled by the ``list`` branch below.
     """
     if raw is None:
         return ""
+    if isinstance(raw, str):
+        return raw
     if not isinstance(raw, list):
         raise ProviderError("Enable Banking transaction remittance information is malformed")
     return " ".join(str(line) for line in raw)

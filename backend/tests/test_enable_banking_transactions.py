@@ -5,6 +5,7 @@ Every value is synthetic — invented amounts, ``"TEST MERCHANT 01"`` descriptio
 (see ``.claude/rules/data-safety.md``).
 """
 
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -150,3 +151,156 @@ def test_missing_amount_block_is_rejected() -> None:
 def test_malformed_date_is_rejected() -> None:
     with pytest.raises(ProviderError):
         to_transaction(_entry(booking_date="not-a-date"), account=_account())
+
+
+# -- value_date fallback chain (found 2026-08-27 debugging PayPal) ----------
+
+
+def test_value_date_falls_back_to_transaction_date_when_value_date_missing() -> None:
+    entry = _entry(value_date=None, transaction_date="2026-08-17")
+    tx = to_transaction(entry, account=_account())
+    assert tx.value_date == datetime(2026, 8, 17, tzinfo=UTC)
+
+
+def test_value_date_wins_over_transaction_date_when_both_present() -> None:
+    # _entry()'s value_date is 2026-08-16; a transaction_date must not override it.
+    tx = to_transaction(_entry(transaction_date="2099-01-01"), account=_account())
+    assert tx.value_date == datetime(2026, 8, 16, tzinfo=UTC)
+
+
+def test_value_date_is_none_when_no_date_source_is_present() -> None:
+    tx = to_transaction(_entry(value_date=None), account=_account())
+    assert tx.value_date is None
+
+
+def test_booked_at_has_no_fallback_even_when_transaction_date_present() -> None:
+    # booked_at stays the modelled "not yet settled" signal — pins the B1
+    # decision that only value_date gets a fallback, never booked_at.
+    entry = _entry(booking_date=None, value_date=None, transaction_date="2026-08-17")
+    tx = to_transaction(entry, account=_account())
+    assert tx.booked_at is None
+    assert tx.value_date == datetime(2026, 8, 17, tzinfo=UTC)
+
+
+def test_malformed_transaction_date_is_rejected() -> None:
+    entry = _entry(value_date=None, transaction_date="not-a-date")
+    with pytest.raises(ProviderError):
+        to_transaction(entry, account=_account())
+
+
+# -- description fallback chain (found 2026-08-27 debugging PayPal) --------
+
+
+def test_remittance_information_as_plain_string_is_accepted() -> None:
+    tx = to_transaction(_entry(remittance_information="TEST MERCHANT 02"), account=_account())
+    assert tx.description == "TEST MERCHANT 02"
+
+
+def test_debit_description_falls_back_to_creditor_name() -> None:
+    entry = _entry(
+        credit_debit_indicator="DBIT",
+        remittance_information=None,
+        creditor={"name": "TEST CREDITOR 01"},
+    )
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == "TEST CREDITOR 01"
+
+
+def test_credit_description_falls_back_to_debtor_name() -> None:
+    entry = _entry(
+        credit_debit_indicator="CRDT",
+        remittance_information=None,
+        debtor={"name": "TEST DEBTOR 01"},
+    )
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == "TEST DEBTOR 01"
+
+
+def test_wrong_direction_counterparty_is_not_used() -> None:
+    # A debit only looks at creditor; a debtor present alongside it is ignored.
+    entry = _entry(
+        credit_debit_indicator="DBIT",
+        remittance_information=None,
+        debtor={"name": "TEST DEBTOR 01"},
+    )
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == ""
+
+
+def test_empty_remittance_list_falls_back_to_counterparty_name() -> None:
+    entry = _entry(remittance_information=[], creditor={"name": "TEST CREDITOR 01"})
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == "TEST CREDITOR 01"
+
+
+def test_remittance_wins_over_counterparty_name() -> None:
+    entry = _entry(
+        remittance_information=["TEST MERCHANT 01"],
+        creditor={"name": "TEST CREDITOR 01"},
+    )
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == "TEST MERCHANT 01"
+
+
+def test_malformed_counterparty_yields_empty_description_without_raising() -> None:
+    entry = _entry(remittance_information=None, creditor="not-a-dict")
+    tx = to_transaction(entry, account=_account())
+    assert tx.description == ""
+
+    entry_bad_name = _entry(remittance_information=None, creditor={"name": 123})
+    tx_bad_name = to_transaction(entry_bad_name, account=_account())
+    assert tx_bad_name.description == ""
+
+
+# -- the regression test that would have caught the PayPal bug -------------
+
+
+def test_paypal_shaped_entry_gets_a_date_and_a_description() -> None:
+    """No booking_date, no value_date, no remittance_information — PayPal's
+    actual shape. Both fallback chains must fire together."""
+    entry = _entry(
+        booking_date=None,
+        value_date=None,
+        remittance_information=None,
+        transaction_date="2026-08-20",
+        creditor={"name": "TEST CREDITOR 01"},
+    )
+    tx = to_transaction(entry, account=_account())
+
+    assert tx.value_date == datetime(2026, 8, 20, tzinfo=UTC)
+    assert tx.description == "TEST CREDITOR 01"
+    assert tx.booked_at is None
+    assert tx.key_strategy is KeyStrategy.ENTRY_REFERENCE
+
+
+# -- B4: the derived-hash key uses the resolved (post-fallback) values -----
+
+
+def test_derived_hash_uses_resolved_value_date_and_description() -> None:
+    account = _account()
+    entry = _entry(
+        entry_reference=None,
+        booking_date=None,
+        value_date=None,
+        remittance_information=None,
+        transaction_date="2026-08-20",
+        creditor={"name": "TEST CREDITOR 01"},
+    )
+    tx = to_transaction(entry, account=account)
+    assert tx.key_strategy is KeyStrategy.DERIVED_HASH
+
+    resolved_components = [
+        str(account.id),
+        datetime(2026, 8, 20, tzinfo=UTC).isoformat(),
+        str(tx.money.amount),
+        "EUR",
+        "TEST CREDITOR 01",
+    ]
+    expected_digest = hashlib.sha256("\x1f".join(resolved_components).encode("utf-8")).hexdigest()
+    assert tx.stable_key == expected_digest
+
+    # Pin against the alternative: hashing the raw pre-fallback values (no
+    # value_date, no description) would give a different, wrong key.
+    raw_components = [str(account.id), "", str(tx.money.amount), "EUR", ""]
+    raw_digest = hashlib.sha256("\x1f".join(raw_components).encode("utf-8")).hexdigest()
+    assert tx.stable_key != raw_digest

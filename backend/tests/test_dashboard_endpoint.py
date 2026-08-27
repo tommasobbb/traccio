@@ -323,9 +323,7 @@ def test_summary_by_category_rolls_a_child_up_into_its_root() -> None:
     dev_user_id = get_settings().dev_user_id
     engine = _sqlite_engine()
     root_id = _seed_category(engine, user_id=dev_user_id, name="Dining out")
-    child_id = _seed_category(
-        engine, user_id=dev_user_id, name="Coffee", parent_id=UUID(root_id)
-    )
+    child_id = _seed_category(engine, user_id=dev_user_id, name="Coffee", parent_id=UUID(root_id))
     _seed_tx(
         engine,
         user_id=dev_user_id,
@@ -500,9 +498,7 @@ def test_summary_rejects_an_incomplete_comparison_period() -> None:
     engine = _sqlite_engine()
     client = _client(engine)
 
-    response = client.get(
-        "/dashboard/summary", params={"compare_start": "2026-07-01T00:00:00Z"}
-    )
+    response = client.get("/dashboard/summary", params={"compare_start": "2026-07-01T00:00:00Z"})
 
     assert response.status_code == 422
     assert response.json()["detail"] == "incomplete_comparison_period"

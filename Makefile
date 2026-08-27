@@ -28,6 +28,18 @@ run-tls: db-upgrade ## Avvia il backend in https locale (cert self-signed) per i
 eb-aspsps: ## Elenca gli ASPSP Enable Banking per un paese (COUNTRY=IT), valida l'auth
 	cd $(BACKEND) && uv run python scripts/eb_smoke.py --country $(COUNTRY)
 
+eb-connections: ## Elenca le connessioni dell'utente dev (id, provider, stato)
+	cd $(BACKEND) && uv run python scripts/eb_field_census.py --list
+
+CONNECTION ?=
+eb-census: ## Censisce i campi (solo presenza, mai valori) delle transazioni di una connessione
+	cd $(BACKEND) && uv run python scripts/eb_field_census.py --connection-id $(CONNECTION) $(CENSUS_ARGS)
+
+APPLY ?=
+repair-empty-fields: ## Ripara booked_at/value_date/description vuoti di una connessione (APPLY=1 per scrivere, altrimenti dry-run)
+	cd $(BACKEND) && uv run python scripts/repair_empty_transaction_fields.py \
+		--connection-id $(CONNECTION) $(if $(filter 1,$(APPLY)),--apply,) $(REPAIR_ARGS)
+
 test: test-backend test-core ## Esegue tutti i test
 
 test-backend: ## Test del backend Python
@@ -61,4 +73,4 @@ xcode: ## Rigenera il progetto Xcode da Project.yml
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run run-tls eb-aspsps test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode openapi
+.PHONY: help setup reset-venv run run-tls eb-aspsps eb-connections eb-census repair-empty-fields test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode openapi
