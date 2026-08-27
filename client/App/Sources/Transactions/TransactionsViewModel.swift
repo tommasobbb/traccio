@@ -22,6 +22,17 @@ final class TransactionsViewModel {
         case failed
     }
 
+    /// Why creating a manual movement failed, for the "＋" sheet to surface.
+    /// Carries only a status-derived reason, never the response body.
+    enum CreateFailure: Equatable {
+        /// A `409 account_not_manual` — the chosen account is synced. The
+        /// picker only offers manual accounts, so this is effectively
+        /// unreachable, but mapped rather than collapsed to `.generic` for
+        /// honesty.
+        case accountNotManual
+        case generic
+    }
+
     /// Current load state, observed by the view.
     private(set) var state: State = .idle
     /// The caller's categories, for `TransactionDetailView`'s picker — seeded
@@ -63,6 +74,14 @@ final class TransactionsViewModel {
     /// filters an already-fetched page. Set via `applyFilter(_:)`, never
     /// directly, so a change always resets pagination.
     private(set) var filter: TransactionFilter = .none
+    /// Set while a manual-movement create is in flight, so the "＋" sheet can
+    /// disable its controls.
+    private(set) var isCreating = false
+    /// Why the most recent manual-movement create failed, if it did.
+    private(set) var createFailure: CreateFailure?
+    /// Increments once per successful manual create/delete — a trigger for
+    /// `.sensoryFeedback(.success, trigger:)`, not a count anyone reads.
+    private(set) var successTick = 0
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -214,6 +233,89 @@ final class TransactionsViewModel {
         var next = current
         next[index] = updated
         state = .loaded(next)
+    }
+
+    /// Remove one row by id, leaving every other row and pagination state
+    /// untouched — the counterpart to `replace(_:)` for a manual-movement
+    /// delete made from `TransactionDetailView` (ADR 0020).
+    ///
+    /// A no-op if the id is not in the currently loaded list or the state is
+    /// not `.loaded`.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transaction to drop.
+    func remove(id: UUID) {
+        guard case .loaded(let current) = state else { return }
+        state = .loaded(current.filter { $0.id != id })
+    }
+
+    /// The accounts eligible for a new manual movement — the manual ones
+    /// (ADR 0020). A synced account's history is bank-owned; the backend
+    /// refuses `POST /transactions` for it, so it never appears in the
+    /// picker.
+    var manualAccounts: [AccountResponse] {
+        accountsByID.values
+            .filter { $0.source == .manual }
+            .sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+    }
+
+    /// Create a user-entered movement on a manual account (ADR 0020), then
+    /// reload the first page so it lands in day order.
+    ///
+    /// Reloads rather than inserting in place: a back-dated entry belongs
+    /// mid-list, and `load()` already rebuilds the page in the backend's
+    /// order. A `409` surfaces as `.accountNotManual`, any other failure as
+    /// `.generic`.
+    ///
+    /// Parameters
+    /// ----------
+    /// accountID:
+    ///     The manual account the movement belongs to.
+    /// amount:
+    ///     Signed value in minor units — negative out, positive in.
+    /// currency:
+    ///     ISO 4217 code of `amount`.
+    /// valueDate:
+    ///     When the movement affects the balance.
+    /// description:
+    ///     Free text the user typed.
+    /// confirmedCategoryID:
+    ///     An optional category to confirm at creation.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the movement was created, `false` otherwise (having recorded
+    /// `createFailure`).
+    @discardableResult
+    func createManualTransaction(
+        accountID: UUID, amount: Int, currency: String, valueDate: Date,
+        description: String, confirmedCategoryID: UUID?
+    ) async -> Bool {
+        guard !isCreating else { return false }
+        isCreating = true
+        defer { isCreating = false }
+        createFailure = nil
+
+        do {
+            _ = try await client.createManualTransaction(
+                CreateManualTransactionRequest(
+                    accountID: accountID, amount: amount, currency: currency,
+                    valueDate: valueDate, description: description,
+                    confirmedCategoryID: confirmedCategoryID
+                )
+            )
+            await load()
+            successTick += 1
+            return true
+        } catch APIError.badStatus(409) {
+            createFailure = .accountNotManual
+            return false
+        } catch {
+            createFailure = .generic
+            return false
+        }
     }
 
     /// Change the active filter and reload from the first page.

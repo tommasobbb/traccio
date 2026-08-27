@@ -12,11 +12,16 @@ struct AccountEditorSheet: View {
     /// Called with the trimmed alias (`nil` to clear it), the chosen colour,
     /// and the chosen icon once the user submits.
     let onSave: (String?, PaletteColor, AccountIcon) -> Void
+    /// Called when the user confirms deleting the account. `nil` for a synced
+    /// account — only a manual one (ADR 0020) can be deleted here — so the
+    /// affordance is simply absent otherwise.
+    let onDelete: (() -> Void)?
     let onCancel: () -> Void
 
     @State private var aliasText: String
     @State private var color: PaletteColor
     @State private var icon: AccountIcon
+    @State private var isConfirmingDelete = false
 
     private static let defaultColor = PaletteColor.slate
     private static let defaultIcon = AccountIcon.bank
@@ -26,12 +31,14 @@ struct AccountEditorSheet: View {
         isSaving: Bool,
         failureMessage: String?,
         onSave: @escaping (String?, PaletteColor, AccountIcon) -> Void,
+        onDelete: (() -> Void)? = nil,
         onCancel: @escaping () -> Void
     ) {
         self.account = account
         self.isSaving = isSaving
         self.failureMessage = failureMessage
         self.onSave = onSave
+        self.onDelete = onDelete
         self.onCancel = onCancel
         _aliasText = State(initialValue: account.alias ?? "")
         _color = State(initialValue: account.color ?? Self.defaultColor)
@@ -60,11 +67,34 @@ struct AccountEditorSheet: View {
                         EyebrowLabel(text: "Icona")
                         iconGrid
                     }
+                    if onDelete != nil {
+                        Button(role: .destructive) {
+                            isConfirmingDelete = true
+                        } label: {
+                            Text("Elimina conto")
+                                .font(Typography.body.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Palette.warning)
+                        .disabled(isSaving)
+                    }
                 }
                 .padding(20)
             }
             .background(Palette.background)
             .navigationTitle("Modifica conto")
+            .confirmationDialog(
+                "Eliminare \(account.displayName ?? "questo conto")?",
+                isPresented: $isConfirmingDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Elimina", role: .destructive) { onDelete?() }
+                Button("Annulla", role: .cancel) {}
+            } message: {
+                Text("I movimenti del conto vanno eliminati prima. L'operazione non è reversibile.")
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)

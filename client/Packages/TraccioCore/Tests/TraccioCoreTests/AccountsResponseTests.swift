@@ -19,6 +19,7 @@ struct AccountsResponseTests {
             {
               "id": "11111111-1111-1111-1111-111111111111",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "current",
               "currency": "EUR",
               "name": "Test Current",
@@ -31,6 +32,7 @@ struct AccountsResponseTests {
             {
               "id": "33333333-3333-3333-3333-333333333333",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "card",
               "currency": "EUR",
               "name": null,
@@ -80,6 +82,7 @@ struct AccountsResponseTests {
             { "accounts": [ {
               "id": "44444444-4444-4444-4444-444444444444",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "current",
               "currency": "EUR",
               "name": "Legacy",
@@ -169,6 +172,7 @@ struct AccountsResponseTests {
             { "accounts": [ {
               "id": "44444444-4444-4444-4444-444444444444",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "wallet",
               "currency": "XXX",
               "name": null,
@@ -215,6 +219,7 @@ struct AccountsResponseTests {
         let json = """
             { "accounts": [ {
               "id": "55555555-5555-5555-5555-555555555555",
+              "source": "manual",
               "kind": "cash",
               "currency": "EUR",
               "name": null,
@@ -226,6 +231,27 @@ struct AccountsResponseTests {
             from: Data(json.utf8)
         )
         #expect(response.accounts[0].connectionID == nil)
+        #expect(response.accounts[0].source == .manual)
+    }
+
+    @Test func rejectsUnknownSource() {
+        let json = """
+            { "accounts": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "connection_id": null,
+              "source": "imported",
+              "kind": "cash",
+              "currency": "EUR",
+              "name": null,
+              "created_at": "2026-08-27T12:00:00+00:00"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                AccountsResponse.self,
+                from: Data(json.utf8)
+            )
+        }
     }
 
     @Test func rejectsUnknownAccountKind() {

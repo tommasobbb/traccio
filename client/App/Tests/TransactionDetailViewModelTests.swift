@@ -937,4 +937,69 @@ struct TransactionDetailViewModelTests {
         #expect(model.actionFailure == .generic)
         #expect(rulesAppliedCallCount == 0)
     }
+
+    // MARK: Manual movement edit/delete (ADR 0020)
+
+    @Test func editManualTransactionRefetchesNotifiesAndBumpsDashboard() async throws {
+        let client = FakeAPIClient()
+        let original = Self.makeTransaction(amount: -1000)
+        let edited = Self.makeTransaction(amount: -1600)
+        await client.setEditManualTransactionResult(edited)
+        await client.setTransaction(edited)
+        var updated: TransactionResponse?
+        var dashboardStale = 0
+        let model = TransactionDetailViewModel(
+            transaction: original, client: client,
+            onUpdate: { updated = $0 },
+            onDashboardStale: { dashboardStale += 1 }
+        )
+
+        await model.editManualTransaction(
+            amount: -1600, currency: "EUR",
+            valueDate: Date(timeIntervalSince1970: 1_755_000_000), description: "TEST CASH 01 v2"
+        )
+
+        #expect(model.actionFailure == nil)
+        #expect(model.transaction.amount == -1600)
+        #expect(updated?.amount == -1600)
+        #expect(dashboardStale == 1)
+        let recorded = await client.editedManualTransactions
+        #expect(recorded.first?.id == Self.transactionID)
+        #expect(recorded.first?.amount == -1600)
+    }
+
+    @Test func deleteManualTransactionCallsOnDeleteAndBumpsDashboard() async throws {
+        let client = FakeAPIClient()
+        var deletedID: UUID?
+        var dashboardStale = 0
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onDashboardStale: { dashboardStale += 1 },
+            onDelete: { deletedID = $0 }
+        )
+
+        await model.deleteManualTransaction()
+
+        #expect(model.actionFailure == nil)
+        #expect(deletedID == Self.transactionID)
+        #expect(dashboardStale == 1)
+        #expect(model.successTick == 1)
+        let recorded = await client.deletedManualTransactionIDs
+        #expect(recorded == [Self.transactionID])
+    }
+
+    @Test func deleteManualTransactionOn409SurfacesTransactionInUse() async throws {
+        let client = FakeAPIClient()
+        await client.setDeleteManualTransactionError(APIError.badStatus(409))
+        var deletedID: UUID?
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(), client: client,
+            onDelete: { deletedID = $0 }
+        )
+
+        await model.deleteManualTransaction()
+
+        #expect(model.actionFailure == .transactionInUse)
+        #expect(deletedID == nil)
+    }
 }

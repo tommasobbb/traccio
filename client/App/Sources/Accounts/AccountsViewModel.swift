@@ -38,12 +38,19 @@ final class AccountsViewModel {
     /// itself tracks in-flight state for) — same reasoning as
     /// `CategorizationViewModel.ActionFailure` being its own type.
     enum AccountActionFailure: Equatable {
-        /// A `422` on rename: blank alias or too long. `APIError.badStatus`
-        /// carries only the status code, not the `detail` reason
-        /// (`tasks/backlog.md`), so the two causes are not distinguishable
-        /// here — same collapsing `CategorizationViewModel.createCategory`
-        /// already does for its own `422`.
+        /// A `422` on rename or manual-account create: blank alias or too
+        /// long. `APIError.badStatus` carries only the status code, not the
+        /// `detail` reason (`tasks/backlog.md`), so the two causes are not
+        /// distinguishable here — same collapsing
+        /// `CategorizationViewModel.createCategory` already does for its own
+        /// `422`.
         case invalidAlias
+        /// A `409 account_not_empty` on deleting a manual account (ADR 0020):
+        /// it still holds movements, which must be deleted first. A `409
+        /// account_not_manual` collapses to this too — the editor only
+        /// offers delete for a manual account, so in practice it is always
+        /// the "not empty" case.
+        case accountNotEmpty
         case generic
     }
 
@@ -263,6 +270,92 @@ final class AccountsViewModel {
     func setAccountAppearance(id: UUID, color: PaletteColor?, icon: AccountIcon?) async {
         await performAccountUpdate { client in
             try await client.setAccountAppearance(id: id, color: color, icon: icon)
+        }
+    }
+
+    /// Create a manual account — one with no bank behind it (ADR 0020).
+    ///
+    /// On success the account is appended to `accounts` (its `connectionID`
+    /// is `nil`, so `groupByConnection` files it under the "Conti manuali"
+    /// group) and `successTick` bumps; the caller dismisses the sheet. A
+    /// `422` surfaces as `.invalidAlias`, any other failure as `.generic`.
+    ///
+    /// Parameters
+    /// ----------
+    /// alias:
+    ///     The account's name (e.g. "Contanti").
+    /// kind:
+    ///     What type of account it is.
+    /// currency:
+    ///     The account's ISO 4217 currency.
+    /// color:
+    ///     Optional colour.
+    /// icon:
+    ///     Optional icon.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the account was created, `false` otherwise (having recorded
+    /// `accountActionFailure`).
+    @discardableResult
+    func createManualAccount(
+        alias: String, kind: AccountKind, currency: String,
+        color: PaletteColor?, icon: AccountIcon?
+    ) async -> Bool {
+        guard !isSavingAccount else { return false }
+        isSavingAccount = true
+        defer { isSavingAccount = false }
+        accountActionFailure = nil
+
+        do {
+            let created = try await client.createManualAccount(
+                alias: alias, kind: kind, currency: currency, color: color, icon: icon
+            )
+            accounts.append(created)
+            successTick += 1
+            return true
+        } catch APIError.badStatus(422) {
+            accountActionFailure = .invalidAlias
+            return false
+        } catch {
+            accountActionFailure = .generic
+            return false
+        }
+    }
+
+    /// Delete a manual account (ADR 0020).
+    ///
+    /// On success the account is removed from `accounts`. A `409` means the
+    /// account still holds movements (`.accountNotEmpty`); any other failure
+    /// is `.generic`. The editor only offers this for a manual, so a `409
+    /// account_not_manual` cannot realistically occur here.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to delete.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the account was deleted, `false` otherwise (having recorded
+    /// `accountActionFailure`).
+    @discardableResult
+    func deleteManualAccount(id: UUID) async -> Bool {
+        guard !isSavingAccount else { return false }
+        isSavingAccount = true
+        defer { isSavingAccount = false }
+        accountActionFailure = nil
+
+        do {
+            try await client.deleteAccount(id: id)
+            accounts.removeAll { $0.id == id }
+            return true
+        } catch APIError.badStatus(409) {
+            accountActionFailure = .accountNotEmpty
+            return false
+        } catch {
+            accountActionFailure = .generic
+            return false
         }
     }
 

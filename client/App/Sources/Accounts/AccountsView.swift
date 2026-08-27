@@ -10,6 +10,7 @@ struct AccountsView: View {
     @State private var model = AccountsViewModel()
     @State private var editingAccount: AccountResponse?
     @State private var isPickingInstitution = false
+    @State private var isCreatingManualAccount = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -48,7 +49,35 @@ struct AccountsView: View {
                         }
                     }
                 },
+                // A manual account (ADR 0020) can be deleted from here; a
+                // synced one is removed only by the connection flow, so the
+                // affordance is simply absent for it.
+                onDelete: account.source == .manual
+                    ? {
+                        Task {
+                            if await model.deleteManualAccount(id: account.id) {
+                                editingAccount = nil
+                            }
+                        }
+                    }
+                    : nil,
                 onCancel: { editingAccount = nil }
+            )
+        }
+        .sheet(isPresented: $isCreatingManualAccount) {
+            CreateManualAccountSheet(
+                isSaving: model.isSavingAccount,
+                failureMessage: model.accountActionFailure != nil ? accountFailureMessage : nil,
+                onCreate: { alias, kind, currency, color, icon in
+                    Task {
+                        if await model.createManualAccount(
+                            alias: alias, kind: kind, currency: currency, color: color, icon: icon
+                        ) {
+                            isCreatingManualAccount = false
+                        }
+                    }
+                },
+                onCancel: { isCreatingManualAccount = false }
             )
         }
         .sheet(isPresented: $isPickingInstitution) {
@@ -81,7 +110,14 @@ struct AccountsView: View {
     }
 
     private var accountFailureMessage: String {
-        "Non è stato possibile salvare le modifiche. Riprova."
+        switch model.accountActionFailure {
+        case .invalidAlias:
+            return "Il nome non è valido. Inseriscine uno più breve."
+        case .accountNotEmpty:
+            return "Il conto contiene ancora movimenti. Eliminali prima di eliminare il conto."
+        case .generic, nil:
+            return "Non è stato possibile salvare le modifiche. Riprova."
+        }
     }
 
     /// A cheap discriminator for `.animation(_:value:)` — see
@@ -100,10 +136,11 @@ struct AccountsView: View {
         case .idle, .loading:
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .loaded(let connections) where connections.isEmpty:
+        case .loaded(let connections) where connections.isEmpty && model.accounts.isEmpty:
             EmptyState(
                 systemImage: "creditcard",
-                title: "Nessun conto collegato",
+                title: "Nessun conto",
+                description: "Collega una banca o crea un conto manuale per il contante.",
                 actionTitle: "Collega un conto",
                 action: { isPickingInstitution = true }
             )
@@ -143,6 +180,7 @@ struct AccountsView: View {
                     connectionCard(group)
                 }
                 addConnectionCard
+                addManualAccountCard
             }
             .padding(20)
         }
@@ -158,6 +196,31 @@ struct AccountsView: View {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .bold))
                 Text("Collega un nuovo conto")
+                    .font(Typography.caption.weight(.bold))
+            }
+            .foregroundStyle(Palette.inkSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The dashed "Crea un conto manuale" entry point (ADR 0020) — a cash
+    /// float or an investment pass-through, tracked by hand with no bank
+    /// behind it. Sits directly below "Collega un nuovo conto"; same shape,
+    /// different glyph.
+    private var addManualAccountCard: some View {
+        Button {
+            isCreatingManualAccount = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "wallet.pass")
+                    .font(.system(size: 13, weight: .bold))
+                Text("Crea un conto manuale")
                     .font(Typography.caption.weight(.bold))
             }
             .foregroundStyle(Palette.inkSecondary)
@@ -214,6 +277,11 @@ struct AccountsView: View {
                     Divider().overlay(Palette.separatorSubtle)
                     accountList(group.accounts)
                 }
+            } else if group.accounts.allSatisfy({ $0.source == .manual }) {
+                // Manual accounts (ADR 0020) — no connection by design, not a
+                // data inconsistency.
+                EyebrowLabel(text: "Conti manuali")
+                accountList(group.accounts)
             } else {
                 // Accounts matching no known connection — a real data
                 // inconsistency, surfaced rather than silently dropped.

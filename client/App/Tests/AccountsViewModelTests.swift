@@ -15,6 +15,9 @@ struct AccountsViewModelTests {
 
     private static func makeAccount(
         id: UUID = accountID,
+        connectionID: UUID? = UUID(),
+        source: AccountSource = .synced,
+        kind: AccountKind = .current,
         name: String? = "TEST CURRENT 01",
         alias: String? = nil,
         displayName: String? = "TEST CURRENT 01",
@@ -23,8 +26,9 @@ struct AccountsViewModelTests {
     ) -> AccountResponse {
         AccountResponse(
             id: id,
-            connectionID: UUID(),
-            kind: .current,
+            connectionID: connectionID,
+            source: source,
+            kind: kind,
             currency: "EUR",
             name: name,
             alias: alias,
@@ -158,5 +162,78 @@ struct AccountsViewModelTests {
 
         #expect(url == nil)
         #expect(model.startConnectionFailed == true)
+    }
+
+    // MARK: Manual accounts (ADR 0020)
+
+    private static func makeManualAccount(id: UUID = UUID()) -> AccountResponse {
+        makeAccount(
+            id: id, connectionID: nil, source: .manual, kind: .cash,
+            name: nil, alias: "Contanti", displayName: "Contanti"
+        )
+    }
+
+    @Test func createManualAccountAppendsTheAccountAndBumpsSuccessTick() async throws {
+        let client = FakeAPIClient()
+        await client.setAccounts([Self.makeAccount()])
+        let model = AccountsViewModel(client: client)
+        await model.load()
+        let created = Self.makeManualAccount()
+        await client.setCreateManualAccountResult(created)
+
+        let ok = await model.createManualAccount(
+            alias: "Contanti", kind: .cash, currency: "EUR", color: nil, icon: nil
+        )
+
+        #expect(ok)
+        #expect(model.accountActionFailure == nil)
+        #expect(model.accounts.contains { $0.id == created.id })
+        #expect(model.successTick == 1)
+        let recorded = await client.createdManualAccounts
+        #expect(recorded == [.init(alias: "Contanti", kind: .cash, currency: "EUR", color: nil, icon: nil)])
+    }
+
+    @Test func createManualAccountOn422SurfacesInvalidAlias() async throws {
+        let client = FakeAPIClient()
+        let model = AccountsViewModel(client: client)
+        await client.setCreateManualAccountError(APIError.badStatus(422))
+
+        let ok = await model.createManualAccount(
+            alias: "   ", kind: .cash, currency: "EUR", color: nil, icon: nil
+        )
+
+        #expect(!ok)
+        #expect(model.accountActionFailure == .invalidAlias)
+        #expect(model.accounts.isEmpty)
+    }
+
+    @Test func deleteManualAccountRemovesItFromTheList() async throws {
+        let client = FakeAPIClient()
+        let manual = Self.makeManualAccount()
+        await client.setAccounts([Self.makeAccount(), manual])
+        let model = AccountsViewModel(client: client)
+        await model.load()
+
+        let ok = await model.deleteManualAccount(id: manual.id)
+
+        #expect(ok)
+        #expect(!model.accounts.contains { $0.id == manual.id })
+        let recorded = await client.deletedAccountIDs
+        #expect(recorded == [manual.id])
+    }
+
+    @Test func deleteManualAccountOn409SurfacesAccountNotEmpty() async throws {
+        let client = FakeAPIClient()
+        let manual = Self.makeManualAccount()
+        await client.setAccounts([manual])
+        let model = AccountsViewModel(client: client)
+        await model.load()
+        await client.setDeleteAccountError(APIError.badStatus(409))
+
+        let ok = await model.deleteManualAccount(id: manual.id)
+
+        #expect(!ok)
+        #expect(model.accountActionFailure == .accountNotEmpty)
+        #expect(model.accounts.contains { $0.id == manual.id })
     }
 }

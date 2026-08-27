@@ -17,6 +17,10 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     /// Connection currently exposing this account, or `nil` for a manual
     /// account — one the user created with no bank behind it (ADR 0020).
     public let connectionID: UUID?
+    /// `synced` if backed by a bank connection, `manual` if the user created
+    /// and maintains it. Derived server-side from `connectionID`; rendered,
+    /// not inferred from the `nil`.
+    public let source: AccountSource
     /// `current`, `savings`, `card`, `wallet`, or `cash`.
     public let kind: AccountKind
     /// The account's ISO 4217 currency.
@@ -39,6 +43,7 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id
         case connectionID = "connection_id"
+        case source
         case kind
         case currency
         case name
@@ -52,6 +57,7 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     public init(
         id: UUID,
         connectionID: UUID?,
+        source: AccountSource,
         kind: AccountKind,
         currency: String,
         name: String?,
@@ -63,6 +69,7 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.id = id
         self.connectionID = connectionID
+        self.source = source
         self.kind = kind
         self.currency = currency
         self.name = name

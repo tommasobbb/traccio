@@ -26,6 +26,14 @@ actor FakeAPIClient: APIClientProtocol {
     var renameAccountError: Error?
     var accountAppearanceToReturn: AccountResponse?
     var accountAppearanceError: Error?
+    var createManualAccountToReturn: AccountResponse?
+    var createManualAccountError: Error?
+    var deleteAccountError: Error?
+    var createManualTransactionToReturn: TransactionResponse?
+    var createManualTransactionError: Error?
+    var editManualTransactionToReturn: TransactionResponse?
+    var editManualTransactionError: Error?
+    var deleteManualTransactionError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
@@ -159,6 +167,11 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var unassignedEventMembers: [RecordedEventMember] = []
     private(set) var renamedAccounts: [RecordedAccountRename] = []
     private(set) var accountAppearanceUpdates: [RecordedAccountAppearance] = []
+    private(set) var createdManualAccounts: [RecordedManualAccountCreate] = []
+    private(set) var deletedAccountIDs: [UUID] = []
+    private(set) var createdManualTransactions: [RecordedManualTransactionCreate] = []
+    private(set) var editedManualTransactions: [RecordedManualTransactionEdit] = []
+    private(set) var deletedManualTransactionIDs: [UUID] = []
     /// Every `country` passed to `institutions(country:)`, in call order.
     private(set) var receivedInstitutionsCountries: [String] = []
     /// Every `startConnection(institution:country:)` call, for asserting
@@ -212,6 +225,34 @@ actor FakeAPIClient: APIClientProtocol {
         let icon: AccountIcon?
     }
 
+    /// A recorded `createManualAccount(...)` call (ADR 0020).
+    struct RecordedManualAccountCreate: Equatable {
+        let alias: String
+        let kind: AccountKind
+        let currency: String
+        let color: PaletteColor?
+        let icon: AccountIcon?
+    }
+
+    /// A recorded `createManualTransaction(_:)` call (ADR 0020).
+    struct RecordedManualTransactionCreate: Equatable {
+        let accountID: UUID
+        let amount: Int
+        let currency: String
+        let valueDate: Date
+        let description: String
+        let confirmedCategoryID: UUID?
+    }
+
+    /// A recorded `editManualTransaction(id:_:)` call (ADR 0020).
+    struct RecordedManualTransactionEdit: Equatable {
+        let id: UUID
+        let amount: Int
+        let currency: String
+        let valueDate: Date
+        let description: String
+    }
+
     /// A recorded `outgoingID`/`incomingID` pair, for asserting exactly which
     /// legs a confirm/reject call named.
     struct RecordedTransferPair: Equatable {
@@ -250,6 +291,38 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setAccountAppearanceError(_ error: Error) {
         accountAppearanceError = error
+    }
+
+    func setCreateManualAccountResult(_ account: AccountResponse) {
+        createManualAccountToReturn = account
+    }
+
+    func setCreateManualAccountError(_ error: Error) {
+        createManualAccountError = error
+    }
+
+    func setDeleteAccountError(_ error: Error) {
+        deleteAccountError = error
+    }
+
+    func setCreateManualTransactionResult(_ transaction: TransactionResponse) {
+        createManualTransactionToReturn = transaction
+    }
+
+    func setCreateManualTransactionError(_ error: Error) {
+        createManualTransactionError = error
+    }
+
+    func setEditManualTransactionResult(_ transaction: TransactionResponse) {
+        editManualTransactionToReturn = transaction
+    }
+
+    func setEditManualTransactionError(_ error: Error) {
+        editManualTransactionError = error
+    }
+
+    func setDeleteManualTransactionError(_ error: Error) {
+        deleteManualTransactionError = error
     }
 
     func setHealthError(_ error: Error) {
@@ -552,6 +625,65 @@ actor FakeAPIClient: APIClientProtocol {
         accountAppearanceUpdates.append(RecordedAccountAppearance(id: id, color: color, icon: icon))
         guard let accountAppearanceToReturn else { throw NotConfigured() }
         return accountAppearanceToReturn
+    }
+
+    func createManualAccount(
+        alias: String, kind: AccountKind, currency: String,
+        color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse {
+        if let createManualAccountError { throw createManualAccountError }
+        createdManualAccounts.append(
+            RecordedManualAccountCreate(
+                alias: alias, kind: kind, currency: currency, color: color, icon: icon
+            )
+        )
+        guard let createManualAccountToReturn else { throw NotConfigured() }
+        return createManualAccountToReturn
+    }
+
+    func deleteAccount(id: UUID) async throws {
+        if let deleteAccountError { throw deleteAccountError }
+        deletedAccountIDs.append(id)
+    }
+
+    func createManualTransaction(
+        _ request: CreateManualTransactionRequest
+    ) async throws -> TransactionResponse {
+        if let createManualTransactionError { throw createManualTransactionError }
+        createdManualTransactions.append(
+            RecordedManualTransactionCreate(
+                accountID: request.accountID,
+                amount: request.amount,
+                currency: request.currency,
+                valueDate: request.valueDate,
+                description: request.description,
+                confirmedCategoryID: request.confirmedCategoryID
+            )
+        )
+        guard let createManualTransactionToReturn else { throw NotConfigured() }
+        return createManualTransactionToReturn
+    }
+
+    func editManualTransaction(
+        id: UUID, _ request: EditManualTransactionRequest
+    ) async throws -> TransactionResponse {
+        if let editManualTransactionError { throw editManualTransactionError }
+        editedManualTransactions.append(
+            RecordedManualTransactionEdit(
+                id: id,
+                amount: request.amount,
+                currency: request.currency,
+                valueDate: request.valueDate,
+                description: request.description
+            )
+        )
+        guard let editManualTransactionToReturn else { throw NotConfigured() }
+        return editManualTransactionToReturn
+    }
+
+    func deleteManualTransaction(id: UUID) async throws {
+        if let deleteManualTransactionError { throw deleteManualTransactionError }
+        deletedManualTransactionIDs.append(id)
     }
 
     func health() async throws -> HealthResponse {

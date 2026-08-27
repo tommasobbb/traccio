@@ -17,6 +17,11 @@ public protocol APIClientProtocol: Sendable {
     func setAccountAppearance(
         id: UUID, color: PaletteColor?, icon: AccountIcon?
     ) async throws -> AccountResponse
+    func createManualAccount(
+        alias: String, kind: AccountKind, currency: String,
+        color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse
+    func deleteAccount(id: UUID) async throws
     func health() async throws -> HealthResponse
     func dashboardSummary(
         start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
@@ -25,6 +30,13 @@ public protocol APIClientProtocol: Sendable {
     func transaction(id: UUID) async throws -> TransactionResponse
     func confirmCategory(transactionID: UUID, categoryID: UUID) async throws
     func clearCategory(transactionID: UUID) async throws
+    func createManualTransaction(
+        _ request: CreateManualTransactionRequest
+    ) async throws -> TransactionResponse
+    func editManualTransaction(
+        id: UUID, _ request: EditManualTransactionRequest
+    ) async throws -> TransactionResponse
+    func deleteManualTransaction(id: UUID) async throws
     func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
         -> [TransactionResponse]
     func categories() async throws -> [CategoryResponse]

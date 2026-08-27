@@ -51,6 +51,10 @@ struct TransactionRow: View {
     /// and re-applies every rule, so the caller can invalidate
     /// `DataFreshness.Scope.transactions`/`.dashboard`.
     let onRulesApplied: () -> Void
+    /// Called with this transaction's id after it is deleted from the detail
+    /// screen (a manual movement, ADR 0020), so
+    /// `TransactionsViewModel.remove(id:)` can drop the row.
+    let onDelete: (UUID) -> Void
 
     var body: some View {
         NavigationLink {
@@ -65,7 +69,8 @@ struct TransactionRow: View {
                 onUpdate: onUpdate,
                 onAdvanceChange: onAdvanceUpdate,
                 onDashboardStale: onDashboardStale,
-                onRulesApplied: onRulesApplied
+                onRulesApplied: onRulesApplied,
+                onDelete: onDelete
             )
         } label: {
             rowContent

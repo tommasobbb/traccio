@@ -9,10 +9,16 @@ import TraccioCore
 /// leading tile blank whenever appearance was never set.
 extension AccountResponse {
     /// The icon this account renders with: the user's choice, or a fallback
-    /// that mirrors `AccountKind`'s old hardcoded glyph (wallet vs. everything
-    /// else) rather than defaulting every kind to the same icon.
+    /// keyed off `kind` rather than defaulting every kind to the same glyph.
     var tileIcon: AccountIcon {
-        icon ?? (kind == .wallet ? .wallet : .bank)
+        if let icon { return icon }
+        switch kind {
+        case .wallet: return .wallet
+        case .cash: return .cash
+        case .savings: return .savings
+        case .card: return .card
+        case .current: return .bank
+        }
     }
 
     /// The colour this account renders with: the user's choice, or a neutral

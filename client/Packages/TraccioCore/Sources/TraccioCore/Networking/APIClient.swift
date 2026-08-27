@@ -98,6 +98,58 @@ public struct APIClient: Sendable {
         )
     }
 
+    /// Create a manual account — one with no bank behind it (ADR 0020).
+    ///
+    /// Mirrors `POST /accounts`, `201` with the created account (its
+    /// `connectionID` is `nil`, its `source` is `.manual`). A `422` if the
+    /// alias is blank or too long, or the currency/kind is not recognized —
+    /// the client does not pre-check.
+    ///
+    /// Parameters
+    /// ----------
+    /// alias:
+    ///     The account's name (e.g. "Contanti").
+    /// kind:
+    ///     What type of account it is — typically `.cash` or `.wallet`.
+    /// currency:
+    ///     The account's ISO 4217 currency.
+    /// color:
+    ///     Optional colour.
+    /// icon:
+    ///     Optional icon.
+    ///
+    /// Returns
+    /// -------
+    /// The created manual account.
+    public func createManualAccount(
+        alias: String, kind: AccountKind, currency: String,
+        color: PaletteColor? = nil, icon: AccountIcon? = nil
+    ) async throws -> AccountResponse {
+        try await post(
+            "accounts",
+            body: CreateManualAccountRequest(
+                alias: alias, kind: kind, currency: currency, color: color, icon: icon
+            )
+        )
+    }
+
+    /// Delete a manual account (ADR 0020).
+    ///
+    /// Mirrors `DELETE /accounts/{id}`, `204`. A `404` if the account is
+    /// unknown or not the caller's; a `409 account_not_manual` if it is a
+    /// synced account (removed only by the connection flow); a `409
+    /// account_not_empty` if it still holds a transaction — delete those
+    /// first. `APIError.badStatus(409)` does not distinguish the two `409`s;
+    /// the caller checks whether the account is empty before offering this.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to delete.
+    public func deleteAccount(id: UUID) async throws {
+        try await delete("accounts/\(id.uuidString)")
+    }
+
     /// Liveness probe; a cheap smoke test of the transport and base URL.
     ///
     /// Returns
@@ -229,6 +281,67 @@ public struct APIClient: Sendable {
     ///     The transaction to clear.
     public func clearCategory(transactionID: UUID) async throws {
         try await delete("transactions/\(transactionID.uuidString)/category")
+    }
+
+    /// Create a user-entered movement on a manual account (ADR 0020).
+    ///
+    /// Mirrors `POST /transactions`, `201` with the created transaction (it
+    /// is always `booked`, `role == .personal`). A `404` if the account (or
+    /// the optional category) is unknown or not the caller's; a `409
+    /// account_not_manual` if the account is a synced one.
+    ///
+    /// Parameters
+    /// ----------
+    /// request:
+    ///     The movement's account, amount, currency, value date, description,
+    ///     and optional category.
+    ///
+    /// Returns
+    /// -------
+    /// The created transaction, with the same derived fields
+    /// `GET /transactions` returns.
+    public func createManualTransaction(
+        _ request: CreateManualTransactionRequest
+    ) async throws -> TransactionResponse {
+        try await post("transactions", body: request)
+    }
+
+    /// Edit a user-entered movement on a manual account (ADR 0020).
+    ///
+    /// Mirrors `POST /transactions/{id}/edit`, `200` with the transaction
+    /// after the edit. A `404` if the transaction is unknown or not the
+    /// caller's; a `409 transaction_not_manual` if it is on a synced account.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transaction to edit.
+    /// request:
+    ///     The new movement fields (amount, currency, value date,
+    ///     description).
+    ///
+    /// Returns
+    /// -------
+    /// The transaction after the edit.
+    public func editManualTransaction(
+        id: UUID, _ request: EditManualTransactionRequest
+    ) async throws -> TransactionResponse {
+        try await post("transactions/\(id.uuidString)/edit", body: request)
+    }
+
+    /// Delete a user-entered movement on a manual account (ADR 0020).
+    ///
+    /// Mirrors `DELETE /transactions/{id}`, `204`. A `404` if the transaction
+    /// is unknown or not the caller's; a `409 transaction_not_manual` if it
+    /// is on a synced account; a `409 transaction_in_use` if it is a leg of a
+    /// transfer, advance, or reimbursement — unlink that first.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transaction to delete.
+    public func deleteManualTransaction(id: UUID) async throws {
+        try await delete("transactions/\(id.uuidString)")
     }
 
     /// Fetch a page of the caller's transactions, most recent first.

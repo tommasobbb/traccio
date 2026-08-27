@@ -30,6 +30,10 @@ final class TransactionDetailViewModel {
         /// `409` from `POST /rules` — a rule with this exact
         /// `(matchKind, pattern)` already exists.
         case duplicateRule
+        /// `409 transaction_in_use` from `DELETE /transactions/{id}` — the
+        /// manual movement is a leg of a transfer, advance, or reimbursement
+        /// and must be unlinked first (ADR 0020).
+        case transactionInUse
     }
 
     /// This transaction's advance's recorded reimbursements, oldest first —
@@ -117,6 +121,11 @@ final class TransactionDetailViewModel {
     /// the caller invalidates `DataFreshness.Scope.transactions`/`.dashboard`
     /// rather than this screen trying to know which other rows changed.
     private let onRulesApplied: () -> Void
+    /// Invoked with this transaction's id after a successful
+    /// `deleteManualTransaction()` (ADR 0020), so the caller
+    /// (`TransactionsViewModel.remove(id:)`) can drop the row; the view then
+    /// dismisses itself.
+    private let onDelete: (UUID) -> Void
 
     /// Create the view model.
     ///
@@ -160,7 +169,8 @@ final class TransactionDetailViewModel {
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {},
-        onRulesApplied: @escaping () -> Void = {}
+        onRulesApplied: @escaping () -> Void = {},
+        onDelete: @escaping (UUID) -> Void = { _ in }
     ) {
         self.transaction = transaction
         self.advance = advance
@@ -171,6 +181,7 @@ final class TransactionDetailViewModel {
         self.onAdvanceChange = onAdvanceChange
         self.onDashboardStale = onDashboardStale
         self.onRulesApplied = onRulesApplied
+        self.onDelete = onDelete
     }
 
     /// Fetch categories if none were seeded at `init`.
@@ -214,6 +225,65 @@ final class TransactionDetailViewModel {
     /// Clear the transaction's confirmed category, then re-fetch it.
     func clearCategory() async {
         await performUpdate { try await $0.clearCategory(transactionID: $1) }
+    }
+
+    /// Edit this manual movement's amount/currency/value-date/description
+    /// (ADR 0020), then re-fetch it.
+    ///
+    /// Only valid for a movement on a manual account; the backend answers
+    /// `409 transaction_not_manual` otherwise, surfaced as `.generic` — the
+    /// view only shows the edit affordance for a manual row, so that path is
+    /// effectively unreachable. Reuses `performUpdate`, so `onUpdate` /
+    /// `onDashboardStale` / `successTick` all fire on success.
+    ///
+    /// Parameters
+    /// ----------
+    /// amount:
+    ///     New signed value in minor units.
+    /// currency:
+    ///     New ISO 4217 code of `amount`.
+    /// valueDate:
+    ///     New value date.
+    /// description:
+    ///     New description text.
+    func editManualTransaction(
+        amount: Int, currency: String, valueDate: Date, description: String
+    ) async {
+        await performUpdate {
+            _ = try await $0.editManualTransaction(
+                id: $1,
+                EditManualTransactionRequest(
+                    amount: amount, currency: currency, valueDate: valueDate,
+                    description: description
+                )
+            )
+        }
+    }
+
+    /// Delete this manual movement (ADR 0020).
+    ///
+    /// On success `onDelete` fires with the id (so the list drops the row)
+    /// and `onDashboardStale` (a movement leaving changes the totals); the
+    /// view dismisses itself. A `409 transaction_in_use` surfaces as
+    /// `.transactionInUse` — the movement is a transfer/advance/reimbursement
+    /// leg and must be unlinked first; any other failure is `.generic`. Does
+    /// not reuse `performUpdate` (nothing to re-fetch — the row is gone).
+    func deleteManualTransaction() async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            try await client.deleteManualTransaction(id: transaction.id)
+            onDelete(transaction.id)
+            onDashboardStale()
+            successTick += 1
+        } catch APIError.badStatus(409) {
+            actionFailure = .transactionInUse
+        } catch {
+            actionFailure = .generic
+        }
     }
 
     /// Create a categorization rule, then re-apply every rule so this (and

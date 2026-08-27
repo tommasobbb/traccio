@@ -27,10 +27,11 @@ struct ConnectionGroupTests {
         )
     }
 
-    private static func account(id: UUID = UUID(), connectionID: UUID) -> AccountResponse {
+    private static func account(id: UUID = UUID(), connectionID: UUID?) -> AccountResponse {
         AccountResponse(
             id: id,
             connectionID: connectionID,
+            source: connectionID == nil ? .manual : .synced,
             kind: .current,
             currency: "EUR",
             name: "Test Current",
@@ -81,6 +82,20 @@ struct ConnectionGroupTests {
         #expect(groups[0].connection?.id == known.id)
         #expect(groups[1].connection == nil)
         #expect(groups[1].accounts == [orphan])
+    }
+
+    @Test func manualAccountsWithNoConnectionLandInTheOrphanedGroup() {
+        let known = Self.connection()
+        let knownAccount = Self.account(connectionID: known.id)
+        let manual = Self.account(connectionID: nil)
+
+        let groups = TraccioCore.groupByConnection(
+            connections: [known], accounts: [knownAccount, manual]
+        )
+
+        #expect(groups.count == 2)
+        #expect(groups[1].connection == nil)
+        #expect(groups[1].accounts == [manual])
     }
 
     @Test func returnsNoGroupsForEmptyInput() {

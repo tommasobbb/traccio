@@ -26,6 +26,9 @@ struct TransactionsView: View {
     /// made from this screen's own `TransactionDetailView` do not bump it —
     /// see `DataFreshness`'s doc comment.
     @Environment(DataFreshness.self) private var freshness
+    /// Presents `CreateManualTransactionSheet` — a hand-entered movement on a
+    /// manual account (ADR 0020).
+    @State private var isCreatingTransaction = false
 
     /// Create the screen.
     ///
@@ -51,6 +54,7 @@ struct TransactionsView: View {
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
             .animation(.easeInOut(duration: 0.2), value: stateTag)
+            .sensoryFeedback(.success, trigger: model.successTick)
             .refreshable { await model.load() }
             .toolbar {
                 if model.transferSuggestionCount > 0 {
@@ -69,6 +73,35 @@ struct TransactionsView: View {
                         }
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        isCreatingTransaction = true
+                    } label: {
+                        Label("Nuovo movimento", systemImage: "plus")
+                    }
+                }
+            }
+            .sheet(isPresented: $isCreatingTransaction) {
+                CreateManualTransactionSheet(
+                    accounts: model.manualAccounts,
+                    isCreating: model.isCreating,
+                    failureMessage: model.createFailure != nil
+                        ? "Non è stato possibile aggiungere il movimento. Riprova." : nil,
+                    onCreate: { accountID, amount, currency, valueDate, description in
+                        Task {
+                            let ok = await model.createManualTransaction(
+                                accountID: accountID, amount: amount, currency: currency,
+                                valueDate: valueDate, description: description,
+                                confirmedCategoryID: nil
+                            )
+                            if ok {
+                                freshness.markStale([.dashboard])
+                                isCreatingTransaction = false
+                            }
+                        }
+                    },
+                    onCancel: { isCreatingTransaction = false }
+                )
             }
         }
         .task(id: freshness.token(for: .transactions)) { await model.load() }
@@ -273,7 +306,8 @@ struct TransactionsView: View {
                         onUpdate: { model.replace($0) },
                         onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
                         onDashboardStale: { freshness.markStale([.dashboard]) },
-                        onRulesApplied: { freshness.markStale([.transactions, .dashboard]) }
+                        onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
+                        onDelete: { model.remove(id: $0) }
                     )
                     .onAppear {
                         if isLastGroup, transaction.id == group.transactions.last?.id {

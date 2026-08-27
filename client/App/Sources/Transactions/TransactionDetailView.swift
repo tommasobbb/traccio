@@ -32,6 +32,9 @@ struct TransactionDetailView: View {
     @State private var isPresentingAddReimbursementSheet = false
     @State private var isPresentingEventPickerSheet = false
     @State private var isPresentingCreateRuleSheet = false
+    @State private var isPresentingEditSheet = false
+    @State private var isConfirmingDelete = false
+    @Environment(\.dismiss) private var dismiss
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -98,13 +101,15 @@ struct TransactionDetailView: View {
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {},
-        onRulesApplied: @escaping () -> Void = {}
+        onRulesApplied: @escaping () -> Void = {},
+        onDelete: @escaping (UUID) -> Void = { _ in }
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
                 transaction: transaction, advance: advance, categories: categories, transfer: transfer,
                 client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange,
-                onDashboardStale: onDashboardStale, onRulesApplied: onRulesApplied
+                onDashboardStale: onDashboardStale, onRulesApplied: onRulesApplied,
+                onDelete: onDelete
             )
         )
         self.account = account
@@ -147,6 +152,9 @@ struct TransactionDetailView: View {
                         isUnlinking: model.isUpdating,
                         onUnlink: { Task { await model.unlinkTransfer() } }
                     )
+                }
+                if isManual {
+                    manualActionsCard
                 }
             }
             .padding(20)
@@ -235,6 +243,71 @@ struct TransactionDetailView: View {
                 onCancel: { isPresentingEventPickerSheet = false }
             )
         }
+        .sheet(isPresented: $isPresentingEditSheet) {
+            EditManualTransactionSheet(
+                transaction: model.transaction,
+                isSaving: model.isUpdating,
+                failureMessage: model.actionFailure != nil
+                    ? "Non è stato possibile salvare il movimento. Riprova." : nil,
+                onSave: { amount, currency, valueDate, description in
+                    Task {
+                        await model.editManualTransaction(
+                            amount: amount, currency: currency, valueDate: valueDate,
+                            description: description
+                        )
+                        if model.actionFailure == nil {
+                            isPresentingEditSheet = false
+                        }
+                    }
+                },
+                onCancel: { isPresentingEditSheet = false }
+            )
+        }
+        .confirmationDialog(
+            "Eliminare questo movimento?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Elimina", role: .destructive) {
+                Task {
+                    await model.deleteManualTransaction()
+                    if model.actionFailure == nil { dismiss() }
+                }
+            }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("L'operazione non è reversibile.")
+        }
+    }
+
+    // MARK: Manual movement actions (ADR 0020)
+
+    /// Whether this row is on a manual account and so can be edited/deleted.
+    private var isManual: Bool {
+        account?.source == .manual
+    }
+
+    private var manualActionsCard: some View {
+        Card {
+            EyebrowLabel(text: "Movimento manuale")
+            Text("Questo movimento è stato inserito a mano e puoi modificarlo o eliminarlo.")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkSecondary)
+            HStack(spacing: 10) {
+                PillButton(title: "Modifica", action: { isPresentingEditSheet = true })
+                Button(role: .destructive) {
+                    isConfirmingDelete = true
+                } label: {
+                    Text("Elimina")
+                        .font(Typography.body.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Palette.warning)
+            }
+            .disabled(model.isUpdating)
+        }
     }
 
     // MARK: Advance
@@ -295,6 +368,8 @@ struct TransactionDetailView: View {
         case .transactionInAnotherEvent: "Il movimento è già assegnato a un altro evento."
         case .mixedCurrency: "Questo movimento ha una valuta diversa da quella dell'evento."
         case .duplicateRule: "Esiste già una regola così."
+        case .transactionInUse:
+            "Il movimento è collegato a un trasferimento o a un anticipo. Scollegalo prima di eliminarlo."
         case .generic: "Non è stato possibile completare l'operazione. Riprova."
         }
     }

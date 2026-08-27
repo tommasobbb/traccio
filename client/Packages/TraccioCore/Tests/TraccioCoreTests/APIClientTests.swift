@@ -22,6 +22,7 @@ struct APIClientTests {
             {
               "id": "11111111-1111-1111-1111-111111111111",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "current",
               "currency": "EUR",
               "name": "Test Current",
@@ -30,6 +31,7 @@ struct APIClientTests {
             {
               "id": "33333333-3333-3333-3333-333333333333",
               "connection_id": "22222222-2222-2222-2222-222222222222",
+              "source": "synced",
               "kind": "card",
               "currency": "EUR",
               "name": null,
@@ -83,6 +85,7 @@ struct APIClientTests {
             let envelope = """
                 { "id": "\(accountID.uuidString)",
                   "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "source": "synced",
                   "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
                   "alias": "My salary account", "display_name": "My salary account",
                   "color": null, "icon": null,
@@ -111,6 +114,7 @@ struct APIClientTests {
             let envelope = """
                 { "id": "\(accountID.uuidString)",
                   "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "source": "synced",
                   "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
                   "alias": null, "display_name": "TEST CURRENT 01",
                   "color": null, "icon": null,
@@ -139,6 +143,7 @@ struct APIClientTests {
             let envelope = """
                 { "id": "\(accountID.uuidString)",
                   "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "source": "synced",
                   "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
                   "alias": null, "display_name": "TEST CURRENT 01",
                   "color": "teal", "icon": "savings",
@@ -172,6 +177,7 @@ struct APIClientTests {
             let envelope = """
                 { "id": "\(accountID.uuidString)",
                   "connection_id": "22222222-2222-2222-2222-222222222222",
+                  "source": "synced",
                   "kind": "current", "currency": "EUR", "name": "TEST CURRENT 01",
                   "alias": null, "display_name": "TEST CURRENT 01",
                   "color": null, "icon": null,
@@ -1847,6 +1853,214 @@ struct APIClientTests {
         }
 
         try await client.unassignTransaction(eventID: eventID, transactionID: transactionID)
+    }
+
+    // MARK: Manual accounts and manual transactions (ADR 0020)
+
+    @Test func createManualAccountPostsToAccountsAndDecodesTheManualAccount() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/accounts")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["alias"] as? String == "Contanti")
+            #expect(body?["kind"] as? String == "cash")
+            #expect(body?["currency"] as? String == "EUR")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "55555555-5555-5555-5555-555555555555",
+                  "connection_id": null,
+                  "source": "manual",
+                  "kind": "cash",
+                  "currency": "EUR",
+                  "name": null,
+                  "alias": "Contanti",
+                  "display_name": "Contanti",
+                  "color": null,
+                  "icon": null,
+                  "created_at": "2026-08-27T12:00:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.createManualAccount(
+            alias: "Contanti", kind: .cash, currency: "EUR", color: nil, icon: nil
+        )
+        #expect(account.connectionID == nil)
+        #expect(account.source == .manual)
+        #expect(account.kind == .cash)
+    }
+
+    @Test func deleteAccountIssuesADeleteToTheAccountEndpoint() async throws {
+        let accountID = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/accounts/\(accountID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteAccount(id: accountID)
+    }
+
+    @Test func deleteAccountThrowsBadStatusOnANonEmptyOrSyncedAccount() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "account_not_empty"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteAccount(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
+    /// 2026-08-20T10:00:00Z, built from components so the test never depends
+    /// on a hand-computed Unix timestamp.
+    private static let valueDate: Date = {
+        var c = DateComponents()
+        c.year = 2026; c.month = 8; c.day = 20; c.hour = 10; c.minute = 0; c.second = 0
+        c.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .iso8601).date(from: c)!
+    }()
+
+    @Test func createManualTransactionPostsTheRequestAsSnakeCaseJSON() async throws {
+        let accountID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/transactions")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["account_id"] as? String == accountID.uuidString)
+            #expect(body?["amount"] as? Int == -1500)
+            #expect(body?["currency"] as? String == "EUR")
+            #expect((body?["value_date"] as? String)?.hasPrefix("2026-08-20T10:00:00") == true)
+            #expect(body?["description"] as? String == "TEST CASH 01")
+            // Omitted, not sent as null, when nil.
+            #expect(body?["confirmed_category_id"] == nil)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "99999999-9999-9999-9999-999999999999",
+                  "account_id": "\(accountID.uuidString)",
+                  "amount": -1500,
+                  "effective_amount": -1500,
+                  "currency": "EUR",
+                  "booked_at": null,
+                  "value_date": "2026-08-20T10:00:00+00:00",
+                  "description": "TEST CASH 01",
+                  "display_description": null,
+                  "status": "booked",
+                  "role": "personal",
+                  "suggested_category_id": null,
+                  "confirmed_category_id": null,
+                  "effective_category_id": null,
+                  "event_id": null
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let created = try await client.createManualTransaction(
+            CreateManualTransactionRequest(
+                accountID: accountID,
+                amount: -1500,
+                currency: "EUR",
+                valueDate: Self.valueDate,
+                description: "TEST CASH 01"
+            )
+        )
+        #expect(created.amount == -1500)
+        #expect(created.status == .booked)
+    }
+
+    @Test func editManualTransactionPostsToTheEditEndpoint() async throws {
+        let txID = UUID(uuidString: "99999999-9999-9999-9999-999999999999")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/transactions/\(txID.uuidString)/edit")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["amount"] as? Int == -1600)
+            #expect(body?["description"] as? String == "TEST CASH 01 v2")
+            #expect(body?["account_id"] == nil)  // an edit never moves accounts
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "\(txID.uuidString)",
+                  "account_id": "22222222-2222-2222-2222-222222222222",
+                  "amount": -1600,
+                  "effective_amount": -1600,
+                  "currency": "EUR",
+                  "booked_at": null,
+                  "value_date": "2026-08-21T09:00:00+00:00",
+                  "description": "TEST CASH 01 v2",
+                  "display_description": null,
+                  "status": "booked",
+                  "role": "personal",
+                  "suggested_category_id": null,
+                  "confirmed_category_id": null,
+                  "effective_category_id": null,
+                  "event_id": null
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let edited = try await client.editManualTransaction(
+            id: txID,
+            EditManualTransactionRequest(
+                amount: -1600,
+                currency: "EUR",
+                valueDate: Self.valueDate,
+                description: "TEST CASH 01 v2"
+            )
+        )
+        #expect(edited.amount == -1600)
+    }
+
+    @Test func deleteManualTransactionIssuesADeleteToTheTransactionEndpoint() async throws {
+        let txID = UUID(uuidString: "99999999-9999-9999-9999-999999999999")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "DELETE")
+            #expect(request.url?.path == "/transactions/\(txID.uuidString)")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        try await client.deleteManualTransaction(id: txID)
+    }
+
+    @Test func deleteManualTransactionThrowsBadStatusWhenInUse() async {
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "transaction_in_use"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.deleteManualTransaction(id: UUID())
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
     }
 }
 

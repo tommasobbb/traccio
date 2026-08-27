@@ -219,4 +219,93 @@ struct TransactionsViewModelTests {
         #expect(filters.count == 2)
         #expect(filters.last?.searchTerm == "mercato")
     }
+
+    // MARK: Manual movements (ADR 0020)
+
+    private static func makeAccount(id: UUID, source: AccountSource) -> AccountResponse {
+        AccountResponse(
+            id: id,
+            connectionID: source == .manual ? nil : UUID(),
+            source: source,
+            kind: source == .manual ? .cash : .current,
+            currency: "EUR",
+            name: source == .manual ? nil : "TEST CURRENT 01",
+            alias: source == .manual ? "Contanti" : nil,
+            displayName: source == .manual ? "Contanti" : "TEST CURRENT 01",
+            color: nil,
+            icon: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
+    @Test func manualAccountsFiltersOutSyncedOnes() async throws {
+        let manualID = UUID()
+        let client = FakeAPIClient()
+        await client.setAccounts([
+            Self.makeAccount(id: UUID(), source: .synced),
+            Self.makeAccount(id: manualID, source: .manual),
+        ])
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        #expect(model.manualAccounts.map(\.id) == [manualID])
+    }
+
+    @Test func createManualTransactionReloadsAndBumpsSuccessTickOnSuccess() async throws {
+        let accountID = UUID()
+        let client = FakeAPIClient()
+        await client.setTransactions([Self.makeTransaction()])
+        await client.setCreateManualTransactionResult(Self.makeTransaction())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.createManualTransaction(
+            accountID: accountID, amount: -1500, currency: "EUR",
+            valueDate: Date(timeIntervalSince1970: 1_755_000_000),
+            description: "TEST CASH 01", confirmedCategoryID: nil
+        )
+
+        #expect(ok)
+        #expect(model.createFailure == nil)
+        #expect(model.successTick == 1)
+        let recorded = await client.createdManualTransactions
+        #expect(recorded.count == 1)
+        #expect(recorded.first?.accountID == accountID)
+        #expect(recorded.first?.amount == -1500)
+        // load()'s first-page request, then a second after the create.
+        #expect(await client.receivedTransactionsOffsets == [0, 0])
+    }
+
+    @Test func createManualTransactionOn409SurfacesAccountNotManual() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateManualTransactionError(APIError.badStatus(409))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.createManualTransaction(
+            accountID: UUID(), amount: -1, currency: "EUR",
+            valueDate: Date(timeIntervalSince1970: 1_755_000_000),
+            description: "x", confirmedCategoryID: nil
+        )
+
+        #expect(!ok)
+        #expect(model.createFailure == .accountNotManual)
+    }
+
+    @Test func removeDropsOneRowLeavingTheRest() async throws {
+        let first = Self.makeTransaction()
+        let second = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([first, second])
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        model.remove(id: first.id)
+
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.map(\.id) == [second.id])
+    }
 }
