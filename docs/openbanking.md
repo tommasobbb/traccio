@@ -57,6 +57,25 @@ They produce the application ID and the private key the backend adapter needs.
 References: Enable Banking docs — `quick-start`, `api/control-panel`,
 `tpp/getting-started` under <https://enablebanking.com/docs>.
 
+## Institution discovery (`GET /aspsps`)
+
+`GET /aspsps?country=<ISO2>` returns the supported banks for a country — public
+metadata, no personal or consent data. Drives the client's institution picker
+(`StartConnectionSheet`) via `BankProvider.list_institutions`. From a live
+`country=IT` call (2026-08-27): 338 entries. Fields per entry:
+
+| Field | Coverage (IT) | Notes |
+| --- | --- | --- |
+| `name` | 338/338 | The provider-scoped identifier — pass straight back as `StartConnectionRequest.institution`. |
+| `country` | 338/338 | ISO 3166-1 alpha-2. |
+| `logo` | 338/338 | `string(uri)`. URL shape `https://enablebanking.com/brands/{country}/{percent-encoded name}/` (deterministic from `name`+`country`). Serves `image/png` (~5431×1200), `CORS: *`, `cache-control: immutable`. Uploadcare-style transform suffixes work: `.../-/resize/120x/` → `image/webp`. Public branding — not sensitive. |
+| `bic` | 252/338 | Bank identifier code; absent for some (e.g. PayPal). |
+| `psu_types` | 338/338 | e.g. `["personal", "business"]`. |
+| `auth_methods` | 338/338 | Authentication approaches offered. |
+| `beta` | 338/338 | Implementation-status flag. |
+| `maximum_consent_validity` | 338/338 | Seconds; the ceiling for the `valid_until` we request. |
+| `required_psu_headers` | 36/338 | The per-ASPSP PSU-header requirement referenced in "Operational constraints" — present only where the bank demands specific headers. |
+
 ## Consent flow
 
 How a `Connection` is authorized, as implemented by the Enable Banking adapter
