@@ -240,7 +240,13 @@ class EnableBankingProvider(BankProvider):
             aspsp_country = aspsp.get("country")
             if not isinstance(name, str) or not isinstance(aspsp_country, str):
                 raise ProviderError("Enable Banking /aspsps entry is missing 'name' or 'country'")
-            institutions.append(Institution(name=name, country=aspsp_country))
+            # ``logo`` is a URL to public brand imagery, present on every IT
+            # ASPSP observed (2026-08-27) but treated as optional — a missing
+            # or non-string value degrades to a lettermark in the client, it
+            # does not fail the picker.
+            raw_logo = aspsp.get("logo")
+            logo = raw_logo if isinstance(raw_logo, str) and raw_logo else None
+            institutions.append(Institution(name=name, country=aspsp_country, logo=logo))
         return institutions
 
     def _resolve_account_uid(

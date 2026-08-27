@@ -217,24 +217,25 @@ final class AccountsViewModel {
     /// Parameters
     /// ----------
     /// institution:
-    ///     The provider-scoped institution identifier, picked from
-    ///     `institutions`.
-    /// country:
-    ///     ISO 3166-1 alpha-2 country the institution was offered in.
+    ///     The institution the user picked, straight from `institutions`.
+    ///     Its `name`/`country` drive the SCA start; its `logo` is passed
+    ///     through so the backend stores it on the connection for Conti.
     ///
     /// Returns
     /// -------
     /// The URL to open in the system browser — never an in-app `WebView`
     /// (`.claude/rules/data-safety.md`) — or `nil` on failure, having already
     /// recorded `startConnectionFailed`.
-    func startConnection(institution: String, country: String) async -> URL? {
+    func startConnection(_ institution: InstitutionResponse) async -> URL? {
         guard !isStartingConnection else { return nil }
         isStartingConnection = true
         defer { isStartingConnection = false }
         startConnectionFailed = false
 
         do {
-            let result = try await client.startConnection(institution: institution, country: country)
+            let result = try await client.startConnection(
+                institution: institution.name, country: institution.country, logo: institution.logo
+            )
             return URL(string: result.authorizationURL)
         } catch {
             startConnectionFailed = true

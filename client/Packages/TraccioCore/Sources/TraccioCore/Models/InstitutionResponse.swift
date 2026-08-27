@@ -8,10 +8,14 @@ public struct InstitutionResponse: Codable, Sendable, Equatable {
     public let name: String
     /// ISO 3166-1 alpha-2 country the institution is offered in.
     public let country: String
+    /// The institution's logo URL, or `nil` when the provider has none. The
+    /// client renders it with a lettermark fallback.
+    public let logo: String?
 
-    public init(name: String, country: String) {
+    public init(name: String, country: String, logo: String? = nil) {
         self.name = name
         self.country = country
+        self.logo = logo
     }
 }
 

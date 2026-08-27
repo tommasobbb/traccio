@@ -67,7 +67,9 @@ public protocol APIClientProtocol: Sendable {
     func deleteReimbursement(advanceID: UUID, id: UUID) async throws
     func connections() async throws -> [ConnectionResponse]
     func institutions(country: String) async throws -> [InstitutionResponse]
-    func startConnection(institution: String, country: String) async throws -> StartConnectionResponse
+    func startConnection(
+        institution: String, country: String, logo: String?
+    ) async throws -> StartConnectionResponse
     func syncConnection(connectionID: UUID) async throws -> SyncResponse
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
     func transferSuggestions() async throws -> [TransferSuggestionResponse]

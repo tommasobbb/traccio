@@ -59,8 +59,8 @@ _PROVIDER_ACCOUNTS = [
 # Synthetic institutions the fake adapter reports for `GET /connections/institutions`
 # (see data-safety rules).
 _INSTITUTIONS = [
-    Institution(name="Test Bank 01", country="IT"),
-    Institution(name="Test Bank 02", country="IT"),
+    Institution(name="Test Bank 01", country="IT", logo="https://logos.example.test/it/tb01/"),
+    Institution(name="Test Bank 02", country="IT", logo=None),
 ]
 
 
@@ -200,8 +200,12 @@ def test_list_institutions_returns_the_providers_institutions() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "institutions": [
-            {"name": "Test Bank 01", "country": "IT"},
-            {"name": "Test Bank 02", "country": "IT"},
+            {
+                "name": "Test Bank 01",
+                "country": "IT",
+                "logo": "https://logos.example.test/it/tb01/",
+            },
+            {"name": "Test Bank 02", "country": "IT", "logo": None},
         ]
     }
 
@@ -260,6 +264,27 @@ def test_start_connection_creates_pending_and_returns_url() -> None:
     assert row.country == "IT"
     assert row.auth_state == _STATE
     assert row.encrypted_credentials is None
+    # No logo was sent, so none is stored.
+    assert row.institution_logo is None
+
+
+def test_start_connection_persists_the_supplied_logo_and_lists_it() -> None:
+    engine = _sqlite_engine()
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    client.post(
+        "/connections",
+        json={
+            "institution": "Test Bank 01",
+            "country": "IT",
+            "logo": "https://logos.example.test/it/tb01/",
+        },
+    )
+    client.get("/connections/callback", params={"code": "AUTH-CODE-01", "state": _STATE})
+
+    assert _connections(engine)[0].institution_logo == "https://logos.example.test/it/tb01/"
+    listed = client.get("/connections").json()["connections"][0]
+    assert listed["institution_logo"] == "https://logos.example.test/it/tb01/"
 
 
 def test_callback_activates_connection_and_encrypts_the_credential() -> None:

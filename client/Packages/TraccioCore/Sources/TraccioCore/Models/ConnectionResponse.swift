@@ -13,6 +13,10 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
     public let provider: String
     /// Human-readable bank name for display.
     public let institutionName: String
+    /// The bank's logo URL, captured when the connection was created, or
+    /// `nil` for connections made before this existed (or when the provider
+    /// had no logo). The client renders it with a lettermark fallback.
+    public let institutionLogo: String?
     /// Consent lifecycle state, as last reported by the provider. Render
     /// `consentState` instead — this alone does not account for `expiresAt`
     /// elapsing.
@@ -49,6 +53,7 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         case id
         case provider
         case institutionName = "institution_name"
+        case institutionLogo = "institution_logo"
         case status
         case consentState = "consent_state"
         case daysUntilExpiry = "days_until_expiry"
@@ -64,6 +69,7 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         id: UUID,
         provider: String,
         institutionName: String,
+        institutionLogo: String? = nil,
         status: ConnectionStatus,
         consentState: ConsentState,
         daysUntilExpiry: Int?,
@@ -77,6 +83,7 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
         self.id = id
         self.provider = provider
         self.institutionName = institutionName
+        self.institutionLogo = institutionLogo
         self.status = status
         self.consentState = consentState
         self.daysUntilExpiry = daysUntilExpiry

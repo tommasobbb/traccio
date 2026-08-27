@@ -795,13 +795,22 @@ public struct APIClient: Sendable {
     ///     `institutions(country:)`.
     /// country:
     ///     ISO 3166-1 alpha-2 country the institution was offered in.
+    /// logo:
+    ///     The picked institution's `logo` URL, passed straight through so the
+    ///     backend stores it on the connection for the Conti screen. `nil`
+    ///     when the picker had none.
     ///
     /// Returns
     /// -------
     /// Where to send the user — open `authorizationURL` in the system
     /// browser, never an in-app `WebView`.
-    public func startConnection(institution: String, country: String) async throws -> StartConnectionResponse {
-        try await post("connections", body: StartConnectionRequest(institution: institution, country: country))
+    public func startConnection(
+        institution: String, country: String, logo: String? = nil
+    ) async throws -> StartConnectionResponse {
+        try await post(
+            "connections",
+            body: StartConnectionRequest(institution: institution, country: country, logo: logo)
+        )
     }
 
     /// Sync a connection's accounts and transactions with the bank.

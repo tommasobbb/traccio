@@ -100,11 +100,7 @@ struct AccountsView: View {
     private static let institutionCountry = "IT"
 
     private func startConnection(_ institution: InstitutionResponse) async {
-        guard
-            let url = await model.startConnection(
-                institution: institution.name, country: institution.country
-            )
-        else { return }
+        guard let url = await model.startConnection(institution) else { return }
         isPickingInstitution = false
         openURL(url)
     }
@@ -293,7 +289,9 @@ struct AccountsView: View {
 
     private func connectionHeader(_ connection: ConnectionResponse) -> some View {
         HStack(spacing: 12) {
-            bankMark(for: connection.institutionName)
+            BankLogoView(
+                logo: connection.institutionLogo, name: connection.institutionName, size: 40
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(connection.institutionName)
                     .font(Typography.cardTitle)
@@ -315,15 +313,6 @@ struct AccountsView: View {
                 action: { Task { await model.sync(connectionID: connection.id) } }
             )
         }
-    }
-
-    private func bankMark(for institutionName: String) -> some View {
-        Text(institutionName.first.map(String.init)?.uppercased() ?? "?")
-            .font(Typography.cardTitle)
-            .foregroundStyle(Palette.inkSecondary)
-            .frame(width: 40, height: 40)
-            .background(Palette.neutralFill)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func statusDotColor(for state: ConsentState) -> Color {

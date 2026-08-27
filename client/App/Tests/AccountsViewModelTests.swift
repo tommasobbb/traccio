@@ -138,19 +138,30 @@ struct AccountsViewModelTests {
         #expect(model.institutions.isEmpty)
     }
 
-    @Test func startConnectionReturnsTheAuthorizationURL() async throws {
+    @Test func startConnectionReturnsTheAuthorizationURLAndForwardsTheLogo() async throws {
         let client = FakeAPIClient()
         await client.setStartConnectionResult(
             StartConnectionResponse(connectionID: UUID(), authorizationURL: "https://sca.example.test/go")
         )
         let model = AccountsViewModel(client: client)
 
-        let url = await model.startConnection(institution: "TEST BANK 01", country: "IT")
+        let url = await model.startConnection(
+            InstitutionResponse(
+                name: "TEST BANK 01", country: "IT", logo: "https://logos.example.test/tb01/"
+            )
+        )
 
         #expect(url == URL(string: "https://sca.example.test/go"))
         #expect(model.startConnectionFailed == false)
         let recorded = await client.startedConnections
-        #expect(recorded == [.init(institution: "TEST BANK 01", country: "IT")])
+        #expect(
+            recorded == [
+                .init(
+                    institution: "TEST BANK 01", country: "IT",
+                    logo: "https://logos.example.test/tb01/"
+                )
+            ]
+        )
     }
 
     @Test func startConnectionOnFailureSetsStartConnectionFailedAndReturnsNil() async throws {
@@ -158,7 +169,9 @@ struct AccountsViewModelTests {
         await client.setStartConnectionError(FakeAPIError())
         let model = AccountsViewModel(client: client)
 
-        let url = await model.startConnection(institution: "TEST BANK 01", country: "IT")
+        let url = await model.startConnection(
+            InstitutionResponse(name: "TEST BANK 01", country: "IT", logo: nil)
+        )
 
         #expect(url == nil)
         #expect(model.startConnectionFailed == true)

@@ -68,7 +68,7 @@ metadata, no personal or consent data. Drives the client's institution picker
 | --- | --- | --- |
 | `name` | 338/338 | The provider-scoped identifier — pass straight back as `StartConnectionRequest.institution`. |
 | `country` | 338/338 | ISO 3166-1 alpha-2. |
-| `logo` | 338/338 | `string(uri)`. URL shape `https://enablebanking.com/brands/{country}/{percent-encoded name}/` (deterministic from `name`+`country`). Serves `image/png` (~5431×1200), `CORS: *`, `cache-control: immutable`. Uploadcare-style transform suffixes work: `.../-/resize/120x/` → `image/webp`. Public branding — not sensitive. |
+| `logo` | 338/338 | `string(uri)`. URL shape `https://enablebanking.com/brands/{country}/{percent-encoded name}/` (deterministic from `name`+`country`). Serves `image/png` (~5431×1200), `CORS: *`, `cache-control: immutable`. Uploadcare-style transform suffixes work: `.../-/resize/120x/` → `image/webp`. Public branding — not sensitive. Passed through to `InstitutionResponse.logo` and **persisted** on the connection (`connections.institution_logo`) at connect time, so Conti can render it without a second `/aspsps` call; the client resizes it with the `-/resize/` suffix and falls back to a lettermark. |
 | `bic` | 252/338 | Bank identifier code; absent for some (e.g. PayPal). |
 | `psu_types` | 338/338 | e.g. `["personal", "business"]`. |
 | `auth_methods` | 338/338 | Authentication approaches offered. |

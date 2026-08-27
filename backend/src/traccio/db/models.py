@@ -158,6 +158,11 @@ class ConnectionRow(Base):
         Adapter that produced the connection (e.g. ``"enable_banking"``).
     institution_name : str
         Human-readable bank name for display.
+    institution_logo : str or None
+        The bank's logo URL from the provider's institution list at
+        connect time (Enable Banking ASPSP ``logo``). ``None`` for
+        connections created before this column existed or when the provider
+        had no logo. Cosmetic — the client falls back to a lettermark.
     country : str or None
         ISO 3166-1 alpha-2 country of the institution, as supplied when
         authorization started. ``None`` for connections created before this
@@ -190,6 +195,7 @@ class ConnectionRow(Base):
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
     provider: Mapped[str] = mapped_column(String(64))
     institution_name: Mapped[str] = mapped_column(String(255))
+    institution_logo: Mapped[str | None] = mapped_column(Text, nullable=True)
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     status: Mapped[ConnectionStatus] = mapped_column(_enum_column(ConnectionStatus))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

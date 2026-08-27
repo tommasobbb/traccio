@@ -161,12 +161,16 @@ class Institution(BaseModel):
         as ``StartConnectionRequest.institution``.
     country : str
         ISO 3166-1 alpha-2 country the institution is offered in.
+    logo : str or None
+        The institution's logo URL, if the provider supplies one. ``None``
+        when absent; the client falls back to a lettermark. Cosmetic.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     country: str
+    logo: str | None = None
 
 
 class SyncContext(BaseModel):

@@ -79,6 +79,12 @@ class Connection(BaseModel):
         ``"enable_banking"``).
     institution_name : str
         Human-readable bank name for display.
+    institution_logo : str or None
+        The bank's logo URL, as supplied by the provider's institution list
+        when the connection was started (Enable Banking's ASPSP ``logo``).
+        ``None`` for connections created before this field existed, or if the
+        provider had no logo — the client falls back to a lettermark.
+        Cosmetic; nothing derives from it.
     country : str or None
         ISO 3166-1 alpha-2 country of the institution, as supplied when
         authorization started (``start_authorization`` needs it again on
@@ -105,6 +111,7 @@ class Connection(BaseModel):
     user_id: UUID
     provider: str
     institution_name: str
+    institution_logo: str | None = None
     country: str | None = None
     status: ConnectionStatus
     expires_at: datetime | None = None

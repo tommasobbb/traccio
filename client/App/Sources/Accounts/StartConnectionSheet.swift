@@ -79,7 +79,8 @@ struct StartConnectionSheet: View {
         Button {
             onSelect(institution)
         } label: {
-            HStack {
+            HStack(spacing: 10) {
+                BankLogoView(logo: institution.logo, name: institution.name, size: 26)
                 Text(institution.name)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)

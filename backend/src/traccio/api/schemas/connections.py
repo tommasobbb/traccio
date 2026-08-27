@@ -24,10 +24,17 @@ class StartConnectionRequest(BaseModel):
         The bank's provider-scoped identifier (Enable Banking ASPSP ``name``).
     country : str
         ISO 3166-1 alpha-2 country of the bank.
+    logo : str or None
+        The bank's logo URL, taken from the same ``GET /connections/institutions``
+        entry the caller picked. Stored verbatim on the connection for the
+        Conti screen; ``None`` when the picker had none. Cosmetic — the client
+        already had it, so re-fetching it server-side would only add a
+        provider round-trip to the SCA-start path.
     """
 
     institution: str
     country: str
+    logo: str | None = None
 
 
 class StartConnectionResponse(BaseModel):
@@ -55,15 +62,19 @@ class InstitutionResponse(BaseModel):
         as ``StartConnectionRequest.institution``.
     country : str
         ISO 3166-1 alpha-2 country the institution is offered in.
+    logo : str or None
+        The institution's logo URL, or ``None`` when the provider has none.
+        The client renders it with a lettermark fallback.
     """
 
     name: str
     country: str
+    logo: str | None
 
     @classmethod
     def from_domain(cls, institution: Institution) -> "InstitutionResponse":
         """Project a provider :class:`~traccio.providers.base.Institution`."""
-        return cls(name=institution.name, country=institution.country)
+        return cls(name=institution.name, country=institution.country, logo=institution.logo)
 
 
 class InstitutionsResponse(BaseModel):
@@ -119,6 +130,10 @@ class ConnectionResponse(BaseModel):
         Adapter that produced the connection (e.g. ``"enable_banking"``).
     institution_name : str
         Human-readable bank name for display.
+    institution_logo : str or None
+        The bank's logo URL, captured at connect time. ``None`` for
+        connections created before this existed or when the provider had
+        none — the client falls back to a lettermark.
     status : ConnectionStatus
         Consent lifecycle state, as last reported by the provider. See
         ``consent_state`` for the field the client should actually render.
@@ -160,6 +175,7 @@ class ConnectionResponse(BaseModel):
     id: UUID
     provider: str
     institution_name: str
+    institution_logo: str | None
     status: ConnectionStatus
     consent_state: ConsentState
     days_until_expiry: int | None
@@ -215,6 +231,7 @@ class ConnectionResponse(BaseModel):
             id=connection.id,
             provider=connection.provider,
             institution_name=connection.institution_name,
+            institution_logo=connection.institution_logo,
             status=connection.status,
             consent_state=consent_state(
                 connection, now=now, warning_window_days=warning_window_days

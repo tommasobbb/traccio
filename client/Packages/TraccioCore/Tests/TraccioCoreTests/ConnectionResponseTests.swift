@@ -18,6 +18,7 @@ struct ConnectionResponseTests {
               "id": "11111111-1111-1111-1111-111111111111",
               "provider": "enable_banking",
               "institution_name": "Revolut",
+              "institution_logo": "https://enablebanking.com/brands/IT/Revolut/",
               "status": "active",
               "consent_state": "expiring_soon",
               "days_until_expiry": 9,
@@ -42,6 +43,7 @@ struct ConnectionResponseTests {
         #expect(connection.id == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
         #expect(connection.provider == "enable_banking")
         #expect(connection.institutionName == "Revolut")
+        #expect(connection.institutionLogo == "https://enablebanking.com/brands/IT/Revolut/")
         #expect(connection.status == .active)
         #expect(connection.consentState == .expiringSoon)
         #expect(connection.daysUntilExpiry == 9)
@@ -176,6 +178,8 @@ struct ConnectionResponseTests {
         #expect(connection.daysUntilExpiry == nil)
         #expect(connection.expiresAt == nil)
         #expect(connection.lastSyncedAt == nil)
+        // `institution_logo` omitted entirely — an optional key decodes to nil.
+        #expect(connection.institutionLogo == nil)
     }
 
     @Test func rejectsMissingRequiredField() {

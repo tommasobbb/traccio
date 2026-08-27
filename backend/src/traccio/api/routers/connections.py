@@ -139,7 +139,8 @@ def start_connection(
     Parameters
     ----------
     body : StartConnectionRequest
-        The bank to authorize (institution + country).
+        The bank to authorize (institution + country, plus its logo URL from
+        the picker, stored verbatim for display).
     session : Session
         Request-scoped database session.
     user_id : UUID
@@ -164,6 +165,7 @@ def start_connection(
         user_id=user_id,
         provider=provider.name,
         institution_name=body.institution,
+        institution_logo=body.logo,
         country=body.country,
         status=ConnectionStatus.PENDING,
     )

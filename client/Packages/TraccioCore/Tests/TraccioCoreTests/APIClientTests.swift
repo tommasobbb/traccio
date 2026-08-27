@@ -1438,7 +1438,7 @@ struct APIClientTests {
         #expect(result.authorizationURL == "https://sca.example/go")
     }
 
-    @Test func startConnectionPostsTheInstitutionAndCountryAsSnakeCaseJSON() async throws {
+    @Test func startConnectionPostsTheInstitutionCountryAndLogoAsSnakeCaseJSON() async throws {
         let client = Self.makeClient { request in
             #expect(request.httpMethod == "POST")
             #expect(request.url?.path == "/connections")
@@ -1446,15 +1446,33 @@ struct APIClientTests {
             let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
             #expect(body?["institution"] == "TEST BANK 01")
             #expect(body?["country"] == "IT")
+            #expect(body?["logo"] == "https://logos.example.test/tb01/")
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
             )!
             return (response, Data(Self.startConnectionEnvelope.utf8))
         }
 
-        let result = try await client.startConnection(institution: "TEST BANK 01", country: "IT")
+        let result = try await client.startConnection(
+            institution: "TEST BANK 01", country: "IT", logo: "https://logos.example.test/tb01/"
+        )
         #expect(result.connectionID == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
         #expect(result.authorizationURL == "https://sca.example/go")
+    }
+
+    @Test func startConnectionOmitsLogoFromThePayloadWhenNil() async throws {
+        let client = Self.makeClient { request in
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["institution"] as? String == "TEST BANK 01")
+            #expect(body?.keys.contains("logo") == false)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.startConnectionEnvelope.utf8))
+        }
+
+        _ = try await client.startConnection(institution: "TEST BANK 01", country: "IT", logo: nil)
     }
 
     /// A representative `GET /transfers/suggestions` envelope: one suggestion.

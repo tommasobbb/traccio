@@ -178,10 +178,11 @@ actor FakeAPIClient: APIClientProtocol {
     /// exactly which institution and country were sent.
     private(set) var startedConnections: [RecordedStartConnection] = []
 
-    /// A recorded `startConnection(institution:country:)` call.
+    /// A recorded `startConnection(institution:country:logo:)` call.
     struct RecordedStartConnection: Equatable {
         let institution: String
         let country: String
+        let logo: String?
     }
 
     /// A recorded `renameCategory(id:name:)` call, for asserting exactly
@@ -865,8 +866,12 @@ actor FakeAPIClient: APIClientProtocol {
         return institutionsToReturn
     }
 
-    func startConnection(institution: String, country: String) async throws -> StartConnectionResponse {
-        startedConnections.append(RecordedStartConnection(institution: institution, country: country))
+    func startConnection(
+        institution: String, country: String, logo: String?
+    ) async throws -> StartConnectionResponse {
+        startedConnections.append(
+            RecordedStartConnection(institution: institution, country: country, logo: logo)
+        )
         if let startConnectionError { throw startConnectionError }
         return startConnectionToReturn
     }
