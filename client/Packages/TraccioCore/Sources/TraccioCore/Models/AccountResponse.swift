@@ -14,9 +14,10 @@ import Foundation
 public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
     /// Stable account identifier.
     public let id: UUID
-    /// Connection currently exposing this account.
-    public let connectionID: UUID
-    /// `current`, `savings`, `card`, or `wallet`.
+    /// Connection currently exposing this account, or `nil` for a manual
+    /// account — one the user created with no bank behind it (ADR 0020).
+    public let connectionID: UUID?
+    /// `current`, `savings`, `card`, `wallet`, or `cash`.
     public let kind: AccountKind
     /// The account's ISO 4217 currency.
     public let currency: String
@@ -50,7 +51,7 @@ public struct AccountResponse: Codable, Sendable, Identifiable, Equatable {
 
     public init(
         id: UUID,
-        connectionID: UUID,
+        connectionID: UUID?,
         kind: AccountKind,
         currency: String,
         name: String?,

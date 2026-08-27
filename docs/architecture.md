@@ -105,6 +105,12 @@ The initial sync after a new connection is a separate, greedy path: it must
 pull maximum history inside the short post-authorization window. There is no
 second attempt.
 
+Sync only ever iterates the provider's own account list, and `upsert_account`
+matches on `(user_id, identification_hash)` — `null` for a manual account
+(ADR 0020), and `NULL != NULL`. So a **manual account** and its hand-entered
+transactions are structurally invisible to sync: it cannot adopt, overwrite,
+or prune them.
+
 ## Client
 
 The Swift client is thin on logic and thick on presentation.

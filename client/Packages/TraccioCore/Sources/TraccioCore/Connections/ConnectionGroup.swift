@@ -48,8 +48,12 @@ extension TraccioCore {
         var accountsByConnection: [UUID: [AccountResponse]] = [:]
         var orphaned: [AccountResponse] = []
         for account in accounts {
-            if connections.contains(where: { $0.id == account.connectionID }) {
-                accountsByConnection[account.connectionID, default: []].append(account)
+            // A manual account (ADR 0020) has no `connectionID` and always
+            // falls into the trailing orphaned group.
+            if let connectionID = account.connectionID,
+                connections.contains(where: { $0.id == connectionID })
+            {
+                accountsByConnection[connectionID, default: []].append(account)
             } else {
                 orphaned.append(account)
             }

@@ -194,6 +194,13 @@ class EnableBankingProvider(BankProvider):
         context: SyncContext,
     ) -> list[Transaction]:
         headers = self._psu_headers_for(context)
+        if account.identification_hash is None:
+            # Only a manual account (ADR 0020) has no identification_hash, and a
+            # sync never iterates those — reaching here with one is a bug, not a
+            # provider condition to handle gracefully.
+            raise ProviderError(
+                "cannot fetch transactions for an account with no provider identity"
+            )
         account_uid = self._resolve_account_uid(
             credentials, account.identification_hash, extra_headers=headers
         )

@@ -1,15 +1,18 @@
-"""Pure account rules: alias validation and the display-name fallback.
+"""Pure account rules: alias validation, the display-name fallback, and the
+synced-vs-manual classification.
 
 A user may set an ``alias`` on an :class:`~traccio.domain.models.Account` to
 tell otherwise-identical accounts apart (ADR 0017) — ``name`` alone is the
 provider's own product name (e.g. "Conto corrente"), which several accounts at
 the same bank often share, and is overwritten on every sync
-(:func:`~traccio.db.repositories.upsert_account`). This module holds the one
-pure derivation of what to actually display, plus alias validation — no I/O,
-imports only ``domain/``, so both are testable without a database and reused
-by the API layer.
+(:func:`~traccio.db.repositories.upsert_account`). This module holds the pure
+account derivations — what to actually display, and whether an account is
+bank-synced or user-maintained (:func:`account_source`, ADR 0020) — plus alias
+validation. No I/O, imports only ``domain/``, so all three are testable without
+a database and reused by the API layer.
 """
 
+from traccio.domain.enums import AccountSource
 from traccio.domain.models import Account
 
 # Generous relative to a category name (255): an alias is free text the user
@@ -101,3 +104,28 @@ def display_name(account: Account) -> str | None:
         UI copy, not a domain fact.
     """
     return account.alias if account.alias is not None else account.name
+
+
+def account_source(account: Account) -> AccountSource:
+    """Return whether ``account`` is bank-synced or user-maintained.
+
+    Derived from ``connection_id``, never stored (ADR 0020) — the same
+    discipline :func:`~traccio.domain.consent.consent_state` and
+    :func:`~traccio.domain.advances.derive_advance` follow. The ``Account``
+    validator guarantees ``connection_id`` and ``identification_hash`` agree,
+    so either one answers the question; ``connection_id`` is the load-bearing
+    one (a sync writes it, a manual create leaves it ``None``).
+
+    Parameters
+    ----------
+    account : Account
+        The account to classify.
+
+    Returns
+    -------
+    AccountSource
+        :attr:`~traccio.domain.enums.AccountSource.SYNCED` when the account is
+        backed by a connection, else
+        :attr:`~traccio.domain.enums.AccountSource.MANUAL`.
+    """
+    return AccountSource.SYNCED if account.connection_id is not None else AccountSource.MANUAL

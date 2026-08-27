@@ -15,13 +15,13 @@ re-implements the confirmed-else-suggested fallback.
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 from traccio.domain.categories import effective_category
 from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import TransactionRole, TransactionStatus
 from traccio.domain.models import Transaction
-from traccio.domain.money import Money
+from traccio.domain.money import CurrencyCode, Money
 
 
 class ConfirmCategoryRequest(BaseModel):
@@ -34,6 +34,72 @@ class ConfirmCategoryRequest(BaseModel):
     """
 
     category_id: UUID
+
+
+class CreateManualTransactionRequest(BaseModel):
+    """Body for creating a movement on a manual account (ADR 0020).
+
+    Only manual accounts accept this — a synced account's history is
+    bank-owned and immutable (``409 account_not_manual`` otherwise). The new
+    row is always ``booked`` with ``role=personal`` and
+    ``key_strategy=manual``; there is no pending lifecycle without a bank.
+
+    Attributes
+    ----------
+    account_id : UUID
+        The manual account the movement belongs to. Must belong to the caller
+        and be manual.
+    amount : int
+        Signed value in the currency's minor unit (cents): negative for money
+        out, positive for money in. A :class:`~pydantic.StrictInt`, so a float
+        is rejected rather than truncated — the same discipline as
+        :class:`~traccio.domain.money.Money`.
+    currency : str
+        ISO 4217 code of ``amount`` (three uppercase letters).
+    value_date : datetime
+        When the movement affects the balance (timezone-aware). Used for every
+        date-bounded query — ``booked_at`` is left ``None`` for a manual row,
+        and ``coalesce(booked_at, value_date)`` then falls back to this.
+    description : str
+        Free-text description the user typed.
+    confirmed_category_id : UUID or None
+        An optional category to confirm on the new row at creation time. Must
+        belong to the caller. Equivalent to creating the row and then calling
+        ``POST /transactions/{id}/category``.
+    """
+
+    account_id: UUID
+    amount: StrictInt
+    currency: CurrencyCode
+    value_date: datetime
+    description: str
+    confirmed_category_id: UUID | None = None
+
+
+class EditManualTransactionRequest(BaseModel):
+    """Body for editing a movement on a manual account (ADR 0020).
+
+    The same movement fields as :class:`CreateManualTransactionRequest` minus
+    ``account_id`` (a movement does not move between accounts) and the category
+    (``POST``/``DELETE /transactions/{id}/category`` own that). ``409
+    transaction_not_manual`` if the row is on a synced account.
+
+    Attributes
+    ----------
+    amount : int
+        New signed value in minor units.
+    currency : str
+        New ISO 4217 code of ``amount``.
+    value_date : datetime
+        New value date (timezone-aware).
+    description : str
+        New description text.
+    """
+
+    amount: StrictInt
+    currency: CurrencyCode
+    value_date: datetime
+    description: str
 
 
 class TransactionResponse(BaseModel):

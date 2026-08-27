@@ -15,18 +15,19 @@
         "type": "string"
       },
       "AccountKind": {
-        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.",
+        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.\nCASH : str\n    A hand-tracked cash float (e.g. \"Contanti\"). Only ever a manual\n    account \u2014 there is no bank feed for cash (ADR 0020). ``kind`` is a\n    separate axis from whether the account is synced or manual; see\n    :class:`AccountSource`.",
         "enum": [
           "current",
           "savings",
           "card",
-          "wallet"
+          "wallet",
+          "cash"
         ],
         "title": "AccountKind",
         "type": "string"
       },
       "AccountResponse": {
-        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID\n    Connection currently exposing this account.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, or ``wallet``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Provider-supplied display name (overwritten on every sync).\nalias : str or None\n    User-chosen display name (ADR 0017), or ``None`` if unset.\ndisplay_name : str or None\n    The one name the client should actually show \u2014 ``alias`` if set, else\n    ``name``, else ``None`` \u2014 resolved once by\n    :func:`~traccio.domain.accounts.display_name` so the client does not\n    reimplement the fallback (it previously did, inconsistently, in three\n    different places).\ncolor : PaletteColor or None\n    User-chosen colour, or ``None`` if unset.\nicon : AccountIcon or None\n    User-chosen icon, or ``None`` if unset.\ncreated_at : datetime\n    When the account was first recorded.",
+        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID or None\n    Connection currently exposing this account, or ``None`` for a manual\n    account (ADR 0020).\nsource : AccountSource\n    ``synced`` if the account is backed by a bank connection, ``manual`` if\n    the user created and maintains it. Derived from ``connection_id`` (see\n    :func:`~traccio.domain.accounts.account_source`), never stored \u2014 sent so\n    the client does not infer it from a null.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, ``wallet``, or ``cash``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Provider-supplied display name (overwritten on every sync).\nalias : str or None\n    User-chosen display name (ADR 0017), or ``None`` if unset.\ndisplay_name : str or None\n    The one name the client should actually show \u2014 ``alias`` if set, else\n    ``name``, else ``None`` \u2014 resolved once by\n    :func:`~traccio.domain.accounts.display_name` so the client does not\n    reimplement the fallback (it previously did, inconsistently, in three\n    different places).\ncolor : PaletteColor or None\n    User-chosen colour, or ``None`` if unset.\nicon : AccountIcon or None\n    User-chosen icon, or ``None`` if unset.\ncreated_at : datetime\n    When the account was first recorded.",
         "properties": {
           "alias": {
             "anyOf": [
@@ -50,9 +51,16 @@
             ]
           },
           "connection_id": {
-            "format": "uuid",
-            "title": "Connection Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
           },
           "created_at": {
             "format": "date-time",
@@ -102,11 +110,15 @@
               }
             ],
             "title": "Name"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AccountSource"
           }
         },
         "required": [
           "id",
           "connection_id",
+          "source",
           "kind",
           "currency",
           "name",
@@ -118,6 +130,15 @@
         ],
         "title": "AccountResponse",
         "type": "object"
+      },
+      "AccountSource": {
+        "description": "Where an :class:`~traccio.domain.models.Account` comes from.\n\nDerived, never stored (ADR 0020) \u2014 see\n:func:`~traccio.domain.accounts.account_source`. An account either\nprojects a bank feed through a :class:`~traccio.domain.models.Connection`\n(``connection_id`` set) or is one the user created and maintains by hand\n(``connection_id`` is ``None``). Orthogonal to :class:`AccountKind`, which\nsays *what type* of account it is.\n\nAttributes\n----------\nSYNCED : str\n    Backed by a bank connection; its transactions are provider-sourced and\n    immutable.\nMANUAL : str\n    User-created and hand-maintained; its transactions are user-entered,\n    editable, and deletable, and a sync never touches it.",
+        "enum": [
+          "synced",
+          "manual"
+        ],
+        "title": "AccountSource",
+        "type": "string"
       },
       "AccountSummaryResponse": {
         "description": "Spending and income totals for one account, as returned to the client.\n\nAttributes\n----------\naccount_id : UUID\n    The account these totals belong to.\naccount_name : str or None\n    The account's resolved display name, or ``None`` if unset or the\n    account was deleted between aggregation and this read.\ncolor : PaletteColor or None\n    The account's colour, or ``None`` if unset (or the same race).\nicon : AccountIcon or None\n    The account's icon, or ``None`` if unset (or the same race).\nspending : int\n    Total spending in minor units (cents), a positive magnitude.\nincome : int\n    Total income in minor units (cents), a positive magnitude.\ntransaction_count : int\n    How many transactions fall on this account.",
@@ -978,6 +999,99 @@
         "title": "CreateEventRequest",
         "type": "object"
       },
+      "CreateManualAccountRequest": {
+        "description": "Body for creating a manual account (ADR 0020).\n\nA manual account has no bank connection: the user names it (``alias``),\npicks what kind of account it is and its currency, and optionally an\nappearance. ``name``/``identification_hash``/``connection_id`` are all\nserver-side ``None`` for it.\n\nAttributes\n----------\nalias : str\n    The account's name, e.g. ``\"Contanti\"``. Stripped and validated by\n    :func:`~traccio.domain.accounts.normalize_account_alias`; a manual\n    account must have one (unlike a synced account, which falls back to the\n    provider ``name``).\nkind : AccountKind\n    What type of account it is \u2014 typically ``cash`` or ``wallet`` for a\n    manual one, but any kind is accepted.\ncurrency : str\n    The account's ISO 4217 currency (three uppercase letters).\ncolor : PaletteColor or None\n    Optional colour, from the fixed :class:`PaletteColor` vocabulary.\nicon : AccountIcon or None\n    Optional icon, from the fixed :class:`AccountIcon` vocabulary.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountIcon"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          }
+        },
+        "required": [
+          "alias",
+          "kind",
+          "currency"
+        ],
+        "title": "CreateManualAccountRequest",
+        "type": "object"
+      },
+      "CreateManualTransactionRequest": {
+        "description": "Body for creating a movement on a manual account (ADR 0020).\n\nOnly manual accounts accept this \u2014 a synced account's history is\nbank-owned and immutable (``409 account_not_manual`` otherwise). The new\nrow is always ``booked`` with ``role=personal`` and\n``key_strategy=manual``; there is no pending lifecycle without a bank.\n\nAttributes\n----------\naccount_id : UUID\n    The manual account the movement belongs to. Must belong to the caller\n    and be manual.\namount : int\n    Signed value in the currency's minor unit (cents): negative for money\n    out, positive for money in. A :class:`~pydantic.StrictInt`, so a float\n    is rejected rather than truncated \u2014 the same discipline as\n    :class:`~traccio.domain.money.Money`.\ncurrency : str\n    ISO 4217 code of ``amount`` (three uppercase letters).\nvalue_date : datetime\n    When the movement affects the balance (timezone-aware). Used for every\n    date-bounded query \u2014 ``booked_at`` is left ``None`` for a manual row,\n    and ``coalesce(booked_at, value_date)`` then falls back to this.\ndescription : str\n    Free-text description the user typed.\nconfirmed_category_id : UUID or None\n    An optional category to confirm on the new row at creation time. Must\n    belong to the caller. Equivalent to creating the row and then calling\n    ``POST /transactions/{id}/category``.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "confirmed_category_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Category Id"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "value_date": {
+            "format": "date-time",
+            "title": "Value Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "amount",
+          "currency",
+          "value_date",
+          "description"
+        ],
+        "title": "CreateManualTransactionRequest",
+        "type": "object"
+      },
       "CreateReimbursementRequest": {
         "description": "Body for recording a reimbursement against an advance.\n\nAttributes\n----------\namount : int\n    The amount paid back, a positive magnitude in the advance's currency\n    (cents); must be ``> 0``.\ntransaction_id : UUID or None\n    The incoming transaction to link (the caller's, a ``personal``\n    non-``rejected`` credit). Omit for a manual cash reimbursement.\nparticipant_id : UUID or None\n    The participant this reimbursement is attributed to (ADR 0012). Must\n    be one of the advance's own participants, or the router rejects it\n    with a ``404 unknown_participant``. Omit to leave it unattributed \u2014\n    the only option before ADR 0012, still fully supported.\nnote : str or None\n    Optional free-text note.",
         "properties": {
@@ -1147,6 +1261,37 @@
           "currencies"
         ],
         "title": "DashboardSummaryResponse",
+        "type": "object"
+      },
+      "EditManualTransactionRequest": {
+        "description": "Body for editing a movement on a manual account (ADR 0020).\n\nThe same movement fields as :class:`CreateManualTransactionRequest` minus\n``account_id`` (a movement does not move between accounts) and the category\n(``POST``/``DELETE /transactions/{id}/category`` own that). ``409\ntransaction_not_manual`` if the row is on a synced account.\n\nAttributes\n----------\namount : int\n    New signed value in minor units.\ncurrency : str\n    New ISO 4217 code of ``amount``.\nvalue_date : datetime\n    New value date (timezone-aware).\ndescription : str\n    New description text.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "value_date": {
+            "format": "date-time",
+            "title": "Value Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "currency",
+          "value_date",
+          "description"
+        ],
+        "title": "EditManualTransactionRequest",
         "type": "object"
       },
       "EventResponse": {
@@ -2152,6 +2297,111 @@
           }
         },
         "summary": "Accounts"
+      },
+      "post": {
+        "description": "Create a manual account \u2014 one with no bank connection (ADR 0020).\n\nFor hand-tracked money: a cash float, an investment pass-through. The\naccount has ``connection_id`` and ``identification_hash`` both ``None``, so\na sync can never touch it, and its ``source`` is ``manual``. A ``422`` if\nthe alias is blank or too long, or the currency/kind is not a recognized\nvalue.\n\nParameters\n----------\nbody : CreateManualAccountRequest\n    The new account's name, kind, currency, and optional appearance.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account belongs to.\n\nReturns\n-------\nAccountResponse\n    The newly created manual account.",
+        "operationId": "create_manual_account_endpoint_accounts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManualAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Manual Account Endpoint"
+      }
+    },
+    "/accounts/{account_id}": {
+      "delete": {
+        "description": "Delete a manual account (ADR 0020).\n\nA ``404`` if the account is unknown or not the caller's. A ``409\naccount_not_manual`` if it is a synced account \u2014 those are removed only by\nthe connection flow, never here. A ``409 account_not_empty`` if it still\nholds any transaction: the account's movements must be deleted first\n(``DELETE /transactions/{id}``), mirroring ``409 category_in_use`` \u2014\nfinancial data is never cascade-deleted out from under the user.\n\nParameters\n----------\naccount_id : UUID\n    The account to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account belongs to.",
+        "operationId": "delete_manual_account_endpoint_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Manual Account Endpoint"
       }
     },
     "/accounts/{account_id}/appearance": {
@@ -4586,6 +4836,61 @@
           }
         },
         "summary": "Transactions"
+      },
+      "post": {
+        "description": "Create a user-entered movement on a manual account (ADR 0020).\n\nThe row is always ``booked`` with ``role=personal`` \u2014 there is no pending\nlifecycle without a bank \u2014 and its ``stable_key`` is its own id\n(``key_strategy=manual``). A ``404`` if the account (or the optional\ncategory) is unknown or not the caller's; a ``409 account_not_manual`` if\nthe account is a synced one, whose history is bank-owned and immutable.\n\nParameters\n----------\nbody : CreateManualTransactionRequest\n    The movement's account, amount, currency, value date, description, and\n    optional category.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account and movement belong to.\n\nReturns\n-------\nTransactionResponse\n    The newly created transaction, with the same derived fields\n    ``GET /transactions`` returns.",
+        "operationId": "create_manual_transaction_endpoint_transactions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManualTransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Manual Transaction Endpoint"
       }
     },
     "/transactions/prune-pending": {
@@ -4636,6 +4941,54 @@
       }
     },
     "/transactions/{transaction_id}": {
+      "delete": {
+        "description": "Delete a user-entered movement on a manual account (ADR 0020).\n\nA ``404`` if the transaction is unknown or not the caller's. A ``409\ntransaction_not_manual`` if it is on a synced account. A ``409\ntransaction_in_use`` if it is a leg of a transfer, or an advance's or\nreimbursement's transaction \u2014 unlink that first, the same\nrefuse-rather-than-cascade stance as ``409 category_in_use``.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.",
+        "operationId": "delete_manual_transaction_endpoint_transactions__transaction_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Manual Transaction Endpoint"
+      },
       "get": {
         "description": "Return one of the current user's transactions.\n\nScoped to the current user; a ``404`` if the transaction is unknown or not\nthe caller's \u2014 the same cross-user gate the category endpoints below use.\nExists so a client can re-fetch a single row's server-derived\n``effective_amount``/``effective_category_id`` after a write (e.g.\nconfirming a category) without re-paginating the whole list.\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to fetch.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.\n\nReturns\n-------\nTransactionResponse\n    The transaction, with the same derived fields ``GET /transactions``\n    returns for the same row.",
         "operationId": "transaction_transactions__transaction_id__get",
@@ -4798,6 +5151,73 @@
           }
         },
         "summary": "Confirm Transaction Category"
+      }
+    },
+    "/transactions/{transaction_id}/edit": {
+      "post": {
+        "description": "Edit a user-entered movement on a manual account (ADR 0020).\n\nChanges only the four movement fields (amount, currency, value date,\ndescription); identity, status, role, and category are untouched. A\n``404`` if the transaction is unknown or not the caller's; a ``409\ntransaction_not_manual`` if it is on a synced account, where a movement is\nbank-owned and immutable (corrections arrive as new transactions).\n\nParameters\n----------\ntransaction_id : UUID\n    The transaction to edit.\nbody : EditManualTransactionRequest\n    The new movement fields.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transaction belongs to.\n\nReturns\n-------\nTransactionResponse\n    The transaction after the edit.",
+        "operationId": "edit_manual_transaction_endpoint_transactions__transaction_id__edit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Transaction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditManualTransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Manual Transaction Endpoint"
       }
     },
     "/transfers": {

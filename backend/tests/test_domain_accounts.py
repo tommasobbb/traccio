@@ -14,9 +14,11 @@ from traccio.domain.accounts import (
     REASON_ALIAS_TOO_LONG,
     REASON_BLANK_ALIAS,
     AccountError,
+    account_source,
     display_name,
     normalize_account_alias,
 )
+from traccio.domain.enums import AccountSource
 
 
 def _account(*, name: str | None = None, alias: str | None = None) -> Account:
@@ -72,3 +74,34 @@ def test_display_name_falls_back_to_provider_name_when_alias_unset() -> None:
 def test_display_name_is_none_when_neither_is_set() -> None:
     account = _account(name=None, alias=None)
     assert display_name(account) is None
+
+
+def test_account_source_is_synced_when_connected() -> None:
+    assert account_source(_account(name="TEST CURRENT 01")) is AccountSource.SYNCED
+
+
+def test_account_source_is_manual_when_no_connection() -> None:
+    manual = Account(user_id=uuid4(), kind=AccountKind.CASH, currency="EUR", alias="Contanti")
+    assert account_source(manual) is AccountSource.MANUAL
+
+
+def test_account_rejects_connection_without_identity() -> None:
+    with pytest.raises(ValueError, match="both set"):
+        Account(
+            user_id=uuid4(),
+            connection_id=uuid4(),
+            kind=AccountKind.CURRENT,
+            currency="EUR",
+            identification_hash=None,
+        )
+
+
+def test_account_rejects_identity_without_connection() -> None:
+    with pytest.raises(ValueError, match="both set"):
+        Account(
+            user_id=uuid4(),
+            connection_id=None,
+            kind=AccountKind.CURRENT,
+            currency="EUR",
+            identification_hash="TEST-HASH-01",
+        )

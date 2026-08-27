@@ -8,7 +8,7 @@ router rather than here (see ``api/routers/events.py``).
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 from traccio.api.deps import current_user_id
 from traccio.api.schemas.transactions import (
     ConfirmCategoryRequest,
+    CreateManualTransactionRequest,
+    EditManualTransactionRequest,
     PrunePendingResponse,
     TransactionResponse,
     TransactionsResponse,
@@ -23,7 +25,10 @@ from traccio.api.schemas.transactions import (
 from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
+    create_manual_transaction,
+    delete_manual_transaction,
     event_ids_for_transactions,
+    get_account,
     get_category,
     get_transaction,
     get_transaction_event_id,
@@ -33,10 +38,19 @@ from traccio.db.repositories import (
     prune_stale_pending_transactions,
     set_confirmed_category,
     sum_reimbursements_by_advance,
+    transaction_is_linked,
+    update_manual_transaction,
 )
 from traccio.db.session import get_session
-from traccio.domain.enums import TransactionRole
-from traccio.domain.models import Advance
+from traccio.domain.accounts import account_source
+from traccio.domain.enums import (
+    AccountSource,
+    KeyStrategy,
+    TransactionRole,
+    TransactionStatus,
+)
+from traccio.domain.models import Advance, Transaction
+from traccio.domain.money import Money
 from traccio.domain.search import MAX_SEARCH_TERM_LENGTH, normalize_search_term
 from traccio.services.advances import spending_shares
 
@@ -215,6 +229,162 @@ def transaction(
     return TransactionResponse.from_domain(
         found, advance_own_share=advance_own_share, event_id=event_id
     )
+
+
+@router.post(
+    "/transactions", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED
+)
+def create_manual_transaction_endpoint(
+    body: CreateManualTransactionRequest,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> TransactionResponse:
+    """Create a user-entered movement on a manual account (ADR 0020).
+
+    The row is always ``booked`` with ``role=personal`` — there is no pending
+    lifecycle without a bank — and its ``stable_key`` is its own id
+    (``key_strategy=manual``). A ``404`` if the account (or the optional
+    category) is unknown or not the caller's; a ``409 account_not_manual`` if
+    the account is a synced one, whose history is bank-owned and immutable.
+
+    Parameters
+    ----------
+    body : CreateManualTransactionRequest
+        The movement's account, amount, currency, value date, description, and
+        optional category.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the account and movement belong to.
+
+    Returns
+    -------
+    TransactionResponse
+        The newly created transaction, with the same derived fields
+        ``GET /transactions`` returns.
+    """
+    account = get_account(session, user_id=user_id, account_id=body.account_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="unknown account")
+    if account_source(account) is not AccountSource.MANUAL:
+        raise HTTPException(status_code=409, detail="account_not_manual")
+    if body.confirmed_category_id is not None:
+        category = get_category(session, user_id=user_id, category_id=body.confirmed_category_id)
+        if category is None:
+            raise HTTPException(status_code=404, detail="unknown category")
+
+    new_id = uuid4()
+    transaction = Transaction(
+        id=new_id,
+        user_id=user_id,
+        account_id=body.account_id,
+        money=Money(amount=body.amount, currency=body.currency),
+        booked_at=None,
+        value_date=body.value_date,
+        description=body.description,
+        status=TransactionStatus.BOOKED,
+        role=TransactionRole.PERSONAL,
+        stable_key=str(new_id),
+        key_strategy=KeyStrategy.MANUAL,
+    )
+    created = create_manual_transaction(
+        session, transaction=transaction, confirmed_category_id=body.confirmed_category_id
+    )
+    session.commit()
+    logger.info("transactions.create_manual", transaction_id=str(created.id))
+    return TransactionResponse.from_domain(created)
+
+
+@router.post("/transactions/{transaction_id}/edit", response_model=TransactionResponse)
+def edit_manual_transaction_endpoint(
+    transaction_id: UUID,
+    body: EditManualTransactionRequest,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> TransactionResponse:
+    """Edit a user-entered movement on a manual account (ADR 0020).
+
+    Changes only the four movement fields (amount, currency, value date,
+    description); identity, status, role, and category are untouched. A
+    ``404`` if the transaction is unknown or not the caller's; a ``409
+    transaction_not_manual`` if it is on a synced account, where a movement is
+    bank-owned and immutable (corrections arrive as new transactions).
+
+    Parameters
+    ----------
+    transaction_id : UUID
+        The transaction to edit.
+    body : EditManualTransactionRequest
+        The new movement fields.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the transaction belongs to.
+
+    Returns
+    -------
+    TransactionResponse
+        The transaction after the edit.
+    """
+    transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="unknown transaction")
+    account = get_account(session, user_id=user_id, account_id=transaction.account_id)
+    if account is None or account_source(account) is not AccountSource.MANUAL:
+        raise HTTPException(status_code=409, detail="transaction_not_manual")
+
+    update_manual_transaction(
+        session,
+        user_id=user_id,
+        transaction_id=transaction_id,
+        amount=body.amount,
+        currency=body.currency,
+        value_date=body.value_date,
+        description=body.description,
+    )
+    session.commit()
+    logger.info("transactions.edit_manual", transaction_id=str(transaction_id))
+    edited = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
+    if edited is None:  # pragma: no cover - just deleted under us
+        raise HTTPException(status_code=404, detail="unknown transaction")
+    return TransactionResponse.from_domain(edited)
+
+
+@router.delete("/transactions/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_manual_transaction_endpoint(
+    transaction_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> None:
+    """Delete a user-entered movement on a manual account (ADR 0020).
+
+    A ``404`` if the transaction is unknown or not the caller's. A ``409
+    transaction_not_manual`` if it is on a synced account. A ``409
+    transaction_in_use`` if it is a leg of a transfer, or an advance's or
+    reimbursement's transaction — unlink that first, the same
+    refuse-rather-than-cascade stance as ``409 category_in_use``.
+
+    Parameters
+    ----------
+    transaction_id : UUID
+        The transaction to delete.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the transaction belongs to.
+    """
+    transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="unknown transaction")
+    account = get_account(session, user_id=user_id, account_id=transaction.account_id)
+    if account is None or account_source(account) is not AccountSource.MANUAL:
+        raise HTTPException(status_code=409, detail="transaction_not_manual")
+    if transaction_is_linked(session, user_id=user_id, transaction_id=transaction_id):
+        raise HTTPException(status_code=409, detail="transaction_in_use")
+
+    delete_manual_transaction(session, user_id=user_id, transaction_id=transaction_id)
+    session.commit()
+    logger.info("transactions.delete_manual", transaction_id=str(transaction_id))
 
 
 @router.post("/transactions/{transaction_id}/category", status_code=status.HTTP_204_NO_CONTENT)

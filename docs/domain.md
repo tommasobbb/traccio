@@ -95,10 +95,31 @@ opaque error the provider returns for a dead session.
 
 ## Account
 
-A single balance-bearing account exposed by a bank: a current account, a
-savings account, a card account, or a currency-agnostic wallet (e.g. PayPal).
+A single balance-bearing account: usually one exposed by a bank — a current
+account, a savings account, a card account, or a currency-agnostic wallet
+(e.g. PayPal) — or a **manual** one the user creates and maintains by hand
+(ADR 0020), such as a cash float or an investment pass-through.
 
-`kind`: `current` | `savings` | `card` | `wallet`
+`kind`: `current` | `savings` | `card` | `wallet` | `cash`
+
+`source`: `synced` | `manual` — **derived, never stored**
+(`domain/accounts.py::account_source`). A synced account is backed by a
+`Connection`; a manual account has `connection_id` and `identification_hash`
+both `null`. The two are a validated either/or: `Account` refuses to construct
+with one set and not the other. `kind` is a separate axis — a manual account
+still has a real kind (`cash` for "Contanti", `wallet` or `current` for an
+"Investimenti" pass-through; there is deliberately no `investment` kind, as
+Traccio does not do portfolio tracking — see `ROADMAP.md`).
+
+**A sync can never touch a manual account.** `upsert_account` matches on
+`(user_id, identification_hash)`, and `NULL != NULL` in SQL; `services/sync.py`
+also only ever iterates the provider's own account list. A manual account and
+its transactions are created, edited, and deleted only through
+`POST /accounts`, `DELETE /accounts/{id}`, `POST /transactions`,
+`POST /transactions/{id}/edit`, and `DELETE /transactions/{id}` — all of which
+refuse to act on a synced account or its rows. `DELETE /accounts/{id}` refuses
+a non-empty account (`409 account_not_empty`); its movements are deleted
+first.
 
 **Wallets have no single currency.** A wallet such as PayPal reports `XXX`
 (ISO 4217 "no currency") as its account currency, because it holds balances in
@@ -117,8 +138,9 @@ Not every bank exposes card accounts at all. An account missing from the API
 is not a bug to fix in Traccio.
 
 **Stable identity**: bank-assigned account IDs are not stable across
-consents. Match accounts across `Connections` using a derived
-`identification_hash`, not the provider's account ID.
+consents. Match synced accounts across `Connections` using a derived
+`identification_hash`, not the provider's account ID. A manual account has no
+`identification_hash` (it is `null`) and needs none — nothing re-exposes it.
 
 **Display name, colour, and icon are user-owned appearance, separate from the
 provider's own name** (ADR 0017). `name` is the bank's product name
@@ -135,8 +157,17 @@ hex or SF Symbol strings — see ADR 0017 for why.
 
 ## Transaction
 
-A single movement on an `Account`. Immutable once `booked` — corrections
-arrive as new transactions, never as edits.
+A single movement on an `Account`.
+
+**Editability follows the row's origin, not its `status`** (ADR 0020). A
+movement on a **synced** account is immutable — the bank is the source of
+truth, and corrections arrive as new transactions, never as edits. A movement
+on a **manual** account is the user's own: it is always `booked` (there is no
+pending lifecycle without a bank), it is keyed by its own id
+(`key_strategy=manual`), and it can be edited (`POST /transactions/{id}/edit`,
+amount / currency / value date / description) or deleted
+(`DELETE /transactions/{id}`). A delete is refused (`409 transaction_in_use`)
+while the row is a leg of a transfer, advance, or reimbursement.
 
 Fields that matter for identity and behavior:
 - `amount` + `currency` (see Money)

@@ -183,6 +183,51 @@ struct AccountsResponseTests {
         #expect(response.accounts[0].currency == "XXX")
     }
 
+    @Test func decodesManualAccountWithNullConnectionAndCashKind() throws {
+        // A manual account (ADR 0020): no bank behind it, so `connection_id`
+        // is null and `kind` may be the new `cash`. The extra `source` field
+        // is ignored by this narrow projection.
+        let json = """
+            { "accounts": [ {
+              "id": "55555555-5555-5555-5555-555555555555",
+              "connection_id": null,
+              "source": "manual",
+              "kind": "cash",
+              "currency": "EUR",
+              "name": null,
+              "alias": "Contanti",
+              "display_name": "Contanti",
+              "color": null,
+              "icon": null,
+              "created_at": "2026-08-27T12:00:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            AccountsResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.accounts[0].connectionID == nil)
+        #expect(response.accounts[0].kind == .cash)
+        #expect(response.accounts[0].displayName == "Contanti")
+    }
+
+    @Test func decodesAccountWithMissingConnectionIDKeyAsNil() throws {
+        let json = """
+            { "accounts": [ {
+              "id": "55555555-5555-5555-5555-555555555555",
+              "kind": "cash",
+              "currency": "EUR",
+              "name": null,
+              "created_at": "2026-08-27T12:00:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            AccountsResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.accounts[0].connectionID == nil)
+    }
+
     @Test func rejectsUnknownAccountKind() {
         let json = """
             { "accounts": [ {

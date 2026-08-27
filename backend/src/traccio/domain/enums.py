@@ -48,12 +48,42 @@ class AccountKind(StrEnum):
         A currency-agnostic wallet (e.g. PayPal). It has no single account
         currency — the account may report ``XXX`` (ISO 4217 "no currency") —
         so the per-transaction currency is authoritative, not the account's.
+    CASH : str
+        A hand-tracked cash float (e.g. "Contanti"). Only ever a manual
+        account — there is no bank feed for cash (ADR 0020). ``kind`` is a
+        separate axis from whether the account is synced or manual; see
+        :class:`AccountSource`.
     """
 
     CURRENT = "current"
     SAVINGS = "savings"
     CARD = "card"
     WALLET = "wallet"
+    CASH = "cash"
+
+
+class AccountSource(StrEnum):
+    """Where an :class:`~traccio.domain.models.Account` comes from.
+
+    Derived, never stored (ADR 0020) — see
+    :func:`~traccio.domain.accounts.account_source`. An account either
+    projects a bank feed through a :class:`~traccio.domain.models.Connection`
+    (``connection_id`` set) or is one the user created and maintains by hand
+    (``connection_id`` is ``None``). Orthogonal to :class:`AccountKind`, which
+    says *what type* of account it is.
+
+    Attributes
+    ----------
+    SYNCED : str
+        Backed by a bank connection; its transactions are provider-sourced and
+        immutable.
+    MANUAL : str
+        User-created and hand-maintained; its transactions are user-entered,
+        editable, and deletable, and a sync never touches it.
+    """
+
+    SYNCED = "synced"
+    MANUAL = "manual"
 
 
 class TransactionStatus(StrEnum):
@@ -177,10 +207,15 @@ class KeyStrategy(StrEnum):
         No ``entry_reference`` was available; the key is a hash of
         ``(account_id, value_date, amount, currency, raw description)``. Lower
         confidence during deduplication, since near-identical entries collide.
+    MANUAL : str
+        A user-entered movement on a manual account (ADR 0020). There is no
+        bank key to deduplicate against; ``stable_key`` is the transaction's
+        own id, unique by construction and stable across edits.
     """
 
     ENTRY_REFERENCE = "entry_reference"
     DERIVED_HASH = "derived_hash"
+    MANUAL = "manual"
 
 
 class RuleMatchKind(StrEnum):

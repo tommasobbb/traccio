@@ -615,6 +615,83 @@ def list_accounts(session: Session, user_id: UUID) -> list[Account]:
     return [row_to_account(row) for row in rows]
 
 
+def create_manual_account(session: Session, *, account: Account) -> Account:
+    """Insert a manual account (ADR 0020) — a plain insert, never an upsert.
+
+    Unlike :func:`upsert_account`, there is nothing to match on: a manual
+    account has ``connection_id`` and ``identification_hash`` both ``None``, so
+    every call creates a new row. The ``Account`` model validator has already
+    guaranteed the account is manual-shaped. Scoped by ``account.user_id``; the
+    caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    account : Account
+        The manual account to persist.
+
+    Returns
+    -------
+    Account
+        The newly inserted account.
+    """
+    row = account_to_row(account)
+    session.add(row)
+    return row_to_account(row)
+
+
+def account_has_transactions(session: Session, *, user_id: UUID, account_id: UUID) -> bool:
+    """Return whether any transaction belongs to ``account_id``.
+
+    Scoped by ``user_id``. Used to refuse deleting a manual account that still
+    holds movements (``409 account_not_empty``), the same "refuse rather than
+    cascade-delete financial data" stance as ``409 category_in_use``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the query is scoped to it.
+    account_id : UUID
+        The account to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if at least one transaction references the account.
+    """
+    row = session.scalars(
+        select(TransactionRow.id).where(
+            TransactionRow.user_id == user_id,
+            TransactionRow.account_id == account_id,
+        )
+    ).first()
+    return row is not None
+
+
+def delete_manual_account(session: Session, *, user_id: UUID, account_id: UUID) -> None:
+    """Delete an account row, scoped by ``user_id``.
+
+    A no-op if no row matches. The caller has already verified the account is
+    manual and empty (see :func:`account_has_transactions`); this function only
+    issues the ``DELETE``. The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the delete is scoped to it.
+    account_id : UUID
+        The account to delete.
+    """
+    session.execute(
+        delete(AccountRow).where(AccountRow.id == account_id, AccountRow.user_id == user_id)
+    )
+
+
 def list_connections(session: Session, user_id: UUID) -> list[Connection]:
     """Return the user's connections, oldest first.
 
@@ -848,6 +925,183 @@ def get_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) ->
         )
     ).one_or_none()
     return None if row is None else row_to_transaction(row)
+
+
+def create_manual_transaction(
+    session: Session,
+    *,
+    transaction: Transaction,
+    confirmed_category_id: UUID | None,
+) -> Transaction:
+    """Insert a user-entered movement on a manual account (ADR 0020).
+
+    A plain insert, never the :func:`upsert_transaction` read-then-write: a
+    manual movement's ``stable_key`` is its own id (``KeyStrategy.MANUAL``), so
+    it cannot collide, and there is no bank to reconcile against.
+    ``last_synced_at`` is deliberately left ``None`` — no sync ever observes
+    this row, and :func:`prune_stale_pending_transactions` therefore never ages
+    it (it is also always ``booked``, never ``pending``).
+
+    ``confirmed_category_id`` is written here rather than through
+    :func:`transaction_to_row` (which never maps a category id) — this is an
+    explicit user action at creation time, the same category the dedicated
+    ``POST /transactions/{id}/category`` endpoint would set. Scoped by
+    ``transaction.user_id``; the caller owns the transaction boundary and
+    commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    transaction : Transaction
+        The domain transaction to persist. The caller has built it with
+        ``status=booked``, ``key_strategy=MANUAL``, and
+        ``stable_key=str(id)``.
+    confirmed_category_id : UUID or None
+        An optional category to confirm on the new row, already verified to
+        belong to the user.
+
+    Returns
+    -------
+    Transaction
+        The newly inserted transaction.
+    """
+    row = transaction_to_row(transaction)
+    row.confirmed_category_id = confirmed_category_id
+    session.add(row)
+    return row_to_transaction(row)
+
+
+def update_manual_transaction(
+    session: Session,
+    *,
+    user_id: UUID,
+    transaction_id: UUID,
+    amount: int,
+    currency: str,
+    value_date: datetime,
+    description: str,
+) -> None:
+    """Edit the movement fields of a manual transaction, scoped by ``user_id``.
+
+    Touches only the four user-owned movement fields. ``id``/``stable_key``
+    never change (so identity is stable across edits), ``status`` stays
+    ``booked``, ``role`` and the category ids are left to their own endpoints,
+    and ``last_synced_at`` stays ``None``. A no-op if no row matches. The
+    caller has already verified the owning account is manual
+    (``409 transaction_not_manual`` otherwise); the caller owns the
+    transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the transaction; the update is scoped to it.
+    transaction_id : UUID
+        The transaction to edit.
+    amount : int
+        New signed amount in minor units.
+    currency : str
+        New ISO 4217 currency of ``amount``.
+    value_date : datetime
+        New value date (timezone-aware, UTC).
+    description : str
+        New description text.
+    """
+    session.execute(
+        update(TransactionRow)
+        .where(TransactionRow.id == transaction_id, TransactionRow.user_id == user_id)
+        .values(
+            amount=amount,
+            currency=currency,
+            value_date=value_date,
+            description=description,
+        )
+    )
+
+
+def transaction_is_linked(session: Session, *, user_id: UUID, transaction_id: UUID) -> bool:
+    """Return whether a transaction is a leg of a transfer, advance, or reimbursement.
+
+    Scoped by ``user_id``. Used to refuse deleting a manual transaction that
+    something else points at (``409 transaction_in_use``) — the same
+    refuse-rather-than-cascade stance as ``409 category_in_use`` /
+    ``409 account_not_empty``. Checks every foreign key that references
+    ``transactions.id``: ``transfers`` (either leg), ``transfer_dismissals``
+    (either side of a rejected pair), ``advances``, and ``reimbursements``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose links to search; every query is scoped to it.
+    transaction_id : UUID
+        The transaction to look for.
+
+    Returns
+    -------
+    bool
+        ``True`` if any of those tables reference the transaction.
+    """
+    in_transfer = session.scalars(
+        select(TransferRow.id).where(
+            TransferRow.user_id == user_id,
+            (TransferRow.outgoing_transaction_id == transaction_id)
+            | (TransferRow.incoming_transaction_id == transaction_id),
+        )
+    ).first()
+    if in_transfer is not None:
+        return True
+    in_dismissal = session.scalars(
+        select(TransferDismissalRow.id).where(
+            TransferDismissalRow.user_id == user_id,
+            (TransferDismissalRow.transaction_id_a == transaction_id)
+            | (TransferDismissalRow.transaction_id_b == transaction_id),
+        )
+    ).first()
+    if in_dismissal is not None:
+        return True
+    in_advance = session.scalars(
+        select(AdvanceRow.id).where(
+            AdvanceRow.user_id == user_id,
+            AdvanceRow.transaction_id == transaction_id,
+        )
+    ).first()
+    if in_advance is not None:
+        return True
+    in_reimbursement = session.scalars(
+        select(ReimbursementRow.id).where(
+            ReimbursementRow.user_id == user_id,
+            ReimbursementRow.transaction_id == transaction_id,
+        )
+    ).first()
+    return in_reimbursement is not None
+
+
+def delete_manual_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) -> None:
+    """Delete a transaction row, scoped by ``user_id``.
+
+    A no-op if no row matches. The caller has already verified the row is on a
+    manual account and is not linked to a transfer/advance/reimbursement (see
+    :func:`transaction_is_linked`); this function only issues the ``DELETE``.
+    The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the transaction; the delete is scoped to it.
+    transaction_id : UUID
+        The transaction to delete.
+    """
+    session.execute(
+        delete(TransactionRow).where(
+            TransactionRow.id == transaction_id, TransactionRow.user_id == user_id
+        )
+    )
 
 
 def set_transaction_role(

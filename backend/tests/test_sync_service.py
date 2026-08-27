@@ -195,6 +195,84 @@ def test_sync_persists_accounts_and_transactions_and_stamps_last_synced_at() -> 
         assert connection_row.last_synced_at == _NOW.replace(tzinfo=None)
 
 
+def test_sync_never_touches_a_manual_account_or_its_transactions() -> None:
+    """A manual account (ADR 0020) is invisible to sync.
+
+    Sync iterates only the provider's own accounts, and ``upsert_account``
+    matches on ``(user_id, identification_hash)`` where a manual account's
+    hash is ``NULL`` (``NULL != NULL``). So a manual account and its
+    hand-entered rows survive a sync completely unchanged.
+    """
+    engine = _engine()
+    cipher = _cipher()
+    manual_account_id = uuid4()
+    manual_tx_id = uuid4()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+        session.add(
+            AccountRow(
+                id=manual_account_id,
+                user_id=_USER_ID,
+                connection_id=None,
+                kind=AccountKind.CASH,
+                currency="EUR",
+                identification_hash=None,
+                name=None,
+                alias="Contanti",
+                created_at=_NOW,
+            )
+        )
+        session.add(
+            TransactionRow(
+                id=manual_tx_id,
+                user_id=_USER_ID,
+                account_id=manual_account_id,
+                amount=-500,
+                currency="EUR",
+                booked_at=None,
+                value_date=_NOW,
+                description="TEST CASH 01",
+                status=TransactionStatus.BOOKED,
+                stable_key=str(manual_tx_id),
+                key_strategy=KeyStrategy.MANUAL,
+                last_synced_at=None,
+            )
+        )
+        session.commit()
+
+        sync_connection(
+            session,
+            provider=FakeProvider(),
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        session.commit()
+
+        # The synced account/transaction landed alongside, but the manual ones
+        # are byte-for-byte what they were.
+        manual_account = session.scalars(
+            select(AccountRow).where(AccountRow.id == manual_account_id)
+        ).one()
+        assert manual_account.connection_id is None
+        assert manual_account.identification_hash is None
+        assert manual_account.alias == "Contanti"
+
+        manual_tx = session.scalars(
+            select(TransactionRow).where(TransactionRow.id == manual_tx_id)
+        ).one()
+        assert manual_tx.last_synced_at is None
+        assert manual_tx.key_strategy is KeyStrategy.MANUAL
+        assert manual_tx.amount == -500
+
+        assert len(session.scalars(select(AccountRow)).all()) == 2
+
+
 def test_resync_updates_in_place_rather_than_duplicating() -> None:
     engine = _engine()
     cipher = _cipher()

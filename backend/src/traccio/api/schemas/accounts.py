@@ -5,9 +5,10 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from traccio.domain.accounts import display_name
-from traccio.domain.enums import AccountIcon, AccountKind, PaletteColor
+from traccio.domain.accounts import account_source, display_name
+from traccio.domain.enums import AccountIcon, AccountKind, AccountSource, PaletteColor
 from traccio.domain.models import Account
+from traccio.domain.money import CurrencyCode
 
 
 class RenameAccountRequest(BaseModel):
@@ -45,6 +46,39 @@ class SetAccountAppearanceRequest(BaseModel):
     icon: AccountIcon | None
 
 
+class CreateManualAccountRequest(BaseModel):
+    """Body for creating a manual account (ADR 0020).
+
+    A manual account has no bank connection: the user names it (``alias``),
+    picks what kind of account it is and its currency, and optionally an
+    appearance. ``name``/``identification_hash``/``connection_id`` are all
+    server-side ``None`` for it.
+
+    Attributes
+    ----------
+    alias : str
+        The account's name, e.g. ``"Contanti"``. Stripped and validated by
+        :func:`~traccio.domain.accounts.normalize_account_alias`; a manual
+        account must have one (unlike a synced account, which falls back to the
+        provider ``name``).
+    kind : AccountKind
+        What type of account it is — typically ``cash`` or ``wallet`` for a
+        manual one, but any kind is accepted.
+    currency : str
+        The account's ISO 4217 currency (three uppercase letters).
+    color : PaletteColor or None
+        Optional colour, from the fixed :class:`PaletteColor` vocabulary.
+    icon : AccountIcon or None
+        Optional icon, from the fixed :class:`AccountIcon` vocabulary.
+    """
+
+    alias: str
+    kind: AccountKind
+    currency: CurrencyCode
+    color: PaletteColor | None = None
+    icon: AccountIcon | None = None
+
+
 class AccountResponse(BaseModel):
     """One account as returned to the client.
 
@@ -56,10 +90,16 @@ class AccountResponse(BaseModel):
     ----------
     id : UUID
         Stable account identifier.
-    connection_id : UUID
-        Connection currently exposing this account.
+    connection_id : UUID or None
+        Connection currently exposing this account, or ``None`` for a manual
+        account (ADR 0020).
+    source : AccountSource
+        ``synced`` if the account is backed by a bank connection, ``manual`` if
+        the user created and maintains it. Derived from ``connection_id`` (see
+        :func:`~traccio.domain.accounts.account_source`), never stored — sent so
+        the client does not infer it from a null.
     kind : AccountKind
-        ``current``, ``savings``, ``card``, or ``wallet``.
+        ``current``, ``savings``, ``card``, ``wallet``, or ``cash``.
     currency : str
         The account's ISO 4217 currency.
     name : str or None
@@ -81,7 +121,8 @@ class AccountResponse(BaseModel):
     """
 
     id: UUID
-    connection_id: UUID
+    connection_id: UUID | None
+    source: AccountSource
     kind: AccountKind
     currency: str
     name: str | None
@@ -112,6 +153,7 @@ class AccountResponse(BaseModel):
         return cls(
             id=account.id,
             connection_id=account.connection_id,
+            source=account_source(account),
             kind=account.kind,
             currency=account.currency,
             name=account.name,

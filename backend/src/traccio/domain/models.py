@@ -13,7 +13,7 @@ tests and construction; the authoritative values are owned by the ``db/`` layer.
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from traccio.domain.enums import (
     AccountIcon,
@@ -113,7 +113,15 @@ class Connection(BaseModel):
 
 
 class Account(BaseModel):
-    """A single balance-bearing account exposed by a bank.
+    """A single balance-bearing account: a bank feed, or a manual one.
+
+    Most accounts project a bank feed obtained through a :class:`Connection`.
+    A **manual** account (ADR 0020) has no connection and no provider-assigned
+    identity — ``connection_id`` and ``identification_hash`` are both ``None``
+    — and holds user-entered transactions. A ``model_validator`` enforces that
+    the two fields are either both set or both ``None``; a half-populated
+    account cannot be constructed. Which of the two an account is is derived by
+    :func:`~traccio.domain.accounts.account_source`, never stored.
 
     Attributes
     ----------
@@ -121,17 +129,20 @@ class Account(BaseModel):
         Stable identifier of the account within Traccio.
     user_id : UUID
         Owning user.
-    connection_id : UUID
-        Connection through which this account is currently reachable.
+    connection_id : UUID or None
+        Connection through which this account is currently reachable, or
+        ``None`` for a manual account.
     kind : AccountKind
-        ``current``, ``savings``, ``card``, or ``wallet``.
+        ``current``, ``savings``, ``card``, ``wallet``, or ``cash``. A
+        separate axis from whether the account is synced or manual.
     currency : str
         The account's own ISO 4217 currency (a wallet may report ``XXX``). A
         transaction may carry a different one (foreign card purchases, or the
         per-transaction currency of a currency-agnostic wallet).
-    identification_hash : str
-        Derived stable identity used to match the account across consents.
-        Bank-assigned account IDs are not stable, so they are not used here.
+    identification_hash : str or None
+        Derived stable identity used to match the account across consents, or
+        ``None`` for a manual account. Bank-assigned account IDs are not
+        stable, so they are not used here.
     name : str or None
         Provider-supplied display name (e.g. the bank's product name).
         Overwritten on every sync — see
@@ -154,15 +165,32 @@ class Account(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
-    connection_id: UUID
+    connection_id: UUID | None = None
     kind: AccountKind
     currency: CurrencyCode
-    identification_hash: str
+    identification_hash: str | None = None
     name: str | None = None
     alias: str | None = None
     color: PaletteColor | None = None
     icon: AccountIcon | None = None
     created_at: datetime = Field(default_factory=_now)
+
+    @model_validator(mode="after")
+    def _connection_and_identity_agree(self) -> "Account":
+        """Reject a half-populated account.
+
+        A synced account has both ``connection_id`` and ``identification_hash``;
+        a manual account (ADR 0020) has neither. One without the other is an
+        illegal state — a manual account with a stray identity would collide
+        in the ``(user_id, identification_hash)`` unique index, and a synced
+        account with no identity could not be matched across consents.
+        """
+        if (self.connection_id is None) != (self.identification_hash is None):
+            raise ValueError(
+                "connection_id and identification_hash must be both set "
+                "(synced account) or both None (manual account)"
+            )
+        return self
 
 
 class Transaction(BaseModel):

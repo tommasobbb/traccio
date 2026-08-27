@@ -14,4 +14,7 @@ public enum AccountKind: String, Codable, Sendable, CaseIterable {
     /// A currency-agnostic wallet (e.g. PayPal). It has no single account
     /// currency; the per-transaction currency is authoritative.
     case wallet
+    /// A hand-tracked cash float (e.g. "Contanti"). Only ever a manual
+    /// account — there is no bank feed for cash (ADR 0020).
+    case cash
 }
