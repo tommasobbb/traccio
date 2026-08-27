@@ -14,6 +14,9 @@ TRACCIO_ENABLE_BANKING_REDIRECT_URL = "https://<your-app>.fly.dev/connections/ca
 # On since 2026-08-25: all three real bank connections are live and the
 # trial's whole point is not needing to open the bank apps (tasks/ROADMAP.md).
 TRACCIO_BACKGROUND_SYNC_ENABLED = "true"
+# On since 2026-08-27: the dashboard's opt-in converted combined total
+# (ADR 0021). frankfurter.dev needs no key; base currency defaults to EUR.
+TRACCIO_FX_ENABLED = "true"
 
 [http_service]
   internal_port = 8080
