@@ -65,8 +65,10 @@ a role, links a reimbursement, or sets `confirmed_category_id`.
 **Sync is idempotent.** Running it twice changes nothing. Enforced by a
 unique constraint on (account, stable key), not by application logic alone.
 
-**Every query is scoped by `user_id`.** No exceptions, including admin and
-debug paths.
+**Every query over user data is scoped by `user_id`.** No exceptions,
+including admin and debug paths. The only unscoped table is `fx_rates`
+(ADR 0021) — cached ECB reference rates are public and identical for every
+user, the same category as the seeded `Category` templates.
 
 ## Provider adapters
 
@@ -161,3 +163,8 @@ See `.claude/rules/data-safety.md` for what must never reach logs.
 - No microservices.
 - No GraphQL.
 - No payment initiation, ever. Read-only by design.
+- No FX conversion by default. One **opt-in** external rate source
+  (frankfurter.dev, ECB rates, `TRACCIO_FX_ENABLED`, ADR 0021) feeds only the
+  dashboard's additive `converted` total; the per-currency breakdown is
+  unchanged and every other total stays single-currency. Cached rows in
+  `fx_rates` — the one table not scoped by `user_id` (public reference data).

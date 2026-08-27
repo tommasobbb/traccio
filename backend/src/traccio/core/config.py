@@ -133,6 +133,26 @@ class Settings(BaseSettings):
         ``.env`` and every existing test keeps passing unauthenticated; set
         this only for a deployment reachable from outside localhost — see
         the ADR for why a shared token rather than real per-user auth.
+    fx_enabled : bool
+        Whether ``GET /dashboard/summary`` computes the opt-in converted
+        combined total (ADR 0021). ``False`` by default: the app must boot
+        with no ``.env`` without ever calling an external rate API — turning
+        this on is a deliberate step, exactly like
+        :attr:`background_sync_enabled`. With it off, ``converted`` in the
+        response is always ``null`` and nothing else changes.
+    fx_base_currency : str
+        ISO 4217 code the converted total is expressed in (ADR 0021). There
+        is no per-user preference store yet and the user has one realistic
+        base; a ``convert_to`` query param or a preferences table is the
+        later move (see the ADR's "Revisit when").
+    fx_api_base_url : str
+        Base URL of the frankfurter.dev rate API (ECB reference rates, free,
+        no key). A setting so a self-hosted instance can be pointed at
+        without a code change; not a secret.
+    fx_rate_ttl_hours : int
+        How stale the row for the most recent ECB date may be before
+        ``services/fx.py`` re-fetches it. Historical rows are immutable once
+        fetched and are never refreshed regardless of this value.
     """
 
     model_config = SettingsConfigDict(
@@ -198,6 +218,16 @@ class Settings(BaseSettings):
     # a deployment deliberately sets it. repr=False like every other secret
     # so a whole-Settings log/repr can't leak it.
     api_token: str | None = Field(default=None, repr=False)
+    # Dashboard FX conversion (ADR 0021). Off by default — the app must boot
+    # with no .env without ever calling an external rate API; turning it on is
+    # a deliberate step, same as background_sync_enabled. No secret: frankfurter
+    # needs no key.
+    fx_enabled: bool = False
+    fx_base_currency: str = "EUR"
+    fx_api_base_url: str = "https://api.frankfurter.dev/v1"
+    # Only the most recent ECB date's row is ever re-fetched; historical rows
+    # are immutable once stored.
+    fx_rate_ttl_hours: int = 12
 
 
 @lru_cache

@@ -36,13 +36,14 @@ def _tx(
     booked_at: datetime = _IN_PERIOD,
     confirmed_category_id: UUID | None = None,
     account_id: UUID | None = None,
+    currency: str = "EUR",
 ) -> TransactionRow:
     return TransactionRow(
         id=uuid4(),
         user_id=user_id,
         account_id=account_id or uuid4(),
         amount=amount,
-        currency="EUR",
+        currency=currency,
         booked_at=booked_at,
         value_date=booked_at,
         description="TEST MERCHANT 01",
@@ -87,6 +88,7 @@ def _seed_tx(
     booked_at: datetime = _IN_PERIOD,
     confirmed_category_id: UUID | None = None,
     account_id: UUID | None = None,
+    currency: str = "EUR",
 ) -> str:
     with Session(engine) as session:
         tx = _tx(
@@ -96,6 +98,7 @@ def _seed_tx(
             booked_at=booked_at,
             confirmed_category_id=confirmed_category_id,
             account_id=account_id,
+            currency=currency,
         )
         session.add(tx)
         session.commit()
@@ -250,7 +253,11 @@ def test_summary_with_no_transactions_returns_no_currencies() -> None:
     response = client.get("/dashboard/summary")
 
     assert response.status_code == 200
-    assert response.json() == {"currencies": []}
+    assert response.json() == {
+        "currencies": [],
+        "converted": None,
+        "conversion_unavailable": None,
+    }
 
 
 def test_summary_is_user_scoped() -> None:
@@ -262,7 +269,11 @@ def test_summary_is_user_scoped() -> None:
     response = client.get("/dashboard/summary")
 
     assert response.status_code == 200
-    assert response.json() == {"currencies": []}
+    assert response.json() == {
+        "currencies": [],
+        "converted": None,
+        "conversion_unavailable": None,
+    }
 
 
 def test_summary_by_category_resolves_the_category_display() -> None:
@@ -562,3 +573,104 @@ def test_summary_never_resolves_another_users_category_name() -> None:
     [summary] = response.json()["currencies"]
     names = {entry["category_name"] for entry in summary["by_category"]}
     assert "Stranger's category" not in names
+
+
+# --- FX conversion (ADR 0021) --------------------------------------------------
+
+import httpx  # noqa: E402
+
+from traccio.api.deps import get_fx_client  # noqa: E402
+from traccio.providers.frankfurter import FrankfurterClient  # noqa: E402
+
+# 1 USD = 0.90 EUR on a day at or before the in-period movement date.
+_FX_RANGE_BODY = {
+    "amount": 1,
+    "base": "USD",
+    "start_date": "2026-08-08",
+    "end_date": "2026-08-27",
+    "rates": {"2026-08-14": {"EUR": 0.9}},
+}
+
+
+def _fx_ok_transport() -> httpx.MockTransport:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/latest"):
+            return httpx.Response(
+                200, json={"base": "USD", "date": "2026-08-14", "rates": {"EUR": 0.9}}
+            )
+        return httpx.Response(200, json=_FX_RANGE_BODY)
+
+    return httpx.MockTransport(handle)
+
+
+def _fx_down_transport() -> httpx.MockTransport:
+    return httpx.MockTransport(lambda request: httpx.Response(503, text="down"))
+
+
+def _client_with_fx(engine: Engine, transport: httpx.MockTransport) -> TestClient:
+    client = _client(engine)
+
+    def override_fx_client() -> Iterator[FrankfurterClient]:
+        fx = FrankfurterClient(base_url="https://fx.example.test", transport=transport)
+        try:
+            yield fx
+        finally:
+            fx.close()
+
+    client.app.dependency_overrides[get_fx_client] = override_fx_client
+    return client
+
+
+def test_summary_converts_a_multi_currency_period_when_fx_is_enabled() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="EUR-SPEND")  # -50.00 EUR
+    _seed_tx(
+        engine, user_id=dev_user_id, amount=-10000, stable_key="USD-SPEND", currency="USD"
+    )  # -100.00 USD -> -90.00 EUR
+
+    response = _client_with_fx(engine, _fx_ok_transport()).get("/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    # The per-currency breakdown is unchanged: one entry each.
+    assert {c["currency"] for c in body["currencies"]} == {"EUR", "USD"}
+    assert body["conversion_unavailable"] is None
+    converted = body["converted"]
+    assert converted is not None
+    assert converted["summary"]["currency"] == "EUR"
+    assert converted["summary"]["spending"] == 5000 + 9000
+    assert converted["basis"] == "historical"
+    assert converted["rates"] == [
+        {"source_currency": "USD", "rate": "0.9", "rate_date": "2026-08-14"}
+    ]
+
+
+def test_summary_withholds_the_converted_total_when_rates_are_unavailable() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="EUR-SPEND")
+    _seed_tx(engine, user_id=dev_user_id, amount=-10000, stable_key="USD-SPEND", currency="USD")
+
+    response = _client_with_fx(engine, _fx_down_transport()).get("/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["converted"] is None
+    assert body["conversion_unavailable"] == "rates_unavailable"
+    # The per-currency breakdown is still complete.
+    assert {c["currency"] for c in body["currencies"]} == {"EUR", "USD"}
+
+
+def test_summary_has_no_converted_total_when_fx_is_disabled() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-10000, stable_key="USD-SPEND", currency="USD")
+
+    # No get_fx_client override -> the real dep yields None (feature off).
+    response = _client(engine).get("/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["converted"] is None
+    assert body["conversion_unavailable"] is None

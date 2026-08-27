@@ -343,9 +343,11 @@ class CurrencySummary(BaseModel):
     Attributes
     ----------
     currency : str
-        ISO 4217 code this summary is expressed in. There is no FX in Traccio,
-        so a period spanning multiple currencies produces one
-        :class:`CurrencySummary` per currency rather than a single total.
+        ISO 4217 code this summary is expressed in. A period spanning multiple
+        currencies produces one :class:`CurrencySummary` per currency;
+        combining them into one base currency is the opt-in, additive
+        ``converted`` view built outside this module (ADR 0021,
+        ``api/routers/dashboard.py``), never by :func:`summarize` itself.
     spending : Money
         Total of every negative ``effective_amount``, negated to a positive
         magnitude. A zero ``effective_amount`` (a transfer, a reimbursement, a
@@ -409,8 +411,9 @@ def summarize(
 ) -> list[CurrencySummary]:
     """Return spending/income summaries, one per currency, from ``effective_amount``.
 
-    Groups transactions by currency — never sums across them, since Traccio
-    does no FX conversion — and within each currency splits
+    Groups transactions by currency and never sums across them — a combined
+    converted total is built separately and optionally (ADR 0021) — and within
+    each currency splits
     :func:`~traccio.domain.effective_amount.effective_amount` into the
     ``spending``/``income`` magnitudes and their signed ``net``, then
     partitions by category root, time bucket, and account. Mirrors

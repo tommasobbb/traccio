@@ -899,6 +899,32 @@
         "title": "ConsentState",
         "type": "string"
       },
+      "ConvertedSummaryResponse": {
+        "description": "The opt-in combined total, every currency converted into one base.\n\nPresent only when ``TRACCIO_FX_ENABLED`` is set and every currency the\nperiod contains could be converted; otherwise ``DashboardSummaryResponse.converted``\nis ``null`` and ``conversion_unavailable`` says why. Additive \u2014 the\nper-currency ``currencies`` breakdown is unchanged and remains the source\nof truth (ADR 0021).\n\nAttributes\n----------\nsummary : CurrencySummaryResponse\n    A normal currency summary whose ``currency`` is the base currency and\n    whose totals sum every movement, each converted at its own date's\n    rate. ``by_category``/``by_bucket``/``by_account``/``comparison`` are\n    all converted too.\nrates : list[FxRateResponse]\n    The distinct (source currency, rate, date) triples actually used, for\n    provenance.\nbasis : str\n    Always ``\"historical\"`` \u2014 each movement converted at the rate for its\n    effective date, a dateless movement at the latest rate.",
+        "properties": {
+          "basis": {
+            "default": "historical",
+            "title": "Basis",
+            "type": "string"
+          },
+          "rates": {
+            "items": {
+              "$ref": "#/components/schemas/FxRateResponse"
+            },
+            "title": "Rates",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CurrencySummaryResponse"
+          }
+        },
+        "required": [
+          "summary",
+          "rates"
+        ],
+        "title": "ConvertedSummaryResponse",
+        "type": "object"
+      },
       "CreateAdvanceRequest": {
         "description": "Body for creating an advance on a transaction.\n\nAttributes\n----------\ntransaction_id : UUID\n    The outgoing transaction to mark as an advance. Must be the caller's, a\n    ``personal`` non-``rejected`` spend.\nown_share : int\n    The part of the advance the user actually owes, a positive magnitude in\n    the transaction's currency; ``0 <= own_share <= |amount|``.\nparticipants : list[ParticipantRequest]\n    Optional people who owe the user back (may be empty).",
         "properties": {
@@ -1259,8 +1285,29 @@
         "type": "object"
       },
       "DashboardSummaryResponse": {
-        "description": "Envelope for the dashboard summary.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncurrencies : list[CurrencySummaryResponse]\n    One entry per currency present in the period, sorted by currency code.\n    Empty if no transactions fall within the period.",
+        "description": "Envelope for the dashboard summary.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncurrencies : list[CurrencySummaryResponse]\n    One entry per currency present in the period, sorted by currency code.\n    Empty if no transactions fall within the period.\nconverted : ConvertedSummaryResponse or None\n    The opt-in combined total in the base currency (ADR 0021), or ``null``\n    when the feature is off or a rate was missing. Additive \u2014 never a\n    replacement for ``currencies``.\nconversion_unavailable : str or None\n    When ``TRACCIO_FX_ENABLED`` is set but ``converted`` is still ``null``,\n    a stable value-free reason (``\"rates_unavailable\"`` / ``\"missing_rate\"``).\n    ``null`` when the feature is off or conversion succeeded.",
         "properties": {
+          "conversion_unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion Unavailable"
+          },
+          "converted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConvertedSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "currencies": {
             "items": {
               "$ref": "#/components/schemas/CurrencySummaryResponse"
@@ -1408,6 +1455,31 @@
           "events"
         ],
         "title": "EventsResponse",
+        "type": "object"
+      },
+      "FxRateResponse": {
+        "description": "One ECB reference rate used to build the converted total (ADR 0021).\n\nAttributes\n----------\nsource_currency : str\n    The currency this rate converts *from*.\nrate : str\n    The multiplier as an exact decimal string (``source_currency`` amount\n    times this yields the base currency).\nrate_date : date\n    The ECB publication date the rate is for \u2014 a movement is converted at\n    the rate on or before its own date.",
+        "properties": {
+          "rate": {
+            "title": "Rate",
+            "type": "string"
+          },
+          "rate_date": {
+            "format": "date",
+            "title": "Rate Date",
+            "type": "string"
+          },
+          "source_currency": {
+            "title": "Source Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_currency",
+          "rate",
+          "rate_date"
+        ],
+        "title": "FxRateResponse",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -3846,7 +3918,7 @@
     },
     "/dashboard/summary": {
       "get": {
-        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. There is no FX in Traccio, so a period spanning multiple currencies\nreturns one entry per currency rather than a combined total. Scoped to the\ncurrent user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
+        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. A period spanning multiple currencies returns one entry per\ncurrency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,\n``converted`` additionally carries a single combined total in the base\ncurrency, each movement converted at the ECB rate for its own date\n(ADR 0021) \u2014 best-effort, ``null`` with a ``conversion_unavailable``\nreason if a rate is missing. Scoped to the current user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
         "operationId": "dashboard_summary_dashboard_summary_get",
         "parameters": [
           {

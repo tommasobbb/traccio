@@ -265,3 +265,17 @@ types. No redesign — that is Task 5/6, which this revision unblocks (the
 donut/legend rework wants `average_daily_spending` and the interactive
 breakdown; the scrubbable bar chart and comparison card want `by_bucket`'s
 granularity and `comparison`).
+
+## Revision — 2026-08-27: the "no converted total" alternative is superseded
+
+The Alternatives section rejected "a single combined total across all
+currencies, converted at some rate" outright. **ADR 0021 supersedes that for
+the dashboard**, on the terms the original rejection was protecting: the
+converted total is **opt-in** (`TRACCIO_FX_ENABLED`, off by default),
+**additive** (a new `converted` field — Decision 2's per-currency
+`currencies` breakdown is byte-for-byte unchanged and remains the source of
+truth), **historical** (each movement at the ECB rate for its own date, so a
+past total does not drift), and **best-effort** (a missing rate withholds the
+whole converted view rather than showing an approximate one). Everything else
+in this ADR — `effective_amount`-only, half-open periods, the three additive
+partitions — is unchanged.

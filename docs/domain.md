@@ -635,12 +635,23 @@ spending; an advance counts only the user's declared share; a reimbursement
 is not income. Nothing is stored — recomputed on every read, like an event's
 total.
 
-One summary per currency present in the period, never summed across them —
-there is no FX in Traccio. Within a currency, `spending` and `income` are
-**positive magnitudes** (same convention as `Advance.receivable`/
-`outstanding`) and `net` is the one signed figure. A transaction whose
-`effective_amount` is zero (a transfer leg, a reimbursement, a rejected
-movement) contributes to neither total, but is still counted.
+One summary per currency present in the period (`currencies`), never summed
+across them. Within a currency, `spending` and `income` are **positive
+magnitudes** (same convention as `Advance.receivable`/`outstanding`) and
+`net` is the one signed figure. A transaction whose `effective_amount` is
+zero (a transfer leg, a reimbursement, a rejected movement) contributes to
+neither total, but is still counted.
+
+A single combined total across all currencies is available **opt-in and
+additive** (`converted`, ADR 0021, `TRACCIO_FX_ENABLED`, off by default):
+each movement converted into one base currency at the ECB reference rate for
+its own effective date (a dateless one at the latest rate), via
+frankfurter.dev with a persisted `fx_rates` cache. It never replaces the
+per-currency breakdown, which stays the source of truth, and it is
+**best-effort** — if any rate is missing, `converted` is `null` with a
+value-free `conversion_unavailable` reason, never a partial or wrong total.
+Events stay single-currency: a mixed-currency event still has no total and is
+refused.
 
 The period is measured on the same `coalesce(booked_at, value_date)`
 expression the transaction read-back endpoints already order by, and is

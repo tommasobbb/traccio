@@ -2,9 +2,10 @@
 
 The summary is **derived** from ``effective_amount`` alone by the pure
 :mod:`traccio.domain.dashboard` functions, never stored — the client renders
-it and never recomputes. There is no FX in Traccio, so a period spanning
-multiple currencies produces one entry per currency rather than a single
-combined total.
+it and never recomputes. A period spanning multiple currencies produces one
+entry per currency (``currencies``); a single combined total converted into
+one base currency is available **opt-in and additive** (``converted``,
+ADR 0021, ``TRACCIO_FX_ENABLED``), never replacing the per-currency breakdown.
 
 Category/account names, colours, and icons are read-time joins done here, not
 carried on the domain summaries (``domain/`` never resolves a display value) —
@@ -394,6 +395,55 @@ class CurrencySummaryResponse(BaseModel):
         )
 
 
+class FxRateResponse(BaseModel):
+    """One ECB reference rate used to build the converted total (ADR 0021).
+
+    Attributes
+    ----------
+    source_currency : str
+        The currency this rate converts *from*.
+    rate : str
+        The multiplier as an exact decimal string (``source_currency`` amount
+        times this yields the base currency).
+    rate_date : date
+        The ECB publication date the rate is for — a movement is converted at
+        the rate on or before its own date.
+    """
+
+    source_currency: str
+    rate: str
+    rate_date: date
+
+
+class ConvertedSummaryResponse(BaseModel):
+    """The opt-in combined total, every currency converted into one base.
+
+    Present only when ``TRACCIO_FX_ENABLED`` is set and every currency the
+    period contains could be converted; otherwise ``DashboardSummaryResponse.converted``
+    is ``null`` and ``conversion_unavailable`` says why. Additive — the
+    per-currency ``currencies`` breakdown is unchanged and remains the source
+    of truth (ADR 0021).
+
+    Attributes
+    ----------
+    summary : CurrencySummaryResponse
+        A normal currency summary whose ``currency`` is the base currency and
+        whose totals sum every movement, each converted at its own date's
+        rate. ``by_category``/``by_bucket``/``by_account``/``comparison`` are
+        all converted too.
+    rates : list[FxRateResponse]
+        The distinct (source currency, rate, date) triples actually used, for
+        provenance.
+    basis : str
+        Always ``"historical"`` — each movement converted at the rate for its
+        effective date, a dateless movement at the latest rate.
+    """
+
+    summary: CurrencySummaryResponse
+    rates: list[FxRateResponse]
+    basis: str = "historical"
+
+
 class DashboardSummaryResponse(BaseModel):
     """Envelope for the dashboard summary.
 
@@ -405,6 +455,16 @@ class DashboardSummaryResponse(BaseModel):
     currencies : list[CurrencySummaryResponse]
         One entry per currency present in the period, sorted by currency code.
         Empty if no transactions fall within the period.
+    converted : ConvertedSummaryResponse or None
+        The opt-in combined total in the base currency (ADR 0021), or ``null``
+        when the feature is off or a rate was missing. Additive — never a
+        replacement for ``currencies``.
+    conversion_unavailable : str or None
+        When ``TRACCIO_FX_ENABLED`` is set but ``converted`` is still ``null``,
+        a stable value-free reason (``"rates_unavailable"`` / ``"missing_rate"``).
+        ``null`` when the feature is off or conversion succeeded.
     """
 
     currencies: list[CurrencySummaryResponse]
+    converted: ConvertedSummaryResponse | None = None
+    conversion_unavailable: str | None = None

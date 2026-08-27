@@ -17,6 +17,7 @@ from traccio.core.crypto import TokenCipher, get_token_cipher
 from traccio.providers.enable_banking.auth import load_private_key_pem
 from traccio.providers.enable_banking.client import EnableBankingClient
 from traccio.providers.enable_banking.provider import EnableBankingProvider
+from traccio.providers.frankfurter import FrankfurterClient
 
 
 def current_user_id() -> UUID:
@@ -168,3 +169,36 @@ def get_token_cipher_dep() -> TokenCipher:
         A cipher ready to encrypt/decrypt.
     """
     return get_token_cipher(get_settings().encryption_key)
+
+
+def build_frankfurter_client() -> FrankfurterClient:
+    """Construct the frankfurter.dev rate client from settings (ADR 0021).
+
+    No credentials — frankfurter is free and keyless; only the base URL is
+    configurable. The caller owns ``.close()``.
+    """
+    return FrankfurterClient(base_url=get_settings().fx_api_base_url)
+
+
+def get_fx_client() -> Iterator[FrankfurterClient | None]:
+    """Yield a rate client when ``TRACCIO_FX_ENABLED`` is set, else ``None``.
+
+    The substitution seam for dashboard FX conversion: the dashboard router
+    depends on this and skips conversion entirely when it yields ``None``
+    (the default — the feature is opt-in, ADR 0021). Tests override this
+    dependency with a fake client. The underlying HTTP pool is closed when
+    the request ends.
+
+    Yields
+    ------
+    FrankfurterClient or None
+        A client when the feature is on, ``None`` when it is off.
+    """
+    if not get_settings().fx_enabled:
+        yield None
+        return
+    client = build_frankfurter_client()
+    try:
+        yield client
+    finally:
+        client.close()

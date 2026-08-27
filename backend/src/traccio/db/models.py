@@ -757,3 +757,44 @@ class SyncRunRow(Base):
     accounts_synced: Mapped[int] = mapped_column(Integer, default=0)
     transactions_synced: Mapped[int] = mapped_column(Integer, default=0)
     error_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class FxRateRow(Base):
+    """A cached ECB reference rate (ADR 0021).
+
+    ``1 quote`` = ``rate`` ``base`` on ``rate_date``. **This is the one table
+    not scoped by ``user_id``**: ECB rates are public and identical for every
+    user, the same category as the seeded ``Category`` templates
+    (``docs/domain.md``'s stated exception). Historical rows are immutable
+    once fetched; only the row for the most recent ``rate_date`` is ever
+    re-fetched, when its ``fetched_at`` is older than
+    ``Settings.fx_rate_ttl_hours``.
+
+    Attributes
+    ----------
+    id : UUID
+        Primary key.
+    base : str
+        ISO 4217 code the rate converts *into*.
+    quote : str
+        ISO 4217 code the rate converts *from*.
+    rate_date : date
+        The ECB publication date this rate is for.
+    rate : str
+        The multiplier as an **exact decimal string** (e.g. ``"1.0834"``) —
+        never a float and never ``Numeric``, consistent with "money is
+        integer cents, never floating point". Parsed to
+        :class:`~decimal.Decimal` in the repository.
+    fetched_at : datetime
+        When this row was retrieved from the rate API (timezone-aware, UTC).
+    """
+
+    __tablename__ = "fx_rates"
+    __table_args__ = (UniqueConstraint("base", "quote", "rate_date"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    base: Mapped[str] = mapped_column(String(3))
+    quote: Mapped[str] = mapped_column(String(3))
+    rate_date: Mapped[date] = mapped_column(Date)
+    rate: Mapped[str] = mapped_column(Text)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

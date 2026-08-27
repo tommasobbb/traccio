@@ -10,6 +10,7 @@ currency codes, counts, and the requested granularity/timezone — never
 amounts.
 """
 
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, tzinfo
 from typing import Annotated
 from uuid import UUID
@@ -18,15 +19,19 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, get_fx_client
 from traccio.api.schemas.dashboard import (
     AccountDisplay,
     CategoryDisplay,
+    ConvertedSummaryResponse,
     CurrencySummaryResponse,
     DashboardSummaryResponse,
+    FxRateResponse,
 )
+from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
+    get_fx_rates,
     list_accounts,
     list_advances,
     list_categories,
@@ -35,14 +40,107 @@ from traccio.db.repositories import (
 )
 from traccio.db.session import get_session
 from traccio.domain.accounts import display_name
-from traccio.domain.dashboard import summarize, summarize_comparisons
+from traccio.domain.dashboard import CurrencySummary, summarize, summarize_comparisons
 from traccio.domain.enums import BucketGranularity
-from traccio.domain.models import Advance
+from traccio.domain.fx import MissingRate, to_base_currency
+from traccio.domain.models import Advance, Transaction
+from traccio.domain.money import Money
+from traccio.providers.frankfurter import FrankfurterClient
 from traccio.services.advances import spending_shares
+from traccio.services.fx import FxUnavailable, build_rate_resolver
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+_SummarizePeriod = Callable[
+    [Sequence[Transaction], Mapping[UUID, Money], Sequence[Transaction], Mapping[UUID, Money]],
+    list[CurrencySummary],
+]
+
+
+def _build_converted(
+    session: Session,
+    fx_client: FrankfurterClient | None,
+    *,
+    found: Sequence[Transaction],
+    shares: Mapping[UUID, Money],
+    compare_found: Sequence[Transaction],
+    compare_shares: Mapping[UUID, Money],
+    summarize_period: _SummarizePeriod,
+    category_display: Mapping[UUID, CategoryDisplay],
+    account_display: Mapping[UUID, AccountDisplay],
+    now: datetime,
+) -> tuple[ConvertedSummaryResponse | None, str | None]:
+    """Build the opt-in converted combined total (ADR 0021), or explain why not.
+
+    Returns ``(None, None)`` when the feature is off or the period is empty;
+    ``(None, reason)`` when a rate could not be obtained; ``(response, None)``
+    on success. Conversion happens **before** ``summarize``: every movement's
+    ``Money`` (and advance share) is rewritten into the base currency at its
+    own date's rate, then the same ``summarize_period`` closure runs over the
+    rewritten inputs — so the converted summary carries the same
+    ``by_category``/``by_bucket``/``by_account``/``comparison`` shape, all in
+    the base currency.
+    """
+    if fx_client is None or not found:
+        return None, None
+
+    settings = get_settings()
+    base = settings.fx_base_currency
+
+    resolver = build_rate_resolver(
+        session,
+        fx_client,
+        base=base,
+        transactions=[*found, *compare_found],
+        now=now,
+        ttl_hours=settings.fx_rate_ttl_hours,
+    )
+    if isinstance(resolver, FxUnavailable):
+        return None, resolver.reason
+
+    base_input = to_base_currency(found, shares, base=base, rate_for=resolver)
+    if isinstance(base_input, MissingRate):
+        return None, "missing_rate"
+    cmp_input = to_base_currency(compare_found, compare_shares, base=base, rate_for=resolver)
+    if isinstance(cmp_input, MissingRate):
+        return None, "missing_rate"
+
+    converted_summaries = summarize_period(
+        base_input.transactions,
+        base_input.advance_shares,
+        cmp_input.transactions,
+        cmp_input.advance_shares,
+    )
+    if not converted_summaries:
+        return None, None
+
+    summary_response = CurrencySummaryResponse.from_domain(
+        converted_summaries[0],
+        category_display=category_display,
+        account_display=account_display,
+    )
+
+    non_base = sorted(
+        {t.money.currency for t in [*found, *compare_found] if t.money.currency != base}
+    )
+    rates: list[FxRateResponse] = []
+    for currency in non_base:
+        cached = get_fx_rates(
+            session, base=base, quotes=[currency], up_to=now.astimezone(UTC).date()
+        )
+        if cached:
+            newest = cached[-1]
+            rates.append(
+                FxRateResponse(
+                    source_currency=currency,
+                    rate=str(newest.rate),
+                    rate_date=newest.rate_date,
+                )
+            )
+
+    return ConvertedSummaryResponse(summary=summary_response, rates=rates), None
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummaryResponse)
@@ -55,15 +153,19 @@ def dashboard_summary(
     tz: Annotated[str, Query()] = "UTC",
     compare_start: Annotated[datetime | None, Query()] = None,
     compare_end: Annotated[datetime | None, Query()] = None,
+    fx_client: Annotated[FrankfurterClient | None, Depends(get_fx_client)] = None,
 ) -> DashboardSummaryResponse:
     """Summarize real spending and income over a period, per currency.
 
     Uses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):
     a transfer between the user's own accounts does not inflate spending, an
     advance counts only the user's declared share, and a reimbursement is not
-    income. There is no FX in Traccio, so a period spanning multiple currencies
-    returns one entry per currency rather than a combined total. Scoped to the
-    current user.
+    income. A period spanning multiple currencies returns one entry per
+    currency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,
+    ``converted`` additionally carries a single combined total in the base
+    currency, each movement converted at the ECB rate for its own date
+    (ADR 0021) — best-effort, ``null`` with a ``conversion_unavailable``
+    reason if a rate is missing. Scoped to the current user.
 
     When ``start``/``end`` are both given, ``by_bucket`` is gap-filled across
     the whole period (zero-value buckets included); otherwise only buckets
@@ -137,27 +239,40 @@ def dashboard_summary(
     }
 
     now = datetime.now(UTC)
-    summaries = summarize(
-        found,
-        advance_shares=shares,
-        parents=parents,
-        granularity=granularity,
-        tz=zone,
-        period_start=start,
-        period_end=end,
-        now=now,
-    )
 
-    if compare_start is not None and compare_end is not None:
+    comparing = compare_start is not None and compare_end is not None
+    compare_found: list[Transaction] = []
+    compare_shares: dict[UUID, Money] = {}
+    if comparing:
         compare_found = list_transactions_in_period(
             session, user_id, start=compare_start, end=compare_end
         )
         compare_shares = spending_shares(
             compare_found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance
         )
-        compare_summaries = summarize(
-            compare_found,
-            advance_shares=compare_shares,
+
+    def summarize_period(
+        txns: Sequence[Transaction],
+        txn_shares: Mapping[UUID, Money],
+        cmp_txns: Sequence[Transaction],
+        cmp_shares: Mapping[UUID, Money],
+    ) -> list[CurrencySummary]:
+        """Run ``summarize`` for the period and, if requested, attach the comparison."""
+        result = summarize(
+            txns,
+            advance_shares=txn_shares,
+            parents=parents,
+            granularity=granularity,
+            tz=zone,
+            period_start=start,
+            period_end=end,
+            now=now,
+        )
+        if not comparing:
+            return result
+        cmp = summarize(
+            cmp_txns,
+            advance_shares=cmp_shares,
             parents=parents,
             granularity=granularity,
             tz=zone,
@@ -165,11 +280,23 @@ def dashboard_summary(
             period_end=compare_end,
             now=now,
         )
-        comparisons = summarize_comparisons(summaries, compare_summaries)
-        summaries = [
-            summary.model_copy(update={"comparison": comparisons.get(summary.currency)})
-            for summary in summaries
-        ]
+        deltas = summarize_comparisons(result, cmp)
+        return [s.model_copy(update={"comparison": deltas.get(s.currency)}) for s in result]
+
+    summaries = summarize_period(found, shares, compare_found, compare_shares)
+
+    converted, conversion_unavailable = _build_converted(
+        session,
+        fx_client,
+        found=found,
+        shares=shares,
+        compare_found=compare_found,
+        compare_shares=compare_shares,
+        summarize_period=summarize_period,
+        category_display=category_display,
+        account_display=account_display,
+        now=now,
+    )
 
     # Log currencies, a count, and the requested shape — never amounts (see
     # data-safety rules).
@@ -178,7 +305,9 @@ def dashboard_summary(
         currencies=[s.currency for s in summaries],
         count=len(found),
         granularity=granularity.value,
-        has_comparison=compare_start is not None,
+        has_comparison=comparing,
+        converted=converted is not None,
+        conversion_unavailable=conversion_unavailable,
     )
     return DashboardSummaryResponse(
         currencies=[
@@ -186,5 +315,7 @@ def dashboard_summary(
                 s, category_display=category_display, account_display=account_display
             )
             for s in summaries
-        ]
+        ],
+        converted=converted,
+        conversion_unavailable=conversion_unavailable,
     )
