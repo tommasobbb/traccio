@@ -308,4 +308,151 @@ struct TransactionsViewModelTests {
         }
         #expect(rows.map(\.id) == [second.id])
     }
+
+    // MARK: Free-form transfer linking (docs/domain.md §Transfer)
+
+    private static func makeLeg(
+        id: UUID = UUID(), accountID: UUID = UUID(), amount: Int, role: TransactionRole = .personal
+    ) -> TransactionResponse {
+        TransactionResponse(
+            id: id, accountID: accountID, amount: amount,
+            effectiveAmount: role == .personal ? amount : 0, currency: "EUR",
+            bookedAt: Date(timeIntervalSince1970: 1_755_000_000), valueDate: nil,
+            description: "TEST MERCHANT 01", displayDescription: nil, status: .booked, role: role,
+            suggestedCategoryID: nil, confirmedCategoryID: nil, effectiveCategoryID: nil, eventID: nil
+        )
+    }
+
+    private static func makeTransfer(
+        outgoingID: UUID, incomingID: UUID
+    ) -> TransferResponse {
+        TransferResponse(
+            id: UUID(), outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
+    @Test func enterAndExitSelectionResetTheSelectionState() async throws {
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        model.enterSelection()
+        #expect(model.isSelecting)
+        model.toggleSelection(UUID())
+        #expect(model.selectedIDs.count == 1)
+
+        model.exitSelection()
+        #expect(!model.isSelecting)
+        #expect(model.selectedIDs.isEmpty)
+    }
+
+    @Test func toggleSelectionCapsAtTwoAndRemoves() async throws {
+        let model = TransactionsViewModel(client: FakeAPIClient(), pageSize: 50)
+        let a = UUID()
+        let b = UUID()
+        let c = UUID()
+        model.enterSelection()
+
+        model.toggleSelection(a)
+        model.toggleSelection(b)
+        model.toggleSelection(c)  // ignored — already two
+        #expect(model.selectedIDs == [a, b])
+
+        model.toggleSelection(a)  // removes
+        #expect(model.selectedIDs == [b])
+    }
+
+    @Test func linkSelectedAsTransferConfirmsWithNegativeLegAsOutgoing() async throws {
+        let accountA = UUID()
+        let accountB = UUID()
+        let outgoing = Self.makeLeg(accountID: accountA, amount: -5000)
+        let incoming = Self.makeLeg(accountID: accountB, amount: 5000)
+        let client = FakeAPIClient()
+        await client.setTransactions([incoming, outgoing])  // list order irrelevant
+        await client.setConfirmTransferResult(
+            Self.makeTransfer(outgoingID: outgoing.id, incomingID: incoming.id)
+        )
+        await client.setTransaction(
+            Self.makeLeg(id: outgoing.id, accountID: accountA, amount: -5000, role: .transfer),
+            forID: outgoing.id
+        )
+        await client.setTransaction(
+            Self.makeLeg(id: incoming.id, accountID: accountB, amount: 5000, role: .transfer),
+            forID: incoming.id
+        )
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        model.enterSelection()
+        // Select incoming first, then outgoing — sign, not order, decides.
+        model.toggleSelection(incoming.id)
+        model.toggleSelection(outgoing.id)
+        #expect(model.canLinkSelection)
+
+        let ok = await model.linkSelectedAsTransfer()
+
+        #expect(ok)
+        #expect(!model.isSelecting)
+        #expect(model.successTick == 1)
+        let recorded = await client.confirmedTransferPairs
+        #expect(recorded == [.init(outgoingID: outgoing.id, incomingID: incoming.id)])
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.allSatisfy { $0.role == .transfer })
+        #expect(model.transfersByTransactionID[outgoing.id] != nil)
+        #expect(model.transfersByTransactionID[incoming.id] != nil)
+    }
+
+    @Test func linkSelectedAsTransferOn409SurfacesAlreadyLinkedAndKeepsSelection() async throws {
+        let outgoing = Self.makeLeg(amount: -5000)
+        let incoming = Self.makeLeg(amount: 5000)
+        let client = FakeAPIClient()
+        await client.setTransactions([outgoing, incoming])
+        await client.setConfirmTransferError(APIError.badStatus(409))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        model.enterSelection()
+        model.toggleSelection(outgoing.id)
+        model.toggleSelection(incoming.id)
+
+        let ok = await model.linkSelectedAsTransfer()
+
+        #expect(!ok)
+        #expect(model.linkFailure == .alreadyLinked)
+        #expect(model.isSelecting)
+        #expect(model.selectedIDs.count == 2)
+    }
+
+    @Test func linkSelectedAsTransferOn422SurfacesNotLinkable() async throws {
+        let outgoing = Self.makeLeg(amount: -5000)
+        let incoming = Self.makeLeg(amount: 5000)
+        let client = FakeAPIClient()
+        await client.setTransactions([outgoing, incoming])
+        await client.setConfirmTransferError(APIError.badStatus(422))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        model.enterSelection()
+        model.toggleSelection(outgoing.id)
+        model.toggleSelection(incoming.id)
+
+        _ = await model.linkSelectedAsTransfer()
+
+        #expect(model.linkFailure == .notLinkable)
+    }
+
+    @Test func canLinkSelectionIsFalseForAnInvalidPair() async throws {
+        let a = Self.makeLeg(amount: -5000)
+        let b = Self.makeLeg(amount: -3000)  // same sign
+        let client = FakeAPIClient()
+        await client.setTransactions([a, b])
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        model.enterSelection()
+        model.toggleSelection(a.id)
+        model.toggleSelection(b.id)
+
+        #expect(!model.canLinkSelection)
+    }
 }

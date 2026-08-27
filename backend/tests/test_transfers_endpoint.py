@@ -18,9 +18,9 @@ from sqlalchemy.pool import StaticPool
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.db.base import Base
-from traccio.db.models import TransactionRow
+from traccio.db.models import AccountRow, TransactionRow
 from traccio.db.session import get_session
-from traccio.domain.enums import KeyStrategy, TransactionStatus
+from traccio.domain.enums import AccountKind, KeyStrategy, TransactionStatus
 
 _DAY = datetime(2026, 3, 1, tzinfo=UTC)
 
@@ -286,3 +286,82 @@ def test_confirm_another_users_transaction_is_404() -> None:
     )
     # The stranger's leg is invisible to this user, so it reads as "not found".
     assert response.status_code == 404
+
+
+def test_confirm_links_a_free_form_pair_far_apart_across_manual_and_synced() -> None:
+    """The free-form pairing the client's selection mode drives (ADR 0020 +
+    ``docs/domain.md`` §Transfer).
+
+    Confirming an explicit pair applies only the structural rules — not the
+    amount tolerance or day window that bound automatic suggestions — and it
+    does not care whether a leg sits on a synced or a manual account. Here the
+    legs differ in magnitude by 499.90 EUR and in date by ~11 months, and one
+    account is manual (``connection_id``/``identification_hash`` both ``NULL``,
+    ADR 0020); ``POST /transfers/confirm`` still links them and zeroes both
+    ``effective_amount``.
+    """
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    synced_account_id = uuid4()
+    manual_account_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            AccountRow(
+                id=synced_account_id,
+                user_id=dev_user_id,
+                connection_id=uuid4(),
+                kind=AccountKind.CURRENT,
+                currency="EUR",
+                identification_hash="h-synced-1",
+                name="TEST CURRENT 01",
+                created_at=_DAY,
+            )
+        )
+        session.add(
+            AccountRow(
+                id=manual_account_id,
+                user_id=dev_user_id,
+                connection_id=None,
+                kind=AccountKind.WALLET,
+                currency="EUR",
+                identification_hash=None,
+                name=None,
+                alias="Investimenti",
+                created_at=_DAY,
+            )
+        )
+        out = _tx(
+            user_id=dev_user_id, account_id=synced_account_id, amount=-50000, stable_key="TX-OUT"
+        )
+        out.booked_at = datetime(2026, 1, 1, tzinfo=UTC)
+        out.value_date = datetime(2026, 1, 1, tzinfo=UTC)
+        inc = TransactionRow(
+            id=uuid4(),
+            user_id=dev_user_id,
+            account_id=manual_account_id,
+            amount=10,
+            currency="EUR",
+            booked_at=None,
+            value_date=datetime(2026, 12, 1, tzinfo=UTC),
+            description="TEST CASH IN 01",
+            display_description=None,
+            status=TransactionStatus.BOOKED,
+            stable_key="TX-IN-MANUAL",
+            key_strategy=KeyStrategy.MANUAL,
+        )
+        session.add_all([out, inc])
+        session.commit()
+        out_id, in_id = str(out.id), str(inc.id)
+
+    client = _client(engine)
+    response = client.post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": in_id},
+    )
+
+    assert response.status_code == 201
+    by_id = {t["id"]: t for t in client.get("/transactions").json()["transactions"]}
+    assert by_id[out_id]["role"] == "transfer"
+    assert by_id[in_id]["role"] == "transfer"
+    assert by_id[out_id]["effective_amount"] == 0
+    assert by_id[in_id]["effective_amount"] == 0

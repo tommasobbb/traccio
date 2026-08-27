@@ -55,27 +55,61 @@ struct TransactionRow: View {
     /// screen (a manual movement, ADR 0020), so
     /// `TransactionsViewModel.remove(id:)` can drop the row.
     let onDelete: (UUID) -> Void
+    /// When non-`nil`, the row is in transfer-pairing selection mode: it
+    /// renders a leading checkbox and toggles selection on tap instead of
+    /// navigating to the detail screen (`docs/domain.md` §Transfer).
+    var selection: Selection? = nil
+
+    /// The row's state while the Movimenti list is in transfer-pairing
+    /// selection mode.
+    struct Selection {
+        let isSelected: Bool
+        /// `false` renders the checkbox greyed and blocks the tap — the row
+        /// cannot join the current selection (wrong sign, same account,
+        /// different currency, not `personal`, or two are already picked).
+        let isSelectable: Bool
+        let onToggle: () -> Void
+    }
 
     var body: some View {
-        NavigationLink {
-            TransactionDetailView(
-                transaction: transaction,
-                categories: categories,
-                advance: advance,
-                transfer: transfersByTransactionID[transaction.id],
-                account: accountsByID[transaction.accountID],
-                events: events,
-                client: client,
-                onUpdate: onUpdate,
-                onAdvanceChange: onAdvanceUpdate,
-                onDashboardStale: onDashboardStale,
-                onRulesApplied: onRulesApplied,
-                onDelete: onDelete
-            )
-        } label: {
-            rowContent
+        if let selection {
+            Button(action: selection.onToggle) {
+                HStack(spacing: 12) {
+                    Image(
+                        systemName: selection.isSelected ? "checkmark.circle.fill" : "circle"
+                    )
+                    .font(.system(size: 20))
+                    .foregroundStyle(
+                        selection.isSelected
+                            ? Palette.accent
+                            : (selection.isSelectable ? Palette.inkTertiary : Palette.inkQuaternary)
+                    )
+                    rowContent
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(!selection.isSelectable && !selection.isSelected)
+        } else {
+            NavigationLink {
+                TransactionDetailView(
+                    transaction: transaction,
+                    categories: categories,
+                    advance: advance,
+                    transfer: transfersByTransactionID[transaction.id],
+                    account: accountsByID[transaction.accountID],
+                    events: events,
+                    client: client,
+                    onUpdate: onUpdate,
+                    onAdvanceChange: onAdvanceUpdate,
+                    onDashboardStale: onDashboardStale,
+                    onRulesApplied: onRulesApplied,
+                    onDelete: onDelete
+                )
+            } label: {
+                rowContent
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     private var rowContent: some View {

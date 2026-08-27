@@ -279,6 +279,11 @@ not propose it again (suggestions are recomputed on demand, so without this a
 rejected pair would reappear). A dismissal is order-independent and rejecting the
 same pair twice is idempotent.
 
+The client surfaces the explicit path as a **pick-two selection mode** in
+Movimenti (2026-08-27): the user selects any two rows and confirms them
+directly through `POST /transfers/confirm`, independent of whether detection
+ever suggested them — the same endpoint, no suggestion required.
+
 **Half-transfers exist and are normal**: money moved to an account the user
 has not connected. The outgoing leg has no counterpart and stays
 `personal`. Do not treat an unmatched leg as an error.

@@ -33,6 +33,18 @@ final class TransactionsViewModel {
         case generic
     }
 
+    /// Why linking two selected rows as a transfer failed, for the selection
+    /// bar to surface. Carries only a status-derived reason, never the
+    /// response body.
+    enum LinkFailure: Equatable {
+        /// `409` — one of the two rows is already a leg of another transfer.
+        case alreadyLinked
+        /// `422` — the pair is not structurally valid (should be unreachable,
+        /// since `canLinkSelection` gates the button, but mapped for honesty).
+        case notLinkable
+        case generic
+    }
+
     /// Current load state, observed by the view.
     private(set) var state: State = .idle
     /// The caller's categories, for `TransactionDetailView`'s picker — seeded
@@ -79,9 +91,22 @@ final class TransactionsViewModel {
     private(set) var isCreating = false
     /// Why the most recent manual-movement create failed, if it did.
     private(set) var createFailure: CreateFailure?
-    /// Increments once per successful manual create/delete — a trigger for
-    /// `.sensoryFeedback(.success, trigger:)`, not a count anyone reads.
+    /// Increments once per successful manual create/delete or free-form
+    /// transfer link — a trigger for `.sensoryFeedback(.success, trigger:)`,
+    /// not a count anyone reads.
     private(set) var successTick = 0
+    /// Whether the "pick two rows to link as a transfer" selection mode is
+    /// active (ADR: `docs/domain.md` §Transfer — a user may link any
+    /// structurally valid pair). Entered from the Movimenti toolbar.
+    private(set) var isSelecting = false
+    /// The rows currently selected for linking, in tap order, capped at two.
+    /// Order is only for stable UI; which leg is outgoing is decided by sign.
+    private(set) var selectedIDs: [UUID] = []
+    /// Set while a free-form link is in flight, so the selection bar can
+    /// disable its button.
+    private(set) var isLinking = false
+    /// Why the most recent free-form link failed, if it did.
+    private(set) var linkFailure: LinkFailure?
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
@@ -143,6 +168,9 @@ final class TransactionsViewModel {
         state = .loading
         offset = 0
         reachedEnd = false
+        // A reload is a context change: drop any in-progress row selection so
+        // `selectedIDs` never points at rows no longer on the page.
+        exitSelection()
 
         async let categoriesResult = client.categories()
         async let advancesResult = client.advances()
@@ -249,6 +277,110 @@ final class TransactionsViewModel {
     func remove(id: UUID) {
         guard case .loaded(let current) = state else { return }
         state = .loaded(current.filter { $0.id != id })
+    }
+
+    // MARK: Free-form transfer linking (docs/domain.md §Transfer)
+
+    /// Enter "pick two rows to link as a transfer" mode.
+    func enterSelection() {
+        isSelecting = true
+        selectedIDs = []
+        linkFailure = nil
+    }
+
+    /// Leave selection mode, discarding any partial selection.
+    func exitSelection() {
+        isSelecting = false
+        selectedIDs = []
+        linkFailure = nil
+    }
+
+    /// Toggle one row's membership in the selection. Adds only while fewer
+    /// than two are selected; removing is always allowed. Clears any prior
+    /// `linkFailure` so a fresh attempt starts clean.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The transaction row to toggle.
+    func toggleSelection(_ id: UUID) {
+        linkFailure = nil
+        if let index = selectedIDs.firstIndex(of: id) {
+            selectedIDs.remove(at: index)
+        } else if selectedIDs.count < 2 {
+            selectedIDs.append(id)
+        }
+    }
+
+    /// The currently selected rows resolved to their `TransactionResponse`,
+    /// in selection order. Rows that dropped out of the loaded page are
+    /// simply absent.
+    var selectedTransactions: [TransactionResponse] {
+        guard case .loaded(let current) = state else { return [] }
+        return selectedIDs.compactMap { id in current.first { $0.id == id } }
+    }
+
+    /// Whether exactly two rows are selected and they form a structurally
+    /// valid transfer pair (`TraccioCore.canLinkAsTransfer`).
+    var canLinkSelection: Bool {
+        let selected = selectedTransactions
+        guard selected.count == 2 else { return false }
+        return TraccioCore.canLinkAsTransfer(selected[0], selected[1])
+    }
+
+    /// Link the two selected rows as a transfer, then update both rows in
+    /// place and leave selection mode.
+    ///
+    /// The outgoing leg is the negative one, the incoming the positive.
+    /// After `POST /transfers/confirm` succeeds both legs are re-fetched
+    /// (their `role` is now `.transfer`, `effectiveAmount` zero) and swapped
+    /// in via `replace(_:)`, and the returned transfer is registered in
+    /// `transfersByTransactionID` so the detail screen shows "Annulla
+    /// collegamento" without a full reload — the same two-leg discipline as
+    /// `TransfersViewModel.confirm` / `TransactionDetailViewModel.unlinkTransfer`.
+    ///
+    /// A `409` surfaces as `.alreadyLinked`, a `422` as `.notLinkable`, any
+    /// other failure as `.generic`; the selection is kept so the user can
+    /// adjust.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the transfer was created, `false` otherwise (having recorded
+    /// `linkFailure`).
+    @discardableResult
+    func linkSelectedAsTransfer() async -> Bool {
+        guard !isLinking, canLinkSelection else { return false }
+        let selected = selectedTransactions
+        let outgoing = selected[0].amount < 0 ? selected[0] : selected[1]
+        let incoming = selected[0].amount < 0 ? selected[1] : selected[0]
+
+        isLinking = true
+        defer { isLinking = false }
+        linkFailure = nil
+
+        do {
+            let created = try await client.confirmTransfer(
+                outgoingID: outgoing.id, incomingID: incoming.id
+            )
+            async let refreshedOutgoing = client.transaction(id: outgoing.id)
+            async let refreshedIncoming = client.transaction(id: incoming.id)
+            replace(try await refreshedOutgoing)
+            replace(try await refreshedIncoming)
+            transfersByTransactionID[created.outgoingTransactionID] = created
+            transfersByTransactionID[created.incomingTransactionID] = created
+            exitSelection()
+            successTick += 1
+            return true
+        } catch APIError.badStatus(409) {
+            linkFailure = .alreadyLinked
+            return false
+        } catch APIError.badStatus(422) {
+            linkFailure = .notLinkable
+            return false
+        } catch {
+            linkFailure = .generic
+            return false
+        }
     }
 
     /// The accounts eligible for a new manual movement — the manual ones

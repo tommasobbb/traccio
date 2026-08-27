@@ -54,32 +54,12 @@ struct TransactionsView: View {
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
             .animation(.easeInOut(duration: 0.2), value: stateTag)
+            .animation(.easeInOut(duration: 0.2), value: model.isSelecting)
             .sensoryFeedback(.success, trigger: model.successTick)
-            .refreshable { await model.load() }
-            .toolbar {
-                if model.transferSuggestionCount > 0 {
-                    ToolbarItem(placement: .primaryAction) {
-                        NavigationLink {
-                            TransfersView(
-                                client: model.client,
-                                onUpdate: { model.replace($0) },
-                                onDashboardStale: { freshness.markStale([.dashboard]) }
-                            )
-                        } label: {
-                            Label(
-                                "\(model.transferSuggestionCount) trasferimenti",
-                                systemImage: "arrow.left.arrow.right"
-                            )
-                        }
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isCreatingTransaction = true
-                    } label: {
-                        Label("Nuovo movimento", systemImage: "plus")
-                    }
-                }
+            .refreshable { if !model.isSelecting { await model.load() } }
+            .toolbar { toolbarContent }
+            .safeAreaInset(edge: .bottom) {
+                if model.isSelecting { selectionBar }
             }
             .sheet(isPresented: $isCreatingTransaction) {
                 CreateManualTransactionSheet(
@@ -105,6 +85,110 @@ struct TransactionsView: View {
             }
         }
         .task(id: freshness.token(for: .transactions)) { await model.load() }
+    }
+
+    // MARK: Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if model.isSelecting {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Fine") { model.exitSelection() }
+            }
+        } else {
+            if model.transferSuggestionCount > 0 {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink {
+                        TransfersView(
+                            client: model.client,
+                            onUpdate: { model.replace($0) },
+                            onDashboardStale: { freshness.markStale([.dashboard]) }
+                        )
+                    } label: {
+                        Label(
+                            "\(model.transferSuggestionCount) trasferimenti",
+                            systemImage: "arrow.left.arrow.right"
+                        )
+                    }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { model.enterSelection() } label: {
+                    Label("Collega trasferimento", systemImage: "arrow.triangle.merge")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { isCreatingTransaction = true } label: {
+                    Label("Nuovo movimento", systemImage: "plus")
+                }
+            }
+        }
+    }
+
+    // MARK: Transfer-pairing selection bar
+
+    /// The bottom bar shown while `model.isSelecting`: guidance until two rows
+    /// are picked, then either the link action or the reason it is blocked,
+    /// plus any failure from the last attempt.
+    private var selectionBar: some View {
+        VStack(spacing: 8) {
+            if let message = linkFailureMessage {
+                Banner(message: message)
+            }
+            if model.canLinkSelection {
+                PillButton(
+                    title: "Collega come trasferimento",
+                    isLoading: model.isLinking,
+                    action: {
+                        Task {
+                            if await model.linkSelectedAsTransfer() {
+                                freshness.markStale([.dashboard])
+                            }
+                        }
+                    }
+                )
+            } else {
+                Text(selectionGuidance)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkSecondary)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(16)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    /// What to tell the user given how many rows are selected and whether
+    /// they can be linked. Pure view copy derived from the two
+    /// `TransactionResponse`s — the backend stays the authority on the link.
+    private var selectionGuidance: String {
+        let selected = model.selectedTransactions
+        switch selected.count {
+        case 0, 1:
+            return "Seleziona due movimenti da collegare come trasferimento"
+        default:
+            let a = selected[0]
+            let b = selected[1]
+            if a.role != .personal || b.role != .personal {
+                return "Uno dei due movimenti è già collegato (trasferimento, anticipo o rimborso)"
+            }
+            if a.currency != b.currency { return "I due movimenti hanno valute diverse" }
+            if a.accountID == b.accountID { return "I due movimenti sono sullo stesso conto" }
+            if (a.amount < 0) == (b.amount < 0) {
+                return "Servono un'uscita e un'entrata, non due movimenti dello stesso segno"
+            }
+            return "Questi due movimenti non possono formare un trasferimento"
+        }
+    }
+
+    private var linkFailureMessage: String? {
+        switch model.linkFailure {
+        case nil: nil
+        case .alreadyLinked: "Uno dei due movimenti è già in un trasferimento."
+        case .notLinkable: "Questi due movimenti non possono formare un trasferimento."
+        case .generic: "Non è stato possibile collegare i movimenti. Riprova."
+        }
     }
 
     // MARK: Filter chips
@@ -307,7 +391,8 @@ struct TransactionsView: View {
                         onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
                         onDashboardStale: { freshness.markStale([.dashboard]) },
                         onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
-                        onDelete: { model.remove(id: $0) }
+                        onDelete: { model.remove(id: $0) },
+                        selection: rowSelection(for: transaction)
                     )
                     .onAppear {
                         if isLastGroup, transaction.id == group.transactions.last?.id {
@@ -317,6 +402,37 @@ struct TransactionsView: View {
                 }
             }
         }
+    }
+
+    /// The row's selection state while transfer-pairing mode is active, or
+    /// `nil` when it isn't (the row stays a normal `NavigationLink`).
+    ///
+    /// A row is *selectable* when: it's already selected (so it can be
+    /// deselected); or fewer than two are selected and it can still form a
+    /// valid pair — with no other selection, any `personal`/non-`rejected`/
+    /// non-zero row qualifies; with one selected, only a row that
+    /// `TraccioCore.canLinkAsTransfer` accepts alongside it.
+    private func rowSelection(for transaction: TransactionResponse) -> TransactionRow.Selection? {
+        guard model.isSelecting else { return nil }
+        let isSelected = model.selectedIDs.contains(transaction.id)
+        let others = model.selectedTransactions.filter { $0.id != transaction.id }
+        let isSelectable: Bool
+        if isSelected {
+            isSelectable = true
+        } else if model.selectedIDs.count >= 2 {
+            isSelectable = false
+        } else if let anchor = others.first {
+            isSelectable = TraccioCore.canLinkAsTransfer(anchor, transaction)
+        } else {
+            isSelectable =
+                transaction.role == .personal && transaction.status != .rejected
+                && transaction.amount != 0
+        }
+        return TransactionRow.Selection(
+            isSelected: isSelected,
+            isSelectable: isSelectable,
+            onToggle: { model.toggleSelection(transaction.id) }
+        )
     }
 
     /// "Oggi" / "Ieri" for the two nearest days, else a localized day-month
