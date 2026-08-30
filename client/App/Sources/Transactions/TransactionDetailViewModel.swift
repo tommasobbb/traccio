@@ -77,6 +77,11 @@ final class TransactionDetailViewModel {
     /// `AddReimbursementSheet` opens — a failure leaves it empty, which the
     /// sheet degrades to offering a cash-only entry.
     private(set) var reimbursementCandidates: [TransactionResponse] = []
+    /// Account id → account, fetched alongside the candidates so
+    /// `AddReimbursementSheet` can name each candidate's destination account.
+    /// Best-effort, same as the candidates: an empty map degrades every row
+    /// to a generic "Conto" label.
+    private(set) var reimbursementCandidateAccounts: [UUID: AccountResponse] = [:]
     /// This transaction's advance's recorded reimbursements, loaded by
     /// `loadReimbursements()` and kept in sync by
     /// `createReimbursement(...)`/`deleteReimbursement(_:)`. `.loading` until
@@ -467,13 +472,19 @@ final class TransactionDetailViewModel {
     ///
     /// A no-op when `reimbursementCandidates` is already non-empty. Failure
     /// leaves it empty; `AddReimbursementSheet` still works for a cash-only
-    /// entry.
+    /// entry. The account lookup is fetched in the same pass so a candidate
+    /// row can name its account; a failure there only costs the label.
     func loadReimbursementCandidatesIfNeeded() async {
         guard reimbursementCandidates.isEmpty else { return }
         guard let fetched = try? await client.transactions(filter: .none, limit: 100, offset: 0)
         else { return }
         reimbursementCandidates = fetched.filter {
             $0.role == .personal && $0.amount > 0 && $0.currency == transaction.currency
+        }
+        if let accounts = try? await client.accounts() {
+            reimbursementCandidateAccounts = Dictionary(
+                uniqueKeysWithValues: accounts.map { ($0.id, $0) }
+            )
         }
     }
 

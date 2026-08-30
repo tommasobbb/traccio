@@ -188,6 +188,7 @@ struct TransactionDetailView: View {
         .sheet(isPresented: $isPresentingAddReimbursementSheet) {
             AddReimbursementSheet(
                 candidates: model.reimbursementCandidates,
+                accountsByID: model.reimbursementCandidateAccounts,
                 participants: model.advance?.participants ?? [],
                 isCreating: model.isUpdating,
                 failureMessage: model.actionFailure != nil
