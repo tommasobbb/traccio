@@ -88,6 +88,7 @@ struct DashboardView: View {
                     Image(systemName: "chevron.left")
                 }
                 .accessibilityLabel("Periodo precedente")
+                .disabled(!model.canGoToPrevious)
 
                 Text(title(for: model.period))
                     .font(Typography.cardTitle)

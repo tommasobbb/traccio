@@ -7,7 +7,7 @@ never see ORM types.
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
@@ -55,6 +55,7 @@ from traccio.db.models import (
     TransactionRow,
     TransferDismissalRow,
     TransferRow,
+    UserRow,
 )
 from traccio.domain.categories import default_categories
 from traccio.domain.enums import (
@@ -102,6 +103,19 @@ def _transaction_when() -> "ColumnElement[datetime | None]":
         A SQL expression usable in ``.where()``/``.order_by()``.
     """
     return func.coalesce(TransactionRow.booked_at, TransactionRow.value_date)
+
+
+def _tracking_floor(tracking_start: date | None) -> datetime | None:
+    """The ``coalesce(booked_at, value_date)`` lower bound for a tracking start.
+
+    ADR 0024: the user's ``tracking_start_date`` is a whole-day boundary — the
+    first instant of that day in UTC. ``None`` in, ``None`` out (no floor). A
+    row with no date at all is excluded by this bound, the same way any
+    ``start``/``end`` bound already treats a dateless row.
+    """
+    if tracking_start is None:
+        return None
+    return datetime.combine(tracking_start, time.min, tzinfo=UTC)
 
 
 def create_connection(session: Session, *, connection: Connection, auth_state: str) -> None:
@@ -764,6 +778,7 @@ def list_transactions(
     q: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
+    tracking_start: date | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Transaction]:
@@ -850,6 +865,9 @@ def list_transactions(
         query = query.where(when >= start)
     if end is not None:
         query = query.where(when < end)
+    floor = _tracking_floor(tracking_start)
+    if floor is not None:
+        query = query.where(when >= floor)
     query = query.order_by(when.desc(), TransactionRow.id).limit(limit).offset(offset)
     rows = session.scalars(query).all()
     return [row_to_transaction(row) for row in rows]
@@ -900,6 +918,91 @@ def list_transactions_in_period(
     query = query.order_by(when.desc(), TransactionRow.id)
     rows = session.scalars(query).all()
     return [row_to_transaction(row) for row in rows]
+
+
+def get_tracking_start_date(session: Session, *, user_id: UUID) -> date | None:
+    """Return the user's ``tracking_start_date`` (ADR 0024), or ``None``.
+
+    ``None`` for a user with no row yet (the dev user in a fresh test db never
+    inserts one) and for a user who has never set it — both mean "no floor".
+    Scoped by ``user_id``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose setting to read.
+
+    Returns
+    -------
+    date or None
+        The stored floor, or ``None``.
+    """
+    row = session.get(UserRow, user_id)
+    return row.tracking_start_date if row is not None else None
+
+
+def set_tracking_start_date(session: Session, *, user_id: UUID, value: date | None) -> None:
+    """Set (or clear, with ``None``) the user's ``tracking_start_date``.
+
+    Upserts the ``users`` row: a fresh test database only ever holds the ids
+    referenced by other rows, never a ``users`` row for the dev user, so this
+    inserts one on first use (stamping ``created_at`` now) rather than failing.
+    The caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose setting to write.
+    value : date or None
+        The new floor, or ``None`` to clear it (show everything again).
+    """
+    row = session.get(UserRow, user_id)
+    if row is None:
+        session.add(UserRow(id=user_id, created_at=datetime.now(UTC), tracking_start_date=value))
+    else:
+        row.tracking_start_date = value
+
+
+def earliest_transaction_dates_by_account(session: Session, *, user_id: UUID) -> dict[UUID, date]:
+    """Return each account's earliest dated movement (ADR 0024).
+
+    Groups the user's transactions by account and takes
+    ``min(coalesce(booked_at, value_date))`` — the same "when" expression every
+    other date filter uses. An account whose every movement is dateless (no
+    ``booked_at`` and no ``value_date``) has a ``NULL`` minimum and is left
+    out; so is an account with no movements at all. The caller diffs this
+    against the full account list to show the user which accounts constrain
+    the suggestion and which have nothing yet. Scoped by ``user_id``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose transactions to scan.
+
+    Returns
+    -------
+    dict[UUID, date]
+        Account id → earliest movement date, only for accounts with at least
+        one dated movement.
+    """
+    when = _transaction_when()
+    rows = session.execute(
+        select(TransactionRow.account_id, func.min(when))
+        .where(TransactionRow.user_id == user_id)
+        .group_by(TransactionRow.account_id)
+    ).all()
+    result: dict[UUID, date] = {}
+    for account_id, earliest in rows:
+        if earliest is None:
+            continue
+        result[account_id] = earliest.date() if isinstance(earliest, datetime) else earliest
+    return result
 
 
 def get_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) -> Transaction | None:

@@ -24,6 +24,7 @@ from traccio.api.routers import (
     health_router,
     imports_router,
     rules_router,
+    settings_router,
     transactions_router,
     transfers_router,
 )
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     protected.include_router(categories_router)
     protected.include_router(rules_router)
     protected.include_router(dashboard_router)
+    protected.include_router(settings_router)
 
     app.include_router(health_router)
     app.include_router(connections_callback_router)

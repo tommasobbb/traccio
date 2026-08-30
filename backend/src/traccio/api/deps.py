@@ -7,13 +7,17 @@ dependencies they share are declared here instead.
 
 import secrets
 from collections.abc import Iterator
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy.orm import Session
 
 from traccio.core.config import Settings, get_settings
 from traccio.core.crypto import TokenCipher, get_token_cipher
+from traccio.db.repositories import get_tracking_start_date
+from traccio.db.session import get_session
 from traccio.providers.enable_banking.auth import load_private_key_pem
 from traccio.providers.enable_banking.client import EnableBankingClient
 from traccio.providers.enable_banking.provider import EnableBankingProvider
@@ -34,6 +38,26 @@ def current_user_id() -> UUID:
         The current user's id.
     """
     return get_settings().dev_user_id
+
+
+def current_tracking_start(
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> date | None:
+    """Return the current user's ``tracking_start_date`` floor (ADR 0024).
+
+    A single place the value is read, so a route that shows transactions
+    cannot forget to apply it: ``GET /transactions`` and
+    ``GET /dashboard/summary`` both depend on this and pass the result down.
+    ``None`` — no row yet, or never set — means no floor. Reads/writes go
+    through the ``/settings`` endpoints.
+
+    Returns
+    -------
+    date or None
+        The floor, or ``None``.
+    """
+    return get_tracking_start_date(session, user_id=user_id)
 
 
 def require_api_token(

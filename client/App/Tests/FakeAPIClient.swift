@@ -38,6 +38,10 @@ actor FakeAPIClient: APIClientProtocol {
     var importPreviewError: Error?
     var importCommitToReturn: ImportCommitResponse?
     var importCommitError: Error?
+    var settingsToReturn = TrackingStartResponse(trackingStartDate: nil)
+    var settingsError: Error?
+    var trackingStartSuggestionToReturn: TrackingStartSuggestionResponse?
+    var trackingStartSuggestionError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
@@ -178,6 +182,7 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var deletedManualTransactionIDs: [UUID] = []
     private(set) var importPreviewRequests: [ImportPreviewRequest] = []
     private(set) var importCommitRequests: [ImportPreviewRequest] = []
+    private(set) var setTrackingStartValues: [CalendarDate?] = []
     /// Every `country` passed to `institutions(country:)`, in call order.
     private(set) var receivedInstitutionsCountries: [String] = []
     /// Every `startConnection(institution:country:)` call, for asserting
@@ -488,6 +493,22 @@ actor FakeAPIClient: APIClientProtocol {
         importCommitError = error
     }
 
+    func setSettings(_ response: TrackingStartResponse) {
+        settingsToReturn = response
+    }
+
+    func setSettingsError(_ error: Error) {
+        settingsError = error
+    }
+
+    func setTrackingStartSuggestion(_ response: TrackingStartSuggestionResponse) {
+        trackingStartSuggestionToReturn = response
+    }
+
+    func setTrackingStartSuggestionError(_ error: Error) {
+        trackingStartSuggestionError = error
+    }
+
     func setRejectTransferError(_ error: Error) {
         rejectTransferError = error
     }
@@ -722,6 +743,24 @@ actor FakeAPIClient: APIClientProtocol {
         importCommitRequests.append(request)
         guard let importCommitToReturn else { throw NotConfigured() }
         return importCommitToReturn
+    }
+
+    func settings() async throws -> TrackingStartResponse {
+        if let settingsError { throw settingsError }
+        return settingsToReturn
+    }
+
+    func setTrackingStart(_ date: CalendarDate?) async throws -> TrackingStartResponse {
+        if let settingsError { throw settingsError }
+        setTrackingStartValues.append(date)
+        settingsToReturn = TrackingStartResponse(trackingStartDate: date)
+        return settingsToReturn
+    }
+
+    func trackingStartSuggestion() async throws -> TrackingStartSuggestionResponse {
+        if let trackingStartSuggestionError { throw trackingStartSuggestionError }
+        guard let trackingStartSuggestionToReturn else { throw NotConfigured() }
+        return trackingStartSuggestionToReturn
     }
 
     func health() async throws -> HealthResponse {

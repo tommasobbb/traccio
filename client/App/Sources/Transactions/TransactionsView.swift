@@ -259,7 +259,9 @@ struct TransactionsView: View {
         case .lastMonth: "Mese scorso"
         case .last3Months: "Ultimi 3 mesi"
         case .thisYear: "Quest'anno"
-        case .all: "Tutto"
+        // "Dall'inizio", not "Tutto": with a tracking start date set
+        // (ADR 0024) this still stops at that floor server-side.
+        case .all: "Dall'inizio"
         }
     }
 

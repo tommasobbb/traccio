@@ -43,12 +43,20 @@ from traccio.domain.money import Money
 
 def user_to_row(user: User) -> UserRow:
     """Translate a domain :class:`User` into a :class:`UserRow`."""
-    return UserRow(id=user.id, created_at=user.created_at)
+    return UserRow(
+        id=user.id,
+        created_at=user.created_at,
+        tracking_start_date=user.tracking_start_date,
+    )
 
 
 def row_to_user(row: UserRow) -> User:
     """Translate a :class:`UserRow` into a domain :class:`User`."""
-    return User(id=row.id, created_at=row.created_at)
+    return User(
+        id=row.id,
+        created_at=row.created_at,
+        tracking_start_date=row.tracking_start_date,
+    )
 
 
 def connection_to_row(connection: Connection) -> ConnectionRow:

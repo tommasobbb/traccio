@@ -37,6 +37,17 @@ struct SettingsView: View {
                             settingsRow(title: "Eventi", systemImage: "calendar")
                         }
                         .buttonStyle(.plain)
+                        Divider().overlay(Palette.separator)
+                        NavigationLink {
+                            TrackingStartView(
+                                model: TrackingStartViewModel(
+                                    onChanged: { freshness.markStale([.dashboard, .transactions]) }
+                                )
+                            )
+                        } label: {
+                            settingsRow(title: "Inizio tracciamento", systemImage: "calendar.badge.clock")
+                        }
+                        .buttonStyle(.plain)
                         #if os(iOS)
                         Divider().overlay(Palette.separator)
                         biometricLockRow

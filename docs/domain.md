@@ -39,6 +39,18 @@ identities across `Connections`.
 Every persisted query is scoped by `user_id`. There is no "admin sees all"
 path.
 
+**`tracking_start_date`** (ADR 0024) is the first per-user setting: the day
+the dashboard and the Movimenti list begin from. `None` — the default —
+means no floor. It is a whole-day calendar boundary and a **reversible
+display filter**: raising or clearing it changes which movements those two
+surfaces show, never what is stored (bank history is not re-fetchable, so a
+delete would be unrecoverable). It is applied in exactly one place per
+consumer — `list_transactions` for the list, and the dashboard router raises
+it into the requested period before fetching or bucketing — and never to a
+by-id read of an advance, event, reimbursement, or transfer candidate.
+`GET/POST /settings` read and write it; `GET /settings/tracking-start/suggestion`
+derives a suggested value from each account's first movement.
+
 ---
 
 ## Connection
@@ -710,6 +722,13 @@ expression the transaction read-back endpoints already order by, and is
 never overlap. A transaction with neither date set is excluded by any bound
 on that side, and included only when the period is fully open. Pending
 transactions are included — money already committed is not a maybe.
+
+The user's `tracking_start_date` (`User`, ADR 0024) is raised into the
+requested period *before* anything is fetched or bucketed: `start` becomes
+`max(start, floor)`, and the same clamped value drives both the transaction
+fetch and the bucket grid / average-daily-spending, so no total, bucket, or
+average ever counts a day the user excluded. The comparison period is
+clamped the same way.
 
 **Category breakdown** (2026-08-24): each currency's totals additionally
 partition by `effective_category` — one `CategorySummary` per category

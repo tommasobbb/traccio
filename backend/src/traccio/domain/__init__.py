@@ -52,6 +52,7 @@ from traccio.domain.models import (
 from traccio.domain.money import CurrencyCode, Money
 from traccio.domain.rules import rule_matches
 from traccio.domain.sync_schedule import SyncDecision, next_sync_eligible_at, sync_decision
+from traccio.domain.tracking import suggest_tracking_start
 
 __all__ = [
     "Account",
@@ -102,6 +103,7 @@ __all__ = [
     "event_total",
     "next_sync_eligible_at",
     "rule_matches",
+    "suggest_tracking_start",
     "summarize",
     "summarize_comparisons",
     "sync_decision",

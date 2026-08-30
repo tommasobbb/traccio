@@ -714,3 +714,41 @@ def test_summary_has_no_converted_total_when_fx_is_disabled() -> None:
     body = response.json()
     assert body["converted"] is None
     assert body["conversion_unavailable"] is None
+
+
+def test_summary_tracking_start_clamps_totals_and_the_bucket_grid() -> None:
+    """A tracking-start floor (ADR 0024) is raised into the requested period
+    before anything is fetched or bucketed — so a pre-floor row drops out of
+    the totals and the gap-filled grid starts at the floor, not at the
+    requested start."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-1000,
+        stable_key="JUNE",
+        booked_at=datetime(2026, 6, 15, tzinfo=UTC),
+    )
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-2000,
+        stable_key="JULY",
+        booked_at=datetime(2026, 7, 2, tzinfo=UTC),
+    )
+    client = _client(engine)
+    assert client.post("/settings", json={"tracking_start_date": "2026-07-01"}).status_code == 200
+
+    response = client.get(
+        "/dashboard/summary",
+        params={"start": "2026-06-01T00:00:00Z", "end": "2026-07-04T00:00:00Z"},
+    )
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    # The June row is excluded entirely.
+    assert summary["spending"] == 2000
+    assert summary["transaction_count"] == 1
+    # The gap-filled grid begins at the floor, not at 2026-06-01.
+    assert [b["start"] for b in summary["by_bucket"]] == ["2026-07-01", "2026-07-02", "2026-07-03"]

@@ -11,7 +11,7 @@ amounts.
 """
 
 from collections.abc import Callable, Mapping, Sequence
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, date, datetime, time, tzinfo
 from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id, get_fx_client
+from traccio.api.deps import current_tracking_start, current_user_id, get_fx_client
 from traccio.api.schemas.dashboard import (
     AccountDisplay,
     CategoryDisplay,
@@ -153,6 +153,7 @@ def dashboard_summary(
     tz: Annotated[str, Query()] = "UTC",
     compare_start: Annotated[datetime | None, Query()] = None,
     compare_end: Annotated[datetime | None, Query()] = None,
+    tracking_start: Annotated[date | None, Depends(current_tracking_start)] = None,
     fx_client: Annotated[FrankfurterClient | None, Depends(get_fx_client)] = None,
 ) -> DashboardSummaryResponse:
     """Summarize real spending and income over a period, per currency.
@@ -194,6 +195,12 @@ def dashboard_summary(
         Inclusive start of the comparison period.
     compare_end : datetime or None, optional
         Exclusive end of the comparison period.
+    tracking_start : date or None
+        Not a query param — the user's stored ``tracking_start_date`` floor
+        (ADR 0024), injected via
+        :func:`~traccio.api.deps.current_tracking_start`. Raised into both the
+        main and the comparison period before anything is fetched or bucketed,
+        so no total, bucket, or average counts a day the user excluded.
 
     Returns
     -------
@@ -215,6 +222,20 @@ def dashboard_summary(
         zone = ZoneInfo(tz)
     except ZoneInfoNotFoundError as exc:
         raise HTTPException(status_code=422, detail="unknown_timezone") from exc
+
+    # The tracking-start floor (ADR 0024) is raised into the requested period
+    # *here*, so the same clamped start drives both the transaction fetch and
+    # ``summarize``'s bucket grid / average-daily-spending — clamping only the
+    # query would leave empty leading buckets and a wrong daily average.
+    def _clamp(value: datetime | None) -> datetime | None:
+        if tracking_start is None:
+            return value
+        floor = datetime.combine(tracking_start, time.min, tzinfo=UTC)
+        return floor if value is None else max(value, floor)
+
+    start = _clamp(start)
+    if compare_start is not None and compare_end is not None:
+        compare_start = _clamp(compare_start)
 
     found = list_transactions_in_period(session, user_id, start=start, end=end)
     advance_by_tx: dict[UUID, Advance] = {

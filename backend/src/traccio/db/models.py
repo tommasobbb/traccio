@@ -133,12 +133,20 @@ class UserRow(Base):
         Primary key.
     created_at : datetime
         Creation timestamp (timezone-aware, UTC).
+    tracking_start_date : date or None
+        The first day the user wants counted (ADR 0024). ``None`` — the
+        default and the state before this column existed — means "no floor,
+        show everything". A calendar date, not a datetime: the floor is a
+        whole-day boundary and the user picks a month, not an instant. The
+        only per-user setting so far; a `user_settings` table earns its keep
+        only once there is a second one.
     """
 
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    tracking_start_date: Mapped[date | None] = mapped_column(Date(), nullable=True)
 
 
 class ConnectionRow(Base):

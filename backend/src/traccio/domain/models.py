@@ -52,12 +52,18 @@ class User(BaseModel):
         Stable identifier of the user.
     created_at : datetime
         When the user was created (timezone-aware, UTC).
+    tracking_start_date : date or None
+        The first day the user wants counted on the dashboard and in the
+        Movimenti list (ADR 0024). ``None`` means no floor — show everything.
+        A whole-day calendar boundary, reversible: raising or clearing it
+        never deletes a row, only hides it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     id: UUID = Field(default_factory=uuid4)
     created_at: datetime = Field(default_factory=_now)
+    tracking_start_date: date | None = None
 
 
 class Connection(BaseModel):

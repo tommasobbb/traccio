@@ -1079,3 +1079,50 @@ def test_prune_pending_is_user_scoped() -> None:
     # A stranger's stale pending row is invisible to the dev user's prune call.
     assert response.status_code == 200
     assert response.json() == {"pruned": 0}
+
+
+def test_tracking_start_hides_rows_before_the_floor_and_is_reversible() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    with Session(engine) as session:
+        session.add_all(
+            [
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-BEFORE",
+                    description="MERCHANT BEFORE",
+                    booked_at=datetime(2026, 5, 20, tzinfo=UTC),
+                    value_date=datetime(2026, 5, 20, tzinfo=UTC),
+                ),
+                _tx(
+                    user_id=dev_user_id,
+                    account_id=uuid4(),
+                    stable_key="TX-AFTER",
+                    description="MERCHANT AFTER",
+                    booked_at=datetime(2026, 7, 3, tzinfo=UTC),
+                    value_date=datetime(2026, 7, 3, tzinfo=UTC),
+                ),
+            ]
+        )
+        session.commit()
+    client = _client(engine)
+
+    # No floor: both rows.
+    assert {t["description"] for t in client.get("/transactions").json()["transactions"]} == {
+        "MERCHANT BEFORE",
+        "MERCHANT AFTER",
+    }
+
+    # Floor at 2026-07-01: only the July row.
+    assert client.post("/settings", json={"tracking_start_date": "2026-07-01"}).status_code == 200
+    assert [t["description"] for t in client.get("/transactions").json()["transactions"]] == [
+        "MERCHANT AFTER"
+    ]
+
+    # Clearing it brings the earlier row back — nothing was deleted.
+    client.post("/settings", json={"tracking_start_date": None})
+    assert {t["description"] for t in client.get("/transactions").json()["transactions"]} == {
+        "MERCHANT BEFORE",
+        "MERCHANT AFTER",
+    }

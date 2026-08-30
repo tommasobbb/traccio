@@ -48,6 +48,18 @@ final class DashboardViewModel {
     /// previous period's (possibly differently-sized) series carries no
     /// meaning in a new one.
     private(set) var selectedBucketIndex: Int?
+    /// The user's tracking start date (ADR 0024), refreshed on every `load()`.
+    /// The backend floors every total at it regardless; this is only so the
+    /// period picker can stop the user paging to a period entirely before it,
+    /// which would just show an empty screen. `nil` = no floor.
+    private(set) var trackingStart: CalendarDate?
+
+    /// Whether stepping to the previous period would still overlap the
+    /// tracking-start floor. `true` when there is no floor.
+    var canGoToPrevious: Bool {
+        guard let floor = trackingStart?.date() else { return true }
+        return period.previous().end > floor
+    }
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`.claude/rules/swift.md`: "a view model
@@ -96,10 +108,18 @@ final class DashboardViewModel {
         } catch {
             state = .failed
         }
+        // Best-effort: a failure here just leaves the picker unconstrained.
+        if let settings = try? await client.settings() {
+            trackingStart = settings.trackingStartDate
+        }
     }
 
     /// Step to the previous period (same unit) and reload.
+    ///
+    /// A no-op when the previous period lies entirely before the tracking
+    /// start (ADR 0024) — there is nothing there to show.
     func goToPrevious() async {
+        guard canGoToPrevious else { return }
         period = period.previous()
         await load()
     }

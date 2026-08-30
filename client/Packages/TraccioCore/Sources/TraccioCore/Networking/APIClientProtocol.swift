@@ -39,6 +39,9 @@ public protocol APIClientProtocol: Sendable {
     func deleteManualTransaction(id: UUID) async throws
     func importPreview(_ request: ImportPreviewRequest) async throws -> ImportPreviewResponse
     func importCommit(_ request: ImportPreviewRequest) async throws -> ImportCommitResponse
+    func settings() async throws -> TrackingStartResponse
+    func setTrackingStart(_ date: CalendarDate?) async throws -> TrackingStartResponse
+    func trackingStartSuggestion() async throws -> TrackingStartSuggestionResponse
     func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
         -> [TransactionResponse]
     func categories() async throws -> [CategoryResponse]

@@ -6,14 +6,14 @@ router, the same rule that puts ``/events/{id}/transactions`` on the events
 router rather than here (see ``api/routers/events.py``).
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_tracking_start, current_user_id
 from traccio.api.schemas.transactions import (
     ConfirmCategoryRequest,
     CreateManualTransactionRequest,
@@ -70,6 +70,7 @@ def transactions(
     q: Annotated[str | None, Query()] = None,
     start: Annotated[datetime | None, Query()] = None,
     end: Annotated[datetime | None, Query()] = None,
+    tracking_start: Annotated[date | None, Depends(current_tracking_start)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionsResponse:
@@ -111,6 +112,11 @@ def transactions(
     end : datetime or None, optional
         Exclusive upper bound on the same expression (half-open ``[start,
         end)``), the same period semantics as ``GET /dashboard/summary``.
+    tracking_start : date or None
+        Not a query param — the user's stored ``tracking_start_date`` floor
+        (ADR 0024), injected via :func:`~traccio.api.deps.current_tracking_start`.
+        Rows before it are hidden (a dateless row too, like any lower bound).
+        Reversible: it is changed through ``/settings``, never a delete.
     limit : int, optional
         Page size, between 1 and 200 (default 50).
     offset : int, optional
@@ -145,6 +151,7 @@ def transactions(
         q=search_term,
         start=start,
         end=end,
+        tracking_start=tracking_start,
         limit=limit,
         offset=offset,
     )

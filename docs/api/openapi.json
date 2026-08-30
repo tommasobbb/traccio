@@ -1,6 +1,46 @@
 {
   "components": {
     "schemas": {
+      "AccountEarliestResponse": {
+        "description": "One account and the date of its earliest movement.\n\nAttributes\n----------\naccount_id : UUID\n    The account.\ndisplay_name : str or None\n    Its resolved display name (alias, else provider name, else ``None``).\nearliest : date or None\n    The date of its first dated movement, or ``None`` when it has no\n    movements (or only dateless ones) \u2014 such an account places no\n    constraint on the suggestion.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "earliest": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earliest"
+          }
+        },
+        "required": [
+          "account_id",
+          "display_name",
+          "earliest"
+        ],
+        "title": "AccountEarliestResponse",
+        "type": "object"
+      },
       "AccountIcon": {
         "description": "A semantic icon for an :class:`~traccio.domain.models.Account`.\n\nNamed for what the account *is*, not for an SF Symbol \u2014 the backend has no\nnotion that SF Symbols exist; the client owns the icon-name mapping (see\nADR 0017). A separate enum from ``CategoryIcon`` (added in the categories\nslice) because the two\nvocabularies are disjoint: an account picker has no use for a dozen food\nicons, a category picker has no use for \"wallet\".\n\nAttributes\n----------\nBANK : str\n    A current/checking account at a bank.\nCARD : str\n    A card account.\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal).\nSAVINGS : str\n    A savings account.\nCASH : str\n    A cash-like account.\nPHONE : str\n    A mobile-first account (e.g. a phone-based neobank).",
         "enum": [
@@ -2166,6 +2206,28 @@
         "title": "SetCategoryAppearanceRequest",
         "type": "object"
       },
+      "SetTrackingStartRequest": {
+        "description": "Body for ``POST /settings``.\n\n``tracking_start_date`` is **mandatory but nullable**: the key must be\npresent so \"clear it\" (``null``) is never ambiguous with \"leave it alone\"\n(key omitted). Same posture as ``POST /accounts/{id}/rename`` (ADR 0017).\n\nAttributes\n----------\ntracking_start_date : date or None\n    The new floor, or ``null`` to clear it.",
+        "properties": {
+          "tracking_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Start Date"
+          }
+        },
+        "required": [
+          "tracking_start_date"
+        ],
+        "title": "SetTrackingStartRequest",
+        "type": "object"
+      },
       "StartConnectionRequest": {
         "description": "Request to begin authorizing a bank connection.\n\nAttributes\n----------\ninstitution : str\n    The bank's provider-scoped identifier (Enable Banking ASPSP ``name``).\ncountry : str\n    ISO 3166-1 alpha-2 country of the bank.\nlogo : str or None\n    The bank's logo URL, taken from the same ``GET /connections/institutions``\n    entry the caller picked. Stored verbatim on the connection for the\n    Conti screen; ``None`` when the picker had none. Cosmetic \u2014 the client\n    already had it, so re-fetching it server-side would only add a\n    provider round-trip to the SCA-start path.",
         "properties": {
@@ -2233,6 +2295,71 @@
           "transactions_synced"
         ],
         "title": "SyncResponse",
+        "type": "object"
+      },
+      "TrackingStartResponse": {
+        "description": "The user's current tracking start date.\n\nAttributes\n----------\ntracking_start_date : date or None\n    The stored floor, or ``None`` for \"no floor \u2014 show everything\".",
+        "properties": {
+          "tracking_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Start Date"
+          }
+        },
+        "required": [
+          "tracking_start_date"
+        ],
+        "title": "TrackingStartResponse",
+        "type": "object"
+      },
+      "TrackingStartSuggestionResponse": {
+        "description": "A suggested tracking start plus the per-account dates it is derived from.\n\nAttributes\n----------\nsuggestion : date or None\n    The first day of the earliest month every account fully covers\n    (:func:`~traccio.domain.tracking.suggest_tracking_start`), or ``None``\n    when no account has a dated movement yet.\nconstraining_account_id : UUID or None\n    The account whose first movement is the latest \u2014 the one that pushes\n    the suggestion forward. ``None`` when there is nothing to suggest\n    from. The client highlights it so the choice is informed.\naccounts : list[AccountEarliestResponse]\n    Every account, earliest-movement first (accounts with none last),\n    then by display name.",
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountEarliestResponse"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
+          "constraining_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraining Account Id"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          }
+        },
+        "required": [
+          "suggestion",
+          "constraining_account_id",
+          "accounts"
+        ],
+        "title": "TrackingStartSuggestionResponse",
         "type": "object"
       },
       "TransactionResponse": {
@@ -4149,7 +4276,7 @@
     },
     "/dashboard/summary": {
       "get": {
-        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. A period spanning multiple currencies returns one entry per\ncurrency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,\n``converted`` additionally carries a single combined total in the base\ncurrency, each movement converted at the ECB rate for its own date\n(ADR 0021) \u2014 best-effort, ``null`` with a ``conversion_unavailable``\nreason if a rate is missing. Scoped to the current user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
+        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. A period spanning multiple currencies returns one entry per\ncurrency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,\n``converted`` additionally carries a single combined total in the base\ncurrency, each movement converted at the ECB rate for its own date\n(ADR 0021) \u2014 best-effort, ``null`` with a ``conversion_unavailable``\nreason if a rate is missing. Scoped to the current user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\ntracking_start : date or None\n    Not a query param \u2014 the user's stored ``tracking_start_date`` floor\n    (ADR 0024), injected via\n    :func:`~traccio.api.deps.current_tracking_start`. Raised into both the\n    main and the comparison period before anything is fetched or bucketed,\n    so no total, bucket, or average counts a day the user excluded.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
         "operationId": "dashboard_summary_dashboard_summary_get",
         "parameters": [
           {
@@ -5109,9 +5236,158 @@
         "summary": "Remove Rule"
       }
     },
+    "/settings": {
+      "get": {
+        "description": "Return the current user's settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to read.\n\nReturns\n-------\nTrackingStartResponse\n    The stored ``tracking_start_date``, or ``null``.",
+        "operationId": "get_settings_endpoint_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Settings Endpoint"
+      },
+      "post": {
+        "description": "Set or clear the current user's tracking start date.\n\nReversible: raising or clearing the date never deletes a movement, it only\nchanges which ones the dashboard and Movimenti show. Scoped to the current\nuser.\n\nParameters\n----------\nbody : SetTrackingStartRequest\n    The new ``tracking_start_date`` (``null`` to clear).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to write.\n\nReturns\n-------\nTrackingStartResponse\n    The value now stored.",
+        "operationId": "set_settings_endpoint_settings_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTrackingStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Settings Endpoint"
+      }
+    },
+    "/settings/tracking-start/suggestion": {
+      "get": {
+        "description": "Suggest a tracking start from each account's first movement.\n\nThe suggestion is the first day of the earliest month every account fully\ncovers; the constraining account is the one whose first movement is the\nlatest. Accounts with no dated movement are listed too (``earliest:\nnull``) \u2014 they place no constraint, but the user should see they exist.\nScoped to the current user.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose accounts to scan.\n\nReturns\n-------\nTrackingStartSuggestionResponse\n    The suggested date, the constraining account, and every account's\n    first-movement date.",
+        "operationId": "tracking_start_suggestion_endpoint_settings_tracking_start_suggestion_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingStartSuggestionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tracking Start Suggestion Endpoint"
+      }
+    },
     "/transactions": {
       "get": {
-        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one \u2014 or, if it names a root category, one of its children too (a\n    two-level rollup, so a Panoramica drill-down through a root shows\n    every transaction the chart above it counted). Mutually exclusive\n    with ``uncategorized`` \u2014 combining both is a ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nq : str or None, optional\n    Free-text search term, matched case-insensitively against\n    ``description`` or the cleaned-up ``display_description``. Blank or\n    whitespace-only is treated as absent. Longer than\n    :data:`~traccio.domain.search.MAX_SEARCH_TERM_LENGTH` is a ``422``.\n    Never logged \u2014 it is counterparty text\n    (``.claude/rules/data-safety.md``).\nstart : datetime or None, optional\n    Inclusive lower bound on ``coalesce(booked_at, value_date)``.\nend : datetime or None, optional\n    Exclusive upper bound on the same expression (half-open ``[start,\n    end)``), the same period semantics as ``GET /dashboard/summary``.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
+        "description": "List the current user's transactions, most recent first.\n\nScoped to the current user (see :func:`~traccio.api.deps.current_user_id`);\nthe underlying query is already ``scoped by user_id``. Every optional\nfilter is always combined with ``user_id``, so none can reach another\nuser's rows. ``limit``/``offset`` page the result.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to return.\naccount_id : UUID or None, optional\n    When given, restrict to this account.\nevent_id : UUID or None, optional\n    When given, restrict to transactions grouped under this event.\ncategory_id : UUID or None, optional\n    When given, restrict to transactions whose effective category is this\n    one \u2014 or, if it names a root category, one of its children too (a\n    two-level rollup, so a Panoramica drill-down through a root shows\n    every transaction the chart above it counted). Mutually exclusive\n    with ``uncategorized`` \u2014 combining both is a ``422``.\nuncategorized : bool, optional\n    When true, restrict to transactions with no effective category.\n    Mutually exclusive with ``category_id``.\nq : str or None, optional\n    Free-text search term, matched case-insensitively against\n    ``description`` or the cleaned-up ``display_description``. Blank or\n    whitespace-only is treated as absent. Longer than\n    :data:`~traccio.domain.search.MAX_SEARCH_TERM_LENGTH` is a ``422``.\n    Never logged \u2014 it is counterparty text\n    (``.claude/rules/data-safety.md``).\nstart : datetime or None, optional\n    Inclusive lower bound on ``coalesce(booked_at, value_date)``.\nend : datetime or None, optional\n    Exclusive upper bound on the same expression (half-open ``[start,\n    end)``), the same period semantics as ``GET /dashboard/summary``.\ntracking_start : date or None\n    Not a query param \u2014 the user's stored ``tracking_start_date`` floor\n    (ADR 0024), injected via :func:`~traccio.api.deps.current_tracking_start`.\n    Rows before it are hidden (a dateless row too, like any lower bound).\n    Reversible: it is changed through ``/settings``, never a delete.\nlimit : int, optional\n    Page size, between 1 and 200 (default 50).\noffset : int, optional\n    Number of rows to skip (default 0).\n\nReturns\n-------\nTransactionsResponse\n    The requested page of the user's transactions, most recent first.",
         "operationId": "transactions_transactions_get",
         "parameters": [
           {
