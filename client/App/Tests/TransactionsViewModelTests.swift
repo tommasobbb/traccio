@@ -80,13 +80,14 @@ struct TransactionsViewModelTests {
         let client = FakeAPIClient()
         await client.setTransferSuggestions([
             TransferSuggestionResponse(
+                kind: .twoSided,
                 outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
                 currency: "EUR", outgoingAmount: -1000, incomingAmount: 1000, amountDelta: 0, dayGap: 0
             )
         ])
         let transfer = TransferResponse(
-            id: UUID(), outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
-            createdAt: Date()
+            id: UUID(), kind: .twoSided, outgoingTransactionID: outgoingID,
+            incomingTransactionID: incomingID, createdAt: Date()
         )
         await client.setTransfers([transfer])
 
@@ -327,7 +328,8 @@ struct TransactionsViewModelTests {
         outgoingID: UUID, incomingID: UUID
     ) -> TransferResponse {
         TransferResponse(
-            id: UUID(), outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
+            id: UUID(), kind: .twoSided, outgoingTransactionID: outgoingID,
+            incomingTransactionID: incomingID,
             createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
     }

@@ -344,6 +344,49 @@ public struct APIClient: Sendable {
         try await delete("transactions/\(id.uuidString)")
     }
 
+    /// Preview a file import without writing anything (ADR 0023).
+    ///
+    /// Mirrors `POST /imports/preview`. Every movement the file would create is
+    /// classified `new` / `alreadyImported` / `invalid`; nothing is inserted.
+    /// A `413` if the file is over the size limit; a `422` for a bad profile,
+    /// missing columns, an undecodable file, or a needed-but-absent voucher
+    /// account; a `409 account_not_manual` for a synced target account.
+    ///
+    /// Parameters
+    /// ----------
+    /// request:
+    ///     The target account(s), profile, filename, and base64 file content.
+    ///
+    /// Returns
+    /// -------
+    /// The per-movement classification and the counts.
+    public func importPreview(
+        _ request: ImportPreviewRequest
+    ) async throws -> ImportPreviewResponse {
+        try await post("imports/preview", body: request)
+    }
+
+    /// Commit a file import, inserting only the `new` movements (ADR 0023).
+    ///
+    /// Mirrors `POST /imports/commit` — same body and validation as
+    /// `importPreview(_:)`. Running it twice on the same file adds nothing the
+    /// second time (each movement's key is `"{profile}:{external_id}"`).
+    ///
+    /// Parameters
+    /// ----------
+    /// request:
+    ///     The same body a preview takes.
+    ///
+    /// Returns
+    /// -------
+    /// How many movements were inserted, skipped as already present, and how
+    /// many source rows were invalid.
+    public func importCommit(
+        _ request: ImportPreviewRequest
+    ) async throws -> ImportCommitResponse {
+        try await post("imports/commit", body: request)
+    }
+
     /// Fetch a page of the caller's transactions, most recent first.
     ///
     /// Mirrors `GET /transactions` (`docs/api/openapi.json`). Ordering,
@@ -888,18 +931,25 @@ public struct APIClient: Sendable {
     /// Parameters
     /// ----------
     /// outgoingID:
-    ///     The negative leg (money left an account).
+    ///     Two-sided: the negative leg. Funded payment: the funding leg (set to
+    ///     `role == .funding`).
     /// incomingID:
-    ///     The positive leg (money arrived in another account).
+    ///     Two-sided: the positive leg. Funded payment: the funded leg — the
+    ///     real expense, left `.personal`.
+    /// kind:
+    ///     `.twoSided` zeroes both legs; `.fundedPayment` zeroes only
+    ///     `outgoingID`.
     ///
     /// Returns
     /// -------
     /// The created transfer.
-    public func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse {
+    public func confirmTransfer(
+        outgoingID: UUID, incomingID: UUID, kind: TransferKind
+    ) async throws -> TransferResponse {
         try await post(
             "transfers/confirm",
             body: ConfirmTransferRequest(
-                outgoingTransactionID: outgoingID, incomingTransactionID: incomingID
+                kind: kind, outgoingTransactionID: outgoingID, incomingTransactionID: incomingID
             )
         )
     }

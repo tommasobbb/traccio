@@ -37,6 +37,8 @@ public protocol APIClientProtocol: Sendable {
         id: UUID, _ request: EditManualTransactionRequest
     ) async throws -> TransactionResponse
     func deleteManualTransaction(id: UUID) async throws
+    func importPreview(_ request: ImportPreviewRequest) async throws -> ImportPreviewResponse
+    func importCommit(_ request: ImportPreviewRequest) async throws -> ImportCommitResponse
     func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
         -> [TransactionResponse]
     func categories() async throws -> [CategoryResponse]
@@ -74,7 +76,9 @@ public protocol APIClientProtocol: Sendable {
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
     func transferSuggestions() async throws -> [TransferSuggestionResponse]
     func transfers() async throws -> [TransferResponse]
-    func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse
+    func confirmTransfer(
+        outgoingID: UUID, incomingID: UUID, kind: TransferKind
+    ) async throws -> TransferResponse
     func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws
     func deleteTransfer(id: UUID) async throws
     func events() async throws -> [EventResponse]

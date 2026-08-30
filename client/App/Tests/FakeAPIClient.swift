@@ -34,6 +34,10 @@ actor FakeAPIClient: APIClientProtocol {
     var editManualTransactionToReturn: TransactionResponse?
     var editManualTransactionError: Error?
     var deleteManualTransactionError: Error?
+    var importPreviewToReturn: ImportPreviewResponse?
+    var importPreviewError: Error?
+    var importCommitToReturn: ImportCommitResponse?
+    var importCommitError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
     var healthError: Error?
     var dashboardSummaryToReturn = DashboardSummaryResponse(currencies: [])
@@ -172,6 +176,8 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var createdManualTransactions: [RecordedManualTransactionCreate] = []
     private(set) var editedManualTransactions: [RecordedManualTransactionEdit] = []
     private(set) var deletedManualTransactionIDs: [UUID] = []
+    private(set) var importPreviewRequests: [ImportPreviewRequest] = []
+    private(set) var importCommitRequests: [ImportPreviewRequest] = []
     /// Every `country` passed to `institutions(country:)`, in call order.
     private(set) var receivedInstitutionsCountries: [String] = []
     /// Every `startConnection(institution:country:)` call, for asserting
@@ -259,6 +265,7 @@ actor FakeAPIClient: APIClientProtocol {
     struct RecordedTransferPair: Equatable {
         let outgoingID: UUID
         let incomingID: UUID
+        var kind: TransferKind = .twoSided
     }
 
     /// A recorded `eventID`/`transactionID` pair, for asserting exactly which
@@ -463,6 +470,22 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setConfirmTransferError(_ error: Error) {
         confirmTransferError = error
+    }
+
+    func setImportPreviewResult(_ response: ImportPreviewResponse) {
+        importPreviewToReturn = response
+    }
+
+    func setImportPreviewError(_ error: Error) {
+        importPreviewError = error
+    }
+
+    func setImportCommitResult(_ response: ImportCommitResponse) {
+        importCommitToReturn = response
+    }
+
+    func setImportCommitError(_ error: Error) {
+        importCommitError = error
     }
 
     func setRejectTransferError(_ error: Error) {
@@ -687,6 +710,20 @@ actor FakeAPIClient: APIClientProtocol {
         deletedManualTransactionIDs.append(id)
     }
 
+    func importPreview(_ request: ImportPreviewRequest) async throws -> ImportPreviewResponse {
+        if let importPreviewError { throw importPreviewError }
+        importPreviewRequests.append(request)
+        guard let importPreviewToReturn else { throw NotConfigured() }
+        return importPreviewToReturn
+    }
+
+    func importCommit(_ request: ImportPreviewRequest) async throws -> ImportCommitResponse {
+        if let importCommitError { throw importCommitError }
+        importCommitRequests.append(request)
+        guard let importCommitToReturn else { throw NotConfigured() }
+        return importCommitToReturn
+    }
+
     func health() async throws -> HealthResponse {
         if let healthError { throw healthError }
         return healthToReturn
@@ -893,9 +930,13 @@ actor FakeAPIClient: APIClientProtocol {
         transfersToReturn
     }
 
-    func confirmTransfer(outgoingID: UUID, incomingID: UUID) async throws -> TransferResponse {
+    func confirmTransfer(
+        outgoingID: UUID, incomingID: UUID, kind: TransferKind
+    ) async throws -> TransferResponse {
         if let confirmTransferError { throw confirmTransferError }
-        confirmedTransferPairs.append(RecordedTransferPair(outgoingID: outgoingID, incomingID: incomingID))
+        confirmedTransferPairs.append(
+            RecordedTransferPair(outgoingID: outgoingID, incomingID: incomingID, kind: kind)
+        )
         guard let confirmTransferToReturn else { throw NotConfigured() }
         return confirmTransferToReturn
     }

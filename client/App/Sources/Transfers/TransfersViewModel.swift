@@ -134,7 +134,8 @@ final class TransfersViewModel {
         await performUpdate(on: pair) { client in
             _ = try await client.confirmTransfer(
                 outgoingID: pair.suggestion.outgoingTransactionID,
-                incomingID: pair.suggestion.incomingTransactionID
+                incomingID: pair.suggestion.incomingTransactionID,
+                kind: pair.suggestion.kind
             )
             async let outgoing = client.transaction(id: pair.suggestion.outgoingTransactionID)
             async let incoming = client.transaction(id: pair.suggestion.incomingTransactionID)

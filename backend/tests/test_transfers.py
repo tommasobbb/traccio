@@ -9,11 +9,20 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from traccio.domain import KeyStrategy, Money, Transaction, TransactionRole, TransactionStatus
+from traccio.domain import (
+    AccountKind,
+    KeyStrategy,
+    Money,
+    Transaction,
+    TransactionRole,
+    TransactionStatus,
+    TransferKind,
+)
 from traccio.services.transfers import (
     REASON_CURRENCY_MISMATCH,
     REASON_NOT_OPPOSITE_SIGNS,
     REASON_NOT_PERSONAL,
+    REASON_NOT_TWO_OUTFLOWS,
     REASON_REJECTED,
     REASON_SAME_ACCOUNT,
     REASON_ZERO_AMOUNT,
@@ -103,12 +112,127 @@ def test_different_currency_does_not_match() -> None:
     assert detect_transfers([out, inc]) == []
 
 
-def test_same_sign_does_not_match() -> None:
-    """Two outgoing legs are not a transfer."""
+def test_same_sign_does_not_match_without_account_kinds() -> None:
+    """Two outflows are not a two-sided transfer, and without ``account_kinds``
+    they are not a funded payment either."""
     a, b = uuid4(), uuid4()
     assert (
         detect_transfers([_tx(account_id=a, amount=-50000), _tx(account_id=b, amount=-50000)]) == []
     )
+
+
+def test_detects_a_funded_payment_when_one_leg_is_a_wallet() -> None:
+    """Two outflows, one on a wallet, same amount -> a funded-payment suggestion.
+
+    The wallet leg is the real purchase (``incoming``); the bank leg funds it
+    (``outgoing``, the leg that will be zeroed on confirm).
+    """
+    bank, wallet = uuid4(), uuid4()
+    card_charge = _tx(account_id=bank, amount=-1290)
+    wallet_payment = _tx(account_id=wallet, amount=-1290)
+
+    [suggestion] = detect_transfers(
+        [card_charge, wallet_payment],
+        account_kinds={bank: AccountKind.CURRENT, wallet: AccountKind.WALLET},
+    )
+
+    assert suggestion.kind is TransferKind.FUNDED_PAYMENT
+    assert suggestion.outgoing_transaction_id == card_charge.id
+    assert suggestion.incoming_transaction_id == wallet_payment.id
+    assert suggestion.outgoing_amount == -1290
+    assert suggestion.incoming_amount == -1290
+
+
+def test_no_funded_payment_when_neither_leg_is_a_wallet() -> None:
+    """Two bank outflows: nothing tells detection which one funds the other."""
+    a, b = uuid4(), uuid4()
+    assert (
+        detect_transfers(
+            [_tx(account_id=a, amount=-1290), _tx(account_id=b, amount=-1290)],
+            account_kinds={a: AccountKind.CURRENT, b: AccountKind.SAVINGS},
+        )
+        == []
+    )
+
+
+def test_no_funded_payment_when_both_legs_are_wallets() -> None:
+    """Two wallet outflows are just as ambiguous — not suggested."""
+    a, b = uuid4(), uuid4()
+    assert (
+        detect_transfers(
+            [_tx(account_id=a, amount=-1290), _tx(account_id=b, amount=-1290)],
+            account_kinds={a: AccountKind.WALLET, b: AccountKind.WALLET},
+        )
+        == []
+    )
+
+
+def test_funded_payment_uses_its_own_amount_tolerance() -> None:
+    """The funding tolerance is separate from the two-sided one and 0 by default."""
+    bank, wallet = uuid4(), uuid4()
+    charge = _tx(account_id=bank, amount=-1290)
+    payment = _tx(account_id=wallet, amount=-1250)  # 40 cents off
+    kinds = {bank: AccountKind.CARD, wallet: AccountKind.WALLET}
+
+    assert detect_transfers([charge, payment], account_kinds=kinds) == []
+    assert (
+        len(
+            detect_transfers(
+                [charge, payment],
+                account_kinds=kinds,
+                funding_amount_tolerance_cents=100,
+            )
+        )
+        == 1
+    )
+
+
+def test_funded_payment_respects_the_day_window() -> None:
+    """The shared ``window_days`` bounds funded-payment suggestions too."""
+    bank, wallet = uuid4(), uuid4()
+    charge = _tx(account_id=bank, amount=-1290, booked_at=_BASE)
+    payment = _tx(account_id=wallet, amount=-1290, booked_at=_BASE + timedelta(days=6))
+    kinds = {bank: AccountKind.CURRENT, wallet: AccountKind.WALLET}
+
+    assert detect_transfers([charge, payment], account_kinds=kinds, window_days=4) == []
+    assert len(detect_transfers([charge, payment], account_kinds=kinds, window_days=7)) == 1
+
+
+def test_funded_payment_respects_dismissals() -> None:
+    """A rejected funded-payment pair is not proposed again."""
+    bank, wallet = uuid4(), uuid4()
+    charge = _tx(account_id=bank, amount=-1290)
+    payment = _tx(account_id=wallet, amount=-1290)
+
+    assert (
+        detect_transfers(
+            [charge, payment],
+            account_kinds={bank: AccountKind.CURRENT, wallet: AccountKind.WALLET},
+            dismissed_pairs={frozenset({charge.id, payment.id})},
+        )
+        == []
+    )
+
+
+def test_two_sided_pair_is_ranked_ahead_of_a_funded_payment_on_a_tie() -> None:
+    """When a wallet leg could pair either way, the opposite-sign match wins."""
+    bank, wallet, other_bank = uuid4(), uuid4(), uuid4()
+    wallet_payment = _tx(account_id=wallet, amount=-1290)
+    card_charge = _tx(account_id=bank, amount=-1290)  # would be a funded payment
+    real_credit = _tx(account_id=other_bank, amount=1290)  # a clean opposite leg
+    kinds = {
+        bank: AccountKind.CURRENT,
+        wallet: AccountKind.WALLET,
+        other_bank: AccountKind.CURRENT,
+    }
+
+    suggestions = detect_transfers([wallet_payment, card_charge, real_credit], account_kinds=kinds)
+
+    # The wallet payment is consumed by the two-sided match; the card charge is
+    # left with no partner.
+    assert len(suggestions) == 1
+    assert suggestions[0].kind is TransferKind.TWO_SIDED
+    assert suggestions[0].incoming_transaction_id == real_credit.id
 
 
 def test_non_personal_and_rejected_are_excluded() -> None:
@@ -259,3 +383,44 @@ def test_validate_transfer_pair_rejects_zero_amount() -> None:
             _tx(account_id=uuid4(), amount=0), _tx(account_id=uuid4(), amount=50000)
         )
     assert exc.value.reason == REASON_ZERO_AMOUNT
+
+
+def test_validate_funded_payment_accepts_two_outflows() -> None:
+    """For a funded payment both legs must be outflows; ``outgoing`` funds
+    ``incoming``."""
+    funding = _tx(account_id=uuid4(), amount=-1290)
+    funded = _tx(account_id=uuid4(), amount=-1290)
+
+    validate_transfer_pair(funding, funded, kind=TransferKind.FUNDED_PAYMENT)  # does not raise
+
+
+def test_validate_funded_payment_rejects_an_opposite_sign_pair() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=-1290),
+            _tx(account_id=uuid4(), amount=1290),
+            kind=TransferKind.FUNDED_PAYMENT,
+        )
+    assert exc.value.reason == REASON_NOT_TWO_OUTFLOWS
+
+
+def test_validate_funded_payment_rejects_two_inflows() -> None:
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=uuid4(), amount=1290),
+            _tx(account_id=uuid4(), amount=1290),
+            kind=TransferKind.FUNDED_PAYMENT,
+        )
+    assert exc.value.reason == REASON_NOT_TWO_OUTFLOWS
+
+
+def test_validate_funded_payment_still_rejects_a_shared_account() -> None:
+    """The structural checks are shared across kinds."""
+    a = uuid4()
+    with pytest.raises(TransferPairError) as exc:
+        validate_transfer_pair(
+            _tx(account_id=a, amount=-1290),
+            _tx(account_id=a, amount=-1290),
+            kind=TransferKind.FUNDED_PAYMENT,
+        )
+    assert exc.value.reason == REASON_SAME_ACCOUNT

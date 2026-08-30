@@ -33,6 +33,7 @@ struct TransferSuggestionPairTests {
 
     private static func suggestion() -> TransferSuggestionResponse {
         TransferSuggestionResponse(
+            kind: .twoSided,
             outgoingTransactionID: outgoingID,
             incomingTransactionID: incomingID,
             currency: "EUR",
@@ -74,10 +75,12 @@ struct TransferSuggestionPairTests {
         let secondOutgoingID = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
         let secondIncomingID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
         let unresolvable = TransferSuggestionResponse(
+            kind: .twoSided,
             outgoingTransactionID: UUID(), incomingTransactionID: UUID(),
             currency: "EUR", outgoingAmount: -100, incomingAmount: 100, amountDelta: 0, dayGap: 0
         )
         let second = TransferSuggestionResponse(
+            kind: .twoSided,
             outgoingTransactionID: secondOutgoingID, incomingTransactionID: secondIncomingID,
             currency: "EUR", outgoingAmount: -500, incomingAmount: 500, amountDelta: 0, dayGap: 0
         )

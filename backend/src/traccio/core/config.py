@@ -83,7 +83,14 @@ class Settings(BaseSettings):
         automatically.
     transfer_window_days : int
         Maximum whole-day gap between the two legs of a suggested transfer;
-        settlement is not simultaneous.
+        settlement is not simultaneous. Reused for funded-payment suggestions.
+    funding_amount_tolerance_cents : int
+        Maximum absolute difference, in minor units, between the two legs of a
+        suggested *funded payment* (``TransferKind.FUNDED_PAYMENT``). A
+        card-funded wallet payment is charged at exactly the payment amount —
+        there is no fee or FX drift between the legs — so this defaults to
+        ``0`` (exact match). A user may still confirm a looser pair explicitly;
+        this only bounds automatic suggestions.
     consent_warning_window_days : int
         How many whole days before a consent's ``expires_at`` it is surfaced as
         ``expiring_soon`` (see ``domain/consent.py::consent_state``) rather than
@@ -98,6 +105,11 @@ class Settings(BaseSettings):
         reappear within a defined window are dropped"). Chosen conservatively:
         card authorization holds can legitimately sit for weeks depending on
         merchant category.
+    import_max_bytes : int
+        Largest file ``POST /imports/preview`` and ``/imports/commit`` (ADR
+        0023) will decode, in bytes; a larger upload is a ``413``. A monthly
+        personal export is a few KB — the default (2 MiB) is headroom that
+        still bounds the base64 request body.
     background_sync_enabled : bool
         Whether ``api/main.py``'s lifespan starts the background scheduler
         (``services/scheduler.py``, ADR 0010). ``False`` by default: the app
@@ -197,9 +209,17 @@ class Settings(BaseSettings):
     # settlement. See docs/domain.md and services/transfers.py.
     transfer_amount_tolerance_cents: int = 100
     transfer_window_days: int = 4
+    # Funded-payment suggestions (a card charge funding a wallet payment) match
+    # on an exact amount — no fee or FX drift between the legs — so this is 0 by
+    # default. The day window above is reused. See services/transfers.py.
+    funding_amount_tolerance_cents: int = 0
     # How many days before expiry a consent is surfaced as "expiring soon".
     # See domain/consent.py and docs/openbanking.md's expiry-warning constraint.
     consent_warning_window_days: int = 14
+    # Largest import file accepted by POST /imports/* (ADR 0023), in bytes. A
+    # personal monthly export is a few KB; 2 MiB is comfortable headroom and
+    # still bounds the base64 body. Over this is a 413.
+    import_max_bytes: int = 2 * 1024 * 1024
     # How many days a pending transaction may go unseen by a sync before it is
     # considered abandoned. See db/repositories.py::prune_stale_pending_transactions.
     pending_transaction_ttl_days: int = 30

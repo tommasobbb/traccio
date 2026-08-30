@@ -57,9 +57,20 @@ def test_reimbursement_counts_zero() -> None:
     )
 
 
+def test_funding_counts_zero() -> None:
+    """A funding leg is only plumbing for a payment made elsewhere: zero.
+
+    The real spending is the funded leg, which stays ``personal`` and keeps its
+    full amount — see ``TransferKind.FUNDED_PAYMENT``.
+    """
+    assert effective_amount(_tx(role=TransactionRole.FUNDING, amount=-1290)) == Money(
+        amount=0, currency="EUR"
+    )
+
+
 @pytest.mark.parametrize(
     "role",
-    [TransactionRole.PERSONAL, TransactionRole.TRANSFER],
+    [TransactionRole.PERSONAL, TransactionRole.TRANSFER, TransactionRole.FUNDING],
 )
 def test_rejected_counts_zero_regardless_of_role(role: TransactionRole) -> None:
     """A rejected movement never settled, so it contributes zero for any role."""

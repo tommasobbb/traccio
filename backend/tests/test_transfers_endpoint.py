@@ -365,3 +365,147 @@ def test_confirm_links_a_free_form_pair_far_apart_across_manual_and_synced() -> 
     assert by_id[in_id]["role"] == "transfer"
     assert by_id[out_id]["effective_amount"] == 0
     assert by_id[in_id]["effective_amount"] == 0
+
+
+def _seed_funded_payment(engine: Engine, *, user_id: UUID) -> tuple[str, str]:
+    """Seed a card charge and an equal wallet payment; return (funding_id, funded_id).
+
+    The canonical funded-payment shape: a Revolut-style card charge on a bank
+    account that funds a PayPal-style wallet payment for the same amount, same
+    day.
+    """
+    bank_account_id = uuid4()
+    wallet_account_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            AccountRow(
+                id=bank_account_id,
+                user_id=user_id,
+                connection_id=uuid4(),
+                kind=AccountKind.CURRENT,
+                currency="EUR",
+                identification_hash="h-bank-1",
+                name="TEST CURRENT 01",
+                created_at=_DAY,
+            )
+        )
+        session.add(
+            AccountRow(
+                id=wallet_account_id,
+                user_id=user_id,
+                connection_id=uuid4(),
+                kind=AccountKind.WALLET,
+                currency="EUR",
+                identification_hash="h-wallet-1",
+                name="TEST WALLET 01",
+                created_at=_DAY,
+            )
+        )
+        funding = _tx(
+            user_id=user_id, account_id=bank_account_id, amount=-1290, stable_key="TX-CARD"
+        )
+        funded = _tx(
+            user_id=user_id, account_id=wallet_account_id, amount=-1290, stable_key="TX-WALLET"
+        )
+        session.add_all([funding, funded])
+        session.commit()
+        return str(funding.id), str(funded.id)
+
+
+def test_suggests_a_funded_payment_when_a_wallet_leg_is_present() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    funding_id, funded_id = _seed_funded_payment(engine, user_id=dev_user_id)
+
+    response = _client(engine).get("/transfers/suggestions")
+
+    assert response.status_code == 200
+    [suggestion] = response.json()["suggestions"]
+    assert suggestion["kind"] == "funded_payment"
+    assert suggestion["outgoing_transaction_id"] == funding_id
+    assert suggestion["incoming_transaction_id"] == funded_id
+
+
+def test_confirm_funded_payment_zeroes_only_the_funding_leg() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    funding_id, funded_id = _seed_funded_payment(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    response = client.post(
+        "/transfers/confirm",
+        json={
+            "kind": "funded_payment",
+            "outgoing_transaction_id": funding_id,
+            "incoming_transaction_id": funded_id,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["kind"] == "funded_payment"
+    by_id = {t["id"]: t for t in client.get("/transactions").json()["transactions"]}
+    # The funding leg is zeroed; the funded leg keeps its real amount and role,
+    # so the payment counts exactly once.
+    assert by_id[funding_id]["role"] == "funding"
+    assert by_id[funding_id]["effective_amount"] == 0
+    assert by_id[funded_id]["role"] == "personal"
+    assert by_id[funded_id]["effective_amount"] == -1290
+    # The pair is no longer suggested, and it is listed.
+    assert client.get("/transfers/suggestions").json() == {"suggestions": []}
+    assert len(client.get("/transfers").json()["transfers"]) == 1
+
+
+def test_delete_funded_payment_reverts_the_funding_leg() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    funding_id, funded_id = _seed_funded_payment(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    transfer_id = client.post(
+        "/transfers/confirm",
+        json={
+            "kind": "funded_payment",
+            "outgoing_transaction_id": funding_id,
+            "incoming_transaction_id": funded_id,
+        },
+    ).json()["id"]
+
+    assert client.delete(f"/transfers/{transfer_id}").status_code == 204
+
+    by_id = {t["id"]: t for t in client.get("/transactions").json()["transactions"]}
+    assert by_id[funding_id]["role"] == "personal"
+    assert by_id[funding_id]["effective_amount"] == -1290
+    assert by_id[funded_id]["role"] == "personal"
+
+
+def test_confirm_rejects_two_outflows_when_kind_is_two_sided() -> None:
+    """The historical opposite-sign guard still stands for a two-sided confirm."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    funding_id, funded_id = _seed_funded_payment(engine, user_id=dev_user_id)
+
+    response = _client(engine).post(
+        "/transfers/confirm",
+        json={"outgoing_transaction_id": funding_id, "incoming_transaction_id": funded_id},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "not_opposite_signs"
+
+
+def test_confirm_funded_payment_rejects_an_opposite_sign_pair() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, in_id = _seed_pair(engine, user_id=dev_user_id)
+
+    response = _client(engine).post(
+        "/transfers/confirm",
+        json={
+            "kind": "funded_payment",
+            "outgoing_transaction_id": out_id,
+            "incoming_transaction_id": in_id,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "not_two_outflows"

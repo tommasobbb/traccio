@@ -18,12 +18,19 @@ struct TransferSuggestionCard: View {
     let onConfirm: () -> Void
     let onReject: () -> Void
 
+    private var isFundedPayment: Bool { pair.suggestion.kind == .fundedPayment }
+
     var body: some View {
         Card {
-            EyebrowLabel(text: "Possibile trasferimento")
+            EyebrowLabel(text: isFundedPayment ? "Doppia uscita" : "Possibile trasferimento")
             Text(accountsLine)
                 .font(Typography.body.weight(.semibold))
                 .foregroundStyle(Palette.ink)
+            if isFundedPayment {
+                Text("Questa uscita ne finanzia un'altra: verrà contata una volta sola.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkSecondary)
+            }
             legRow(pair.outgoing)
             legRow(pair.incoming)
             if pair.suggestion.amountDelta != 0 {
@@ -40,6 +47,8 @@ struct TransferSuggestionCard: View {
     private var accountsLine: String {
         let outgoingName = accountsByID[pair.outgoing.accountID]?.name ?? "Conto"
         let incomingName = accountsByID[pair.incoming.accountID]?.name ?? "Conto"
+        // Funded payment: the funding account pays for the purchase on the
+        // other. Two-sided: money moves from one to the other.
         return "\(outgoingName) → \(incomingName)"
     }
 

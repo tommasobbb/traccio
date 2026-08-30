@@ -32,6 +32,7 @@ from traccio.domain.enums import (
     SyncTrigger,
     TransactionRole,
     TransactionStatus,
+    TransferKind,
 )
 from traccio.domain.events import event_total
 from traccio.domain.models import (
@@ -89,6 +90,7 @@ __all__ = [
     "TransactionRole",
     "TransactionStatus",
     "Transfer",
+    "TransferKind",
     "User",
     "compare",
     "consent_state",

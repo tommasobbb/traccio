@@ -244,6 +244,7 @@ struct TransactionRow: View {
         switch transaction.role {
         case .personal: ""  // unreachable — guarded by `subtitle`'s condition
         case .transfer: "Trasferimento"
+        case .funding: "Ricarica"
         case .advance: "Anticipo"
         case .reimbursement: "Rimborso"
         }
@@ -252,7 +253,7 @@ struct TransactionRow: View {
     private var roleBadgeStyle: Badge.Style {
         switch transaction.role {
         case .personal: .neutral  // unreachable — guarded by `subtitle`'s condition
-        case .transfer, .reimbursement: .neutral
+        case .transfer, .funding, .reimbursement: .neutral
         case .advance: .accent
         }
     }

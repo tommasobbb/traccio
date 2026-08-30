@@ -359,8 +359,13 @@ final class TransactionsViewModel {
         linkFailure = nil
 
         do {
+            // The pick-two selection mode only makes an opposite-sign pair
+            // selectable (`canLinkAsTransfer`), so this path is always a
+            // two-sided transfer. A funded payment is confirmed from its
+            // suggestion in Trasferimenti, where the backend has already
+            // oriented the legs.
             let created = try await client.confirmTransfer(
-                outgoingID: outgoing.id, incomingID: incoming.id
+                outgoingID: outgoing.id, incomingID: incoming.id, kind: .twoSided
             )
             async let refreshedOutgoing = client.transaction(id: outgoing.id)
             async let refreshedIncoming = client.transaction(id: incoming.id)

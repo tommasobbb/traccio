@@ -33,13 +33,16 @@ struct TransfersViewModelTests {
         )
     }
 
-    private static func makeSuggestion() -> TransferSuggestionResponse {
+    private static func makeSuggestion(
+        kind: TransferKind = .twoSided
+    ) -> TransferSuggestionResponse {
         TransferSuggestionResponse(
+            kind: kind,
             outgoingTransactionID: outgoingID,
             incomingTransactionID: incomingID,
             currency: "EUR",
             outgoingAmount: -25000,
-            incomingAmount: 25000,
+            incomingAmount: kind == .fundedPayment ? -25000 : 25000,
             amountDelta: 0,
             dayGap: 0
         )
@@ -91,8 +94,8 @@ struct TransfersViewModelTests {
         await client.setTransaction(confirmedIncoming, forID: Self.incomingID)
         await client.setConfirmTransferResult(
             TransferResponse(
-                id: UUID(), outgoingTransactionID: Self.outgoingID, incomingTransactionID: Self.incomingID,
-                createdAt: Date()
+                id: UUID(), kind: .twoSided, outgoingTransactionID: Self.outgoingID,
+                incomingTransactionID: Self.incomingID, createdAt: Date()
             )
         )
 
@@ -120,6 +123,40 @@ struct TransfersViewModelTests {
         )
     }
 
+    @Test func confirmForwardsAFundedPaymentKindToTheClient() async throws {
+        let client = FakeAPIClient()
+        await client.setTransferSuggestions([Self.makeSuggestion(kind: .fundedPayment)])
+        await client.setTransaction(
+            Self.makeTransaction(id: Self.outgoingID, amount: -25000), forID: Self.outgoingID
+        )
+        await client.setTransaction(
+            Self.makeTransaction(id: Self.incomingID, amount: -25000), forID: Self.incomingID
+        )
+        await client.setConfirmTransferResult(
+            TransferResponse(
+                id: UUID(), kind: .fundedPayment, outgoingTransactionID: Self.outgoingID,
+                incomingTransactionID: Self.incomingID, createdAt: Date()
+            )
+        )
+        let model = TransfersViewModel(client: client)
+        await model.load()
+        guard case .loaded(let pairs) = model.state, let pair = pairs.first else {
+            Issue.record("expected one loaded funded-payment pair")
+            return
+        }
+
+        await model.confirm(pair)
+
+        #expect(model.actionFailure == nil)
+        #expect(
+            await client.confirmedTransferPairs == [
+                FakeAPIClient.RecordedTransferPair(
+                    outgoingID: Self.outgoingID, incomingID: Self.incomingID, kind: .fundedPayment
+                )
+            ]
+        )
+    }
+
     @Test func confirmSuccessInvalidatesTheDashboardFreshnessScope() async throws {
         // Confirming zeroes both legs' effectiveAmount — a change GET
         // /dashboard/summary's totals must reflect (`DataFreshness`'s doc
@@ -133,8 +170,8 @@ struct TransfersViewModelTests {
         )
         await client.setConfirmTransferResult(
             TransferResponse(
-                id: UUID(), outgoingTransactionID: Self.outgoingID, incomingTransactionID: Self.incomingID,
-                createdAt: Date()
+                id: UUID(), kind: .twoSided, outgoingTransactionID: Self.outgoingID,
+                incomingTransactionID: Self.incomingID, createdAt: Date()
             )
         )
         let freshness = DataFreshness()
@@ -157,8 +194,8 @@ struct TransfersViewModelTests {
         let client = await Self.makeClientWithOneSuggestion()
         await client.setConfirmTransferResult(
             TransferResponse(
-                id: UUID(), outgoingTransactionID: Self.outgoingID, incomingTransactionID: Self.incomingID,
-                createdAt: Date()
+                id: UUID(), kind: .twoSided, outgoingTransactionID: Self.outgoingID,
+                incomingTransactionID: Self.incomingID, createdAt: Date()
             )
         )
         let model = TransfersViewModel(client: client)

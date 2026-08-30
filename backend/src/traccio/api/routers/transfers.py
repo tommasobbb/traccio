@@ -37,6 +37,7 @@ from traccio.db.repositories import (
     create_transfer_dismissal,
     delete_transfer,
     get_transaction,
+    list_accounts,
     list_all_transactions,
     list_transfer_dismissals,
     list_transfers,
@@ -44,7 +45,7 @@ from traccio.db.repositories import (
     transfer_exists_for_transaction,
 )
 from traccio.db.session import get_session
-from traccio.domain.enums import TransactionRole
+from traccio.domain.enums import TransactionRole, TransferKind
 from traccio.domain.models import Transaction, Transfer
 from traccio.services.transfers import (
     TransferPairError,
@@ -96,10 +97,14 @@ def transfer_suggestions(
     settings = get_settings()
     transactions = list_all_transactions(session, user_id)
     dismissed = list_transfer_dismissals(session, user_id)
+    # Account kinds let detection spot the wallet leg of a funded payment.
+    account_kinds = {account.id: account.kind for account in list_accounts(session, user_id)}
     suggestions = detect_transfers(
         transactions,
         amount_tolerance_cents=settings.transfer_amount_tolerance_cents,
         window_days=settings.transfer_window_days,
+        funding_amount_tolerance_cents=settings.funding_amount_tolerance_cents,
+        account_kinds=account_kinds,
         dismissed_pairs=dismissed,
     )
     # Log a count, never transaction contents (see data-safety rules).
@@ -123,15 +128,21 @@ def confirm_transfer(
 
     The explicit user action that turns a suggestion into a persisted link: it
     validates the pair (same invariants detection uses, minus the tolerance and
-    window — a user may link any structurally valid pair), records the
-    :class:`~traccio.domain.models.Transfer`, and sets both legs' ``role`` to
-    ``transfer`` so their ``effective_amount`` becomes zero. Scoped to the
-    current user.
+    window — a user may link any structurally valid pair) and records the
+    :class:`~traccio.domain.models.Transfer`. The roles it then writes depend on
+    ``body.kind``:
+
+    - ``two_sided`` — both legs become ``role=transfer`` (both
+      ``effective_amount`` become zero).
+    - ``funded_payment`` — only ``outgoing`` (the funding leg) becomes
+      ``role=funding``; ``incoming`` (the real expense) is left ``personal``.
+
+    Scoped to the current user.
 
     Parameters
     ----------
     body : ConfirmTransferRequest
-        The outgoing (negative) and incoming (positive) legs to link.
+        The two legs to link and the ``kind`` of pairing.
     session : Session
         Request-scoped database session.
     user_id : UUID
@@ -151,21 +162,28 @@ def confirm_transfer(
             raise HTTPException(status_code=409, detail="transaction already in a transfer")
 
     try:
-        validate_transfer_pair(outgoing, incoming)
+        validate_transfer_pair(outgoing, incoming, kind=body.kind)
     except TransferPairError as exc:
         # ``exc.reason`` is a stable, value-free code (no financial data).
         raise HTTPException(status_code=422, detail=exc.reason) from exc
 
     transfer = Transfer(
         user_id=user_id,
+        kind=body.kind,
         outgoing_transaction_id=outgoing.id,
         incoming_transaction_id=incoming.id,
     )
     created = create_transfer(session, transfer=transfer)
-    for leg in (outgoing, incoming):
+    if body.kind is TransferKind.FUNDED_PAYMENT:
+        # Only the funding leg is zeroed; the funded leg keeps its real amount.
         set_transaction_role(
-            session, user_id=user_id, transaction_id=leg.id, role=TransactionRole.TRANSFER
+            session, user_id=user_id, transaction_id=outgoing.id, role=TransactionRole.FUNDING
         )
+    else:
+        for leg in (outgoing, incoming):
+            set_transaction_role(
+                session, user_id=user_id, transaction_id=leg.id, role=TransactionRole.TRANSFER
+            )
     session.commit()
 
     logger.info("transfers.confirm", transfer_id=str(created.id))
@@ -213,9 +231,11 @@ def remove_transfer(
 ) -> None:
     """Delete a confirmed transfer and revert both legs to ``personal``.
 
-    The inverse of confirm: unlink the two transactions and restore their role so
-    their ``effective_amount`` returns to the full amount. Scoped to the current
-    user; a ``404`` if the transfer is unknown or not the caller's.
+    The inverse of confirm: unlink the two transactions and restore their role
+    so their ``effective_amount`` returns to the full amount. Both legs are set
+    to ``personal`` regardless of ``kind`` — for a funded payment the funded
+    leg was already ``personal``, so that write is a harmless no-op. Scoped to
+    the current user; a ``404`` if the transfer is unknown or not the caller's.
 
     Parameters
     ----------

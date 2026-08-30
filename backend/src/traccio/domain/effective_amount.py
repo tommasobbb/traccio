@@ -60,6 +60,13 @@ def effective_amount(transaction: Transaction, *, advance_own_share: Money | Non
             # Internal movement between the user's own accounts — neither income
             # nor spending on either leg.
             return Money(amount=0, currency=currency)
+        case TransactionRole.FUNDING:
+            # One outflow that funds a payment made from another account (a card
+            # charge topping up a wallet — see ``TransferKind.FUNDED_PAYMENT``).
+            # The real spending is the funded leg, which stays ``personal``;
+            # this leg is only the plumbing, so it contributes zero. Unlike a
+            # two-sided transfer, only this leg of the pair is zeroed.
+            return Money(amount=0, currency=currency)
         case TransactionRole.REIMBURSEMENT:
             # Money paid back against an advance: it reduces a receivable, it is
             # not income.

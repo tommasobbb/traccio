@@ -98,7 +98,10 @@ opaque error the provider returns for a dead session.
 A single balance-bearing account: usually one exposed by a bank — a current
 account, a savings account, a card account, or a currency-agnostic wallet
 (e.g. PayPal) — or a **manual** one the user creates and maintains by hand
-(ADR 0020), such as a cash float or an investment pass-through.
+(ADR 0020), such as a cash float or an investment pass-through. A manual
+account's movements are hand-entered, or brought in by **importing a file**
+(ADR 0023) — a Satispay export, a CSV — onto it; a synced account never
+accepts either.
 
 `kind`: `current` | `savings` | `card` | `wallet` | `cash`
 
@@ -193,6 +196,19 @@ imperfect — two identical coffees on the same day collide — so record which
 strategy produced the key, and treat fallback-keyed rows as lower-confidence
 during deduplication.
 
+A **manual** movement (ADR 0020) has no bank key: its `stable_key` is its own
+id (`key_strategy=manual`), unique by construction, and it is deliberately not
+deduplicated — two identical cash entries are two real movements.
+
+An **imported** movement (ADR 0023, a file brought onto a manual account) is
+keyed by the file's own stable id: `stable_key = "{profile}:{external_id}"`
+(the meal-voucher leg of a Satispay split gets a `":voucher"` suffix), or
+`"{profile}:{hash}"` when the file has no id column. Here dedup **is** wanted —
+re-importing next month's export, which overlaps the last one, must add only
+the new rows — and the `(account_id, stable_key)` uniqueness provides it. Only
+`key_strategy=imported` rows are deduplicated this way; hand-entered manual
+rows are not.
+
 ### Pending to booked
 
 A pending transaction and its booked counterpart are **the same
@@ -234,9 +250,15 @@ as real personal spending:
 | Role            | Effective amount                          |
 | --------------- | ------------------------------------------ |
 | `personal`      | full `amount` (default)                    |
-| `transfer`      | zero — see `Transfer`                      |
+| `transfer`      | zero — see `Transfer` (both legs)          |
+| `funding`       | zero — the funding leg of a funded payment; see `Transfer` |
 | `advance`       | only the user's own share — see `Advance`  |
 | `reimbursement` | zero — see `Reimbursement`                 |
+
+`funding` and `transfer` both derive to zero, but differ in symmetry: a
+`transfer` zeroes **both** legs of the pair, a `funding` zeroes **only** the
+funding leg — the funded leg stays `personal` and is the real expense (see
+`Transfer` below).
 
 `effective_amount` is derived, never stored as the source of truth. Every
 dashboard, budget, and category total is computed from `effective_amount`.
@@ -250,39 +272,68 @@ An unreviewed suggestion does not change `effective_amount`.
 
 ## Transfer
 
-Two transactions that represent the same money moving between two accounts
-the user owns. Neither is income nor spending: both have an
-`effective_amount` of zero.
+Two of the user's own transactions that represent the same money, paired so
+it is not counted twice. It is detected, not reported — no bank tells us a
+movement was internal — and only ever **suggested** until the user confirms.
 
-A `Transfer` links exactly two transactions with opposite signs. It is
-detected, not reported — no bank tells us a movement was internal.
+A `Transfer` has a **`kind`** (ADR 0022) that decides the legs' signs and
+which are zeroed:
 
-**Detection** matches candidates on: opposite sign, same currency, amounts
-equal or within a small tolerance (fees and FX alter them), different
-accounts belonging to the same user, and dates within a short window
-(settlement is not simultaneous).
+- **`two_sided`** (the default, and every transfer before ADR 0022) — money
+  left one account and arrived in another, so the legs have **opposite
+  signs**. Confirming sets **both** to `role=transfer`; both
+  `effective_amount` become zero.
+- **`funded_payment`** — one outflow funds another: a card charge on a real
+  account tops up a wallet so the wallet can pay a merchant (PayPal drawing
+  on a Revolut card). The bank never reports the top-up as its own credit,
+  so **both legs are outflows**. Confirming sets only the funding leg to
+  `role=funding` (zeroed); the funded leg — the real purchase — stays
+  `role=personal` and keeps its full amount, merchant, and category. The
+  `Transfer`'s `outgoing_transaction_id` is the funding leg and
+  `incoming_transaction_id` the funded leg; the field names are historical.
+
+**Detection** of a `two_sided` transfer matches candidates on: opposite
+sign, same currency, amounts equal or within a small tolerance (fees and FX
+alter them), different accounts belonging to the same user, and dates within
+a short window (settlement is not simultaneous).
+
+**Detection** of a `funded_payment` matches two outflows on different
+accounts, same currency, within the same day window, whose amounts are
+**exactly** equal (a card-funded wallet payment carries no fee or FX drift),
+**and where exactly one leg sits on a `wallet` account** — that leg is the
+real purchase, the other funds it. Without a wallet leg detection cannot
+tell which outflow funds which and proposes nothing; the user may still link
+any same-sign pair explicitly. Both kinds compete in one assignment, so no
+transaction is suggested twice.
 
 Detection produces a **suggestion**, never a silent link. A wrongly detected
 transfer erases a real expense from the user's totals, which is worse than
 missing one.
 
 **Confirming** a suggestion is the explicit user action that creates the
-`Transfer`: it links exactly the two legs and sets both to `role=transfer`, so
-their `effective_amount` becomes zero. Deleting the `Transfer` unlinks the legs
-and reverts both to `personal`. A user may confirm any structurally valid pair —
-different accounts, same currency, opposite signs, both still `personal` — even
-one outside detection's amount tolerance or day window; those bounds constrain
-automatic *suggestions*, not an explicit confirmation.
+`Transfer`: it links exactly the two legs and applies the per-kind role
+(`two_sided` → both `role=transfer`; `funded_payment` → the funding leg
+`role=funding`, the funded leg untouched), so the zeroed legs'
+`effective_amount` becomes zero. Deleting the `Transfer` unlinks the legs and
+reverts every leg it touched to `personal`. A user may confirm any
+structurally valid pair — different accounts, same currency, both still
+`personal`, and the sign rule for the kind (opposite for `two_sided`, both
+outflows for `funded_payment`) — even one outside detection's amount
+tolerance or day window; those bounds constrain automatic *suggestions*, not
+an explicit confirmation.
 
 **Rejecting** a suggestion records a dismissal for that pair, so detection does
-not propose it again (suggestions are recomputed on demand, so without this a
-rejected pair would reappear). A dismissal is order-independent and rejecting the
-same pair twice is idempotent.
+not propose it again — as either kind (suggestions are recomputed on demand, so
+without this a rejected pair would reappear). A dismissal is order-independent
+and rejecting the same pair twice is idempotent.
 
 The client surfaces the explicit path as a **pick-two selection mode** in
 Movimenti (2026-08-27): the user selects any two rows and confirms them
 directly through `POST /transfers/confirm`, independent of whether detection
-ever suggested them — the same endpoint, no suggestion required.
+ever suggested them — the same endpoint, no suggestion required. That mode
+links `two_sided` pairs only; a `funded_payment` is confirmed from its
+suggestion, where the backend has already oriented the legs (extending the
+pick-two mode to same-sign pairs is filed in `tasks/backlog.md`).
 
 **Half-transfers exist and are normal**: money moved to an account the user
 has not connected. The outgoing leg has no counterpart and stays
@@ -685,7 +736,9 @@ whether a budget was exceeded. That is intended.
 
 - **"Balance"** without qualification. Banks expose several (available,
   booked, cleared) and they disagree. Always name which one.
-- **"Import"** for fetching from a bank. Use `sync`.
+- **"Import"** for fetching from a bank. Use `sync`. "Import" is reserved for
+  its literal meaning — bringing a **file** (a spreadsheet or CSV) onto a
+  manual account (ADR 0023), never a provider fetch.
 - **"Merchant"** as a stored entity. For now it is a parsed hint on the
   transaction, not a first-class record.
 - **"Split"** as a verb on a transaction. Traccio does not divide a bill

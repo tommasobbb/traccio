@@ -45,9 +45,26 @@ struct TransactionDetailViewModelTests {
         )
     }
 
+    private static func makeAccount(id: UUID = UUID()) -> AccountResponse {
+        AccountResponse(
+            id: id,
+            connectionID: UUID(),
+            source: .synced,
+            kind: .current,
+            currency: "EUR",
+            name: "TEST CURRENT 01",
+            alias: nil,
+            displayName: "TEST CURRENT 01",
+            color: nil,
+            icon: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+    }
+
     private static func makeTransfer() -> TransferResponse {
         TransferResponse(
-            id: transferID, outgoingTransactionID: transactionID, incomingTransactionID: counterpartID,
+            id: transferID, kind: .twoSided, outgoingTransactionID: transactionID,
+            incomingTransactionID: counterpartID,
             createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
     }
@@ -511,6 +528,36 @@ struct TransactionDetailViewModelTests {
         await model.loadReimbursementCandidatesIfNeeded()
 
         #expect(model.reimbursementCandidates.isEmpty)
+    }
+
+    @Test func loadReimbursementCandidatesIfNeededAlsoLoadsCandidateAccounts() async throws {
+        let client = FakeAPIClient()
+        let matching = Self.makeTransaction(id: UUID(), amount: 1000, role: .personal)
+        await client.setTransactions([matching])
+        await client.setAccounts([Self.makeAccount(id: UUID()), Self.makeAccount(id: UUID())])
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(), client: client
+        )
+
+        await model.loadReimbursementCandidatesIfNeeded()
+
+        #expect(model.reimbursementCandidates.map(\.id) == [matching.id])
+        #expect(model.reimbursementCandidateAccounts.count == 2)
+    }
+
+    @Test func loadReimbursementCandidatesIfNeededToleratesAnAccountsFailure() async throws {
+        let client = FakeAPIClient()
+        let matching = Self.makeTransaction(id: UUID(), amount: 1000, role: .personal)
+        await client.setTransactions([matching])
+        await client.setAccountsError(FakeAPIError())
+        let model = TransactionDetailViewModel(
+            transaction: Self.makeTransaction(role: .advance), advance: Self.makeAdvance(), client: client
+        )
+
+        await model.loadReimbursementCandidatesIfNeeded()
+
+        #expect(model.reimbursementCandidates.map(\.id) == [matching.id])
+        #expect(model.reimbursementCandidateAccounts.isEmpty)
     }
 
     @Test func createReimbursementCashSucceedsRefetchesAdvanceAndDoesNotCallOnUpdate() async throws {

@@ -11,8 +11,10 @@ struct AccountsView: View {
     @State private var editingAccount: AccountResponse?
     @State private var isPickingInstitution = false
     @State private var isCreatingManualAccount = false
+    @State private var isImportingTransactions = false
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(DataFreshness.self) private var freshness
 
     var body: some View {
         NavigationStack {
@@ -78,6 +80,19 @@ struct AccountsView: View {
                     }
                 },
                 onCancel: { isCreatingManualAccount = false }
+            )
+        }
+        .sheet(isPresented: $isImportingTransactions) {
+            ImportTransactionsSheet(
+                manualAccounts: model.accounts.filter { $0.source == .manual },
+                onImported: {
+                    Task {
+                        await model.load()
+                        freshness.markStale([.dashboard, .transactions])
+                        isImportingTransactions = false
+                    }
+                },
+                onCancel: { isImportingTransactions = false }
             )
         }
         .sheet(isPresented: $isPickingInstitution) {
@@ -177,6 +192,9 @@ struct AccountsView: View {
                 }
                 addConnectionCard
                 addManualAccountCard
+                if model.accounts.contains(where: { $0.source == .manual }) {
+                    importTransactionsCard
+                }
             }
             .padding(20)
         }
@@ -217,6 +235,30 @@ struct AccountsView: View {
                 Image(systemName: "wallet.pass")
                     .font(.system(size: 13, weight: .bold))
                 Text("Crea un conto manuale")
+                    .font(Typography.caption.weight(.bold))
+            }
+            .foregroundStyle(Palette.inkSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// "Importa movimenti da file" (ADR 0023) — bring a Satispay export or a
+    /// CSV onto a manual account. Shown only when a manual account exists to
+    /// receive the movements; same dashed shape as the two cards above.
+    private var importTransactionsCard: some View {
+        Button {
+            isImportingTransactions = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 13, weight: .bold))
+                Text("Importa movimenti da file")
                     .font(Typography.caption.weight(.bold))
             }
             .foregroundStyle(Palette.inkSecondary)

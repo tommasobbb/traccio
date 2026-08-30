@@ -9,15 +9,20 @@ import Foundation
 /// needs the two legs' `TransactionResponse`, resolved separately (see
 /// `pairSuggestions(_:transactions:)`).
 public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
-    /// The negative leg (money left an account).
+    /// Which pairing this suggests — `.twoSided` (opposite-sign pair) or
+    /// `.fundedPayment` (two outflows, `incomingTransactionID` on a wallet is
+    /// the real purchase).
+    public let kind: TransferKind
+    /// Two-sided: the negative leg. Funded payment: the funding leg.
     public let outgoingTransactionID: UUID
-    /// The positive leg (money arrived in another account).
+    /// Two-sided: the positive leg. Funded payment: the funded (wallet) leg.
     public let incomingTransactionID: UUID
     /// ISO 4217 code shared by both legs.
     public let currency: String
-    /// The outgoing leg's amount in minor units (negative).
+    /// The outgoing leg's amount in minor units (negative for both kinds).
     public let outgoingAmount: Int
-    /// The incoming leg's amount in minor units (positive).
+    /// The incoming leg's amount in minor units — positive for a two-sided
+    /// transfer, negative for a funded payment.
     public let incomingAmount: Int
     /// Absolute difference between the legs' magnitudes (`>= 0`); a small
     /// non-zero value is a fee or rounding.
@@ -26,6 +31,7 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
     public let dayGap: Int
 
     private enum CodingKeys: String, CodingKey {
+        case kind
         case outgoingTransactionID = "outgoing_transaction_id"
         case incomingTransactionID = "incoming_transaction_id"
         case currency
@@ -36,6 +42,7 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
     }
 
     public init(
+        kind: TransferKind,
         outgoingTransactionID: UUID,
         incomingTransactionID: UUID,
         currency: String,
@@ -44,6 +51,7 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
         amountDelta: Int,
         dayGap: Int
     ) {
+        self.kind = kind
         self.outgoingTransactionID = outgoingTransactionID
         self.incomingTransactionID = incomingTransactionID
         self.currency = currency

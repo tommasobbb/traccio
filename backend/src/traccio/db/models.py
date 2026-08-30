@@ -57,6 +57,7 @@ from traccio.domain.enums import (
     SyncTrigger,
     TransactionRole,
     TransactionStatus,
+    TransferKind,
 )
 
 
@@ -378,10 +379,17 @@ class TransferRow(Base):
 
     A confirmed link between two transactions the user marked as the same money
     moving between their own accounts. Created only by an explicit user action
-    (detection never links — see ``docs/architecture.md``); creating it also sets
-    both legs' ``role`` to ``transfer``, and deleting it reverts them to
-    ``personal``. Unique on ``(user_id, outgoing_transaction_id,
-    incoming_transaction_id)`` so the same pair cannot be linked twice.
+    (detection never links — see ``docs/architecture.md``); deleting it reverts
+    every leg it touched to ``personal``. Unique on ``(user_id,
+    outgoing_transaction_id, incoming_transaction_id)`` so the same pair cannot
+    be linked twice.
+
+    ``kind`` (see :class:`~traccio.domain.enums.TransferKind`) decides the
+    legs' signs and which legs are zeroed: ``two_sided`` links an opposite-sign
+    pair and sets **both** to ``role=transfer``; ``funded_payment`` links two
+    outflows and sets only ``outgoing_transaction_id`` (the funding leg) to
+    ``role=funding``, leaving ``incoming_transaction_id`` (the real expense)
+    ``personal``.
 
     Attributes
     ----------
@@ -389,10 +397,15 @@ class TransferRow(Base):
         Primary key.
     user_id : UUID
         Owning user (foreign key, indexed). Both legs belong to this user.
+    kind : TransferKind
+        The pairing kind; ``two_sided`` for every row created before this
+        column existed (backfilled by migration).
     outgoing_transaction_id : UUID
-        The negative leg (money left an account); foreign key to ``transactions``.
+        Two-sided: the negative leg. Funded payment: the funding leg (set to
+        ``role=funding``). Foreign key to ``transactions``.
     incoming_transaction_id : UUID
-        The positive leg (money arrived); foreign key to ``transactions``.
+        Two-sided: the positive leg. Funded payment: the funded leg, the real
+        expense (left ``personal``). Foreign key to ``transactions``.
     created_at : datetime
         Creation timestamp (timezone-aware, UTC).
     """
@@ -404,6 +417,9 @@ class TransferRow(Base):
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
+    kind: Mapped[TransferKind] = mapped_column(
+        _enum_column(TransferKind), default=TransferKind.TWO_SIDED
+    )
     outgoing_transaction_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("transactions.id"))
     incoming_transaction_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("transactions.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

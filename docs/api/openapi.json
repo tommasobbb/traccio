@@ -718,12 +718,16 @@
         "type": "object"
       },
       "ConfirmTransferRequest": {
-        "description": "Body for confirming a suggestion as a transfer.\n\nNames the two legs by role: the outgoing (negative) leg left one account and\nthe incoming (positive) leg arrived in another. Both must belong to the\ncaller.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).",
+        "description": "Body for confirming a suggestion as a transfer.\n\n``kind`` decides the sign rule and which legs are zeroed:\n\n- ``two_sided`` (the default) \u2014 ``outgoing`` negative, ``incoming``\n  positive; **both** legs become ``role=transfer``.\n- ``funded_payment`` \u2014 **both** legs are outflows; ``outgoing`` is the\n  funding leg (set to ``role=funding``) and ``incoming`` is the funded leg,\n  the real expense, left ``personal``.\n\nBoth legs must belong to the caller.\n\nAttributes\n----------\nkind : TransferKind\n    Which pairing to confirm. Defaults to ``two_sided`` for compatibility\n    with pre-existing clients.\noutgoing_transaction_id : UUID\n    Two-sided: the negative leg. Funded payment: the funding leg.\nincoming_transaction_id : UUID\n    Two-sided: the positive leg. Funded payment: the funded leg.",
         "properties": {
           "incoming_transaction_id": {
             "format": "uuid",
             "title": "Incoming Transaction Id",
             "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TransferKind",
+            "default": "two_sided"
           },
           "outgoing_transaction_id": {
             "format": "uuid",
@@ -1514,6 +1518,215 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "ImportCommitResponse": {
+        "description": "The result of ``POST /imports/commit``.\n\nAttributes\n----------\nimported : int\n    Movements inserted.\nskipped : int\n    Movements whose key was already stored, left untouched.\ninvalid : int\n    Source rows that produced no movement.",
+        "properties": {
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "invalid": {
+            "title": "Invalid",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "imported",
+          "skipped",
+          "invalid"
+        ],
+        "title": "ImportCommitResponse",
+        "type": "object"
+      },
+      "ImportPreviewRequest": {
+        "description": "Body for ``POST /imports/preview`` and ``POST /imports/commit``.\n\nAttributes\n----------\naccount_id : UUID\n    The manual account the primary movements land on.\nvoucher_account_id : UUID or None\n    The manual account a split profile's voucher leg lands on. Required\n    (``422 voucher_account_required``) when the file has non-zero voucher\n    amounts; must differ from ``account_id``.\nprofile : str\n    An import profile key (``\"satispay\"``, ``\"generic\"``).\nfilename : str\n    The original file name \u2014 a format hint only (content sniffing wins).\ncontent_base64 : str\n    The raw file, base64-encoded.",
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "content_base64": {
+            "title": "Content Base64",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "voucher_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voucher Account Id"
+          }
+        },
+        "required": [
+          "account_id",
+          "profile",
+          "filename",
+          "content_base64"
+        ],
+        "title": "ImportPreviewRequest",
+        "type": "object"
+      },
+      "ImportPreviewResponse": {
+        "description": "The result of ``POST /imports/preview``.\n\nAttributes\n----------\nrows : list[ImportRowResponse]\n    Every movement or invalid row, in source order.\nsummary : ImportPreviewSummaryResponse\n    The counts.",
+        "properties": {
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ImportRowResponse"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ImportPreviewSummaryResponse"
+          }
+        },
+        "required": [
+          "rows",
+          "summary"
+        ],
+        "title": "ImportPreviewResponse",
+        "type": "object"
+      },
+      "ImportPreviewSummaryResponse": {
+        "description": "Counts across a preview's rows.\n\nAttributes\n----------\nnew : int\n    Movements that would be inserted.\nalready_imported : int\n    Movements whose key is already stored (a re-import); skipped.\ninvalid : int\n    Source rows that produced no movement.\ntotal : int\n    ``new + already_imported + invalid``.",
+        "properties": {
+          "already_imported": {
+            "title": "Already Imported",
+            "type": "integer"
+          },
+          "invalid": {
+            "title": "Invalid",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "new",
+          "already_imported",
+          "invalid",
+          "total"
+        ],
+        "title": "ImportPreviewSummaryResponse",
+        "type": "object"
+      },
+      "ImportRowResponse": {
+        "description": "One movement a file would create, or one row that cannot be imported.\n\nAttributes\n----------\nrow_number : int\n    1-based position of the source row (a split row appears twice, once\n    per leg).\nstatus : str\n    ``new``, ``already_imported``, or ``invalid``.\nreason : str or None\n    A stable, value-free code for an ``invalid`` row (e.g.\n    ``amount_split_mismatch``); ``None`` otherwise.\ntarget_account_id : UUID or None\n    Which account this movement would land on; ``None`` for an ``invalid``\n    row.\namount : int or None\n    Signed minor units; ``None`` for an ``invalid`` row.\ncurrency : str or None\n    ISO 4217 code; ``None`` for an ``invalid`` row.\nvalue_date : datetime or None\n    Timezone-aware UTC; ``None`` for an ``invalid`` row.\ndescription : str or None\n    The row's description; ``None`` for an ``invalid`` row.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "row_number": {
+            "title": "Row Number",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_account_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Account Id"
+          },
+          "value_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Date"
+          }
+        },
+        "required": [
+          "row_number",
+          "status",
+          "reason",
+          "target_account_id",
+          "amount",
+          "currency",
+          "value_date",
+          "description"
+        ],
+        "title": "ImportRowResponse",
+        "type": "object"
+      },
       "InstitutionResponse": {
         "description": "One bank the caller can authorize, as returned to the client.\n\nAttributes\n----------\nname : str\n    The provider-scoped institution identifier \u2014 pass this straight back\n    as ``StartConnectionRequest.institution``.\ncountry : str\n    ISO 3166-1 alpha-2 country the institution is offered in.\nlogo : str or None\n    The institution's logo URL, or ``None`` when the provider has none.\n    The client renders it with a lettermark fallback.",
         "properties": {
@@ -2161,10 +2374,11 @@
         "type": "object"
       },
       "TransactionRole": {
-        "description": "How much of a transaction counts as real personal spending.\n\nThe role drives ``effective_amount`` derivation (implemented later, in the\nrole/effective-amount work \u2014 see ``tasks/backlog.md`` M2). It is set by the\nuser or suggested by detection, never assumed silently.\n\nAttributes\n----------\nPERSONAL : str\n    Full amount counts. The default for every transaction.\nTRANSFER : str\n    Internal movement between the user's own accounts; contributes zero.\nADVANCE : str\n    The user paid for others; only the user's own share counts.\nREIMBURSEMENT : str\n    Money paid back against an advance; contributes zero.",
+        "description": "How much of a transaction counts as real personal spending.\n\nThe role drives ``effective_amount`` derivation (implemented later, in the\nrole/effective-amount work \u2014 see ``tasks/backlog.md`` M2). It is set by the\nuser or suggested by detection, never assumed silently.\n\nAttributes\n----------\nPERSONAL : str\n    Full amount counts. The default for every transaction.\nTRANSFER : str\n    Internal movement between the user's own accounts; contributes zero.\n    Both legs of a two-sided :class:`~traccio.domain.models.Transfer` carry\n    this role.\nFUNDING : str\n    The outflow that funds a payment made from another account \u2014 a card\n    charge that tops up a wallet so the wallet can pay a merchant (see\n    :class:`TransferKind.FUNDED_PAYMENT`). Contributes zero: the real\n    spending is the funded leg, which stays :attr:`PERSONAL`. Unlike\n    :attr:`TRANSFER` this zeroes only *one* leg of the pair.\nADVANCE : str\n    The user paid for others; only the user's own share counts.\nREIMBURSEMENT : str\n    Money paid back against an advance; contributes zero.",
         "enum": [
           "personal",
           "transfer",
+          "funding",
           "advance",
           "reimbursement"
         ],
@@ -2198,8 +2412,17 @@
         "title": "TransactionsResponse",
         "type": "object"
       },
+      "TransferKind": {
+        "description": "What kind of link a :class:`~traccio.domain.models.Transfer` records.\n\nA transfer pairs two of the user's own transactions so the same money is\nnot double-counted. The two kinds differ in the legs' signs and in how\n``effective_amount`` treats them.\n\nAttributes\n----------\nTWO_SIDED : str\n    The classic case: money left one account and arrived in another, so the\n    legs have **opposite signs**. Both legs become\n    :attr:`TransactionRole.TRANSFER` and contribute zero.\nFUNDED_PAYMENT : str\n    One outflow funds another: a card charge on a real account tops up a\n    wallet (e.g. PayPal drawing on a Revolut card) so the wallet can pay a\n    merchant. The bank never reports the top-up as its own credit, so both\n    legs are **outflows (same sign)**. Only the funding leg becomes\n    :attr:`TransactionRole.FUNDING` (zeroed); the funded leg stays\n    :attr:`TransactionRole.PERSONAL` and keeps the real merchant and\n    category \u2014 it is the actual expense.",
+        "enum": [
+          "two_sided",
+          "funded_payment"
+        ],
+        "title": "TransferKind",
+        "type": "string"
+      },
       "TransferResponse": {
-        "description": "One confirmed transfer as returned to the client.\n\nProjects :class:`~traccio.domain.models.Transfer`. Both legs already carry\n``role=transfer``, so their ``effective_amount`` is zero on\n``GET /transactions``.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the transfer.\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).\ncreated_at : datetime\n    When the transfer was confirmed (timezone-aware, UTC).",
+        "description": "One confirmed transfer as returned to the client.\n\nProjects :class:`~traccio.domain.models.Transfer`. For a ``two_sided``\ntransfer both legs carry ``role=transfer``; for a ``funded_payment`` only\n``outgoing_transaction_id`` carries ``role=funding`` and\n``incoming_transaction_id`` stays ``personal`` (the real expense). Either\nway the zeroed legs read ``effective_amount == 0`` on ``GET /transactions``.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the transfer.\nkind : TransferKind\n    ``two_sided`` or ``funded_payment``.\noutgoing_transaction_id : UUID\n    Two-sided: the negative leg. Funded payment: the funding leg\n    (``role=funding``).\nincoming_transaction_id : UUID\n    Two-sided: the positive leg. Funded payment: the funded leg, the real\n    expense (left ``personal``).\ncreated_at : datetime\n    When the transfer was confirmed (timezone-aware, UTC).",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -2216,6 +2439,9 @@
             "title": "Incoming Transaction Id",
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/TransferKind"
+          },
           "outgoing_transaction_id": {
             "format": "uuid",
             "title": "Outgoing Transaction Id",
@@ -2224,6 +2450,7 @@
         },
         "required": [
           "id",
+          "kind",
           "outgoing_transaction_id",
           "incoming_transaction_id",
           "created_at"
@@ -2232,7 +2459,7 @@
         "type": "object"
       },
       "TransferSuggestionResponse": {
-        "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\noutgoing_transaction_id : UUID\n    The negative leg (money left an account).\nincoming_transaction_id : UUID\n    The positive leg (money arrived in another account).\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).",
+        "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\nkind : TransferKind\n    ``two_sided`` (opposite-sign pair) or ``funded_payment`` (two outflows,\n    the ``incoming`` leg on a wallet is the real purchase).\noutgoing_transaction_id : UUID\n    Two-sided: the negative leg. Funded payment: the funding leg.\nincoming_transaction_id : UUID\n    Two-sided: the positive leg. Funded payment: the funded (wallet) leg.\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative for both kinds).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive for a two-sided\n    transfer, negative for a funded payment).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).",
         "properties": {
           "amount_delta": {
             "title": "Amount Delta",
@@ -2255,6 +2482,9 @@
             "title": "Incoming Transaction Id",
             "type": "string"
           },
+          "kind": {
+            "$ref": "#/components/schemas/TransferKind"
+          },
           "outgoing_amount": {
             "title": "Outgoing Amount",
             "type": "integer"
@@ -2266,6 +2496,7 @@
           }
         },
         "required": [
+          "kind",
           "outgoing_transaction_id",
           "incoming_transaction_id",
           "currency",
@@ -4565,6 +4796,120 @@
         "summary": "Health"
       }
     },
+    "/imports/commit": {
+      "post": {
+        "description": "Insert the ``new`` movements a file would create.\n\nSame body and validation as the preview; only movements whose key is not\nalready stored are inserted, so running it twice on the same file adds\nnothing the second time. Scoped to the current user.\n\nParameters\n----------\nbody : ImportPreviewRequest\n    The account(s), profile, filename, and base64 file content.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the accounts belong to.\n\nReturns\n-------\nImportCommitResponse\n    How many movements were inserted, skipped as already present, and how\n    many source rows were invalid.",
+        "operationId": "commit_import_imports_commit_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportCommitResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Commit Import"
+      }
+    },
+    "/imports/preview": {
+      "post": {
+        "description": "Classify every movement a file would create, writing nothing.\n\nEach movement is ``new`` (would be inserted) or ``already_imported`` (its\nkey is already stored); each unparseable source row is one ``invalid`` entry\nwith a stable ``reason``. Scoped to the current user; every target account\nmust be a manual one (``409 account_not_manual``).\n\nParameters\n----------\nbody : ImportPreviewRequest\n    The account(s), profile, filename, and base64 file content.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the accounts belong to.\n\nReturns\n-------\nImportPreviewResponse\n    Per-movement rows in source order, plus the counts.",
+        "operationId": "preview_import_imports_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Import"
+      }
+    },
     "/rules": {
       "get": {
         "description": "List the current user's rules, in evaluation order.\n\nThe order they are shown in is the order they actually fire in (see\n:func:`~traccio.services.categorization.evaluation_order`).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose rules to return.\n\nReturns\n-------\nRulesResponse\n    The user's rules, most specific first (empty if none).",
@@ -5376,7 +5721,7 @@
     },
     "/transfers/confirm": {
       "post": {
-        "description": "Confirm two transactions as a transfer.\n\nThe explicit user action that turns a suggestion into a persisted link: it\nvalidates the pair (same invariants detection uses, minus the tolerance and\nwindow \u2014 a user may link any structurally valid pair), records the\n:class:`~traccio.domain.models.Transfer`, and sets both legs' ``role`` to\n``transfer`` so their ``effective_amount`` becomes zero. Scoped to the\ncurrent user.\n\nParameters\n----------\nbody : ConfirmTransferRequest\n    The outgoing (negative) and incoming (positive) legs to link.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.\n\nReturns\n-------\nTransferResponse\n    The created transfer.",
+        "description": "Confirm two transactions as a transfer.\n\nThe explicit user action that turns a suggestion into a persisted link: it\nvalidates the pair (same invariants detection uses, minus the tolerance and\nwindow \u2014 a user may link any structurally valid pair) and records the\n:class:`~traccio.domain.models.Transfer`. The roles it then writes depend on\n``body.kind``:\n\n- ``two_sided`` \u2014 both legs become ``role=transfer`` (both\n  ``effective_amount`` become zero).\n- ``funded_payment`` \u2014 only ``outgoing`` (the funding leg) becomes\n  ``role=funding``; ``incoming`` (the real expense) is left ``personal``.\n\nScoped to the current user.\n\nParameters\n----------\nbody : ConfirmTransferRequest\n    The two legs to link and the ``kind`` of pairing.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transactions belong to.\n\nReturns\n-------\nTransferResponse\n    The created transfer.",
         "operationId": "confirm_transfer_transfers_confirm_post",
         "parameters": [
           {
@@ -5530,7 +5875,7 @@
     },
     "/transfers/{transfer_id}": {
       "delete": {
-        "description": "Delete a confirmed transfer and revert both legs to ``personal``.\n\nThe inverse of confirm: unlink the two transactions and restore their role so\ntheir ``effective_amount`` returns to the full amount. Scoped to the current\nuser; a ``404`` if the transfer is unknown or not the caller's.\n\nParameters\n----------\ntransfer_id : UUID\n    The transfer to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transfer belongs to.",
+        "description": "Delete a confirmed transfer and revert both legs to ``personal``.\n\nThe inverse of confirm: unlink the two transactions and restore their role\nso their ``effective_amount`` returns to the full amount. Both legs are set\nto ``personal`` regardless of ``kind`` \u2014 for a funded payment the funded\nleg was already ``personal``, so that write is a harmless no-op. Scoped to\nthe current user; a ``404`` if the transfer is unknown or not the caller's.\n\nParameters\n----------\ntransfer_id : UUID\n    The transfer to delete.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the transfer belongs to.",
         "operationId": "remove_transfer_transfers__transfer_id__delete",
         "parameters": [
           {

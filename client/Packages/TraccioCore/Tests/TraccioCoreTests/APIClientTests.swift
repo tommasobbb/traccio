@@ -1479,6 +1479,7 @@ struct APIClientTests {
     private static let transferSuggestionsEnvelope = """
         { "suggestions": [
           {
+            "kind": "two_sided",
             "outgoing_transaction_id": "11111111-1111-1111-1111-111111111111",
             "incoming_transaction_id": "22222222-2222-2222-2222-222222222222",
             "currency": "EUR",
@@ -1511,6 +1512,7 @@ struct APIClientTests {
         { "transfers": [
           {
             "id": "33333333-3333-3333-3333-333333333333",
+            "kind": "two_sided",
             "outgoing_transaction_id": "11111111-1111-1111-1111-111111111111",
             "incoming_transaction_id": "22222222-2222-2222-2222-222222222222",
             "created_at": "2026-08-20T09:30:00+00:00"
@@ -1540,6 +1542,7 @@ struct APIClientTests {
             #expect(request.url?.path == "/transfers/confirm")
             let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
             let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["kind"] == "funded_payment")
             #expect(body?["outgoing_transaction_id"] == outgoingID.uuidString)
             #expect(body?["incoming_transaction_id"] == incomingID.uuidString)
             // 201 Created, with the created transfer in the body.
@@ -1549,6 +1552,7 @@ struct APIClientTests {
             let envelope = """
                 {
                   "id": "33333333-3333-3333-3333-333333333333",
+                  "kind": "funded_payment",
                   "outgoing_transaction_id": "\(outgoingID.uuidString)",
                   "incoming_transaction_id": "\(incomingID.uuidString)",
                   "created_at": "2026-08-20T09:30:00+00:00"
@@ -1557,7 +1561,10 @@ struct APIClientTests {
             return (response, Data(envelope.utf8))
         }
 
-        let transfer = try await client.confirmTransfer(outgoingID: outgoingID, incomingID: incomingID)
+        let transfer = try await client.confirmTransfer(
+            outgoingID: outgoingID, incomingID: incomingID, kind: .fundedPayment
+        )
+        #expect(transfer.kind == .fundedPayment)
         #expect(transfer.outgoingTransactionID == outgoingID)
         #expect(transfer.incomingTransactionID == incomingID)
     }
@@ -1571,7 +1578,7 @@ struct APIClientTests {
         }
 
         await #expect {
-            try await client.confirmTransfer(outgoingID: UUID(), incomingID: UUID())
+            try await client.confirmTransfer(outgoingID: UUID(), incomingID: UUID(), kind: .twoSided)
         } throws: { error in
             guard case APIError.badStatus(409) = error else { return false }
             return true

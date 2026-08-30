@@ -120,6 +120,14 @@ class TransactionRole(StrEnum):
         Full amount counts. The default for every transaction.
     TRANSFER : str
         Internal movement between the user's own accounts; contributes zero.
+        Both legs of a two-sided :class:`~traccio.domain.models.Transfer` carry
+        this role.
+    FUNDING : str
+        The outflow that funds a payment made from another account — a card
+        charge that tops up a wallet so the wallet can pay a merchant (see
+        :class:`TransferKind.FUNDED_PAYMENT`). Contributes zero: the real
+        spending is the funded leg, which stays :attr:`PERSONAL`. Unlike
+        :attr:`TRANSFER` this zeroes only *one* leg of the pair.
     ADVANCE : str
         The user paid for others; only the user's own share counts.
     REIMBURSEMENT : str
@@ -128,8 +136,36 @@ class TransactionRole(StrEnum):
 
     PERSONAL = "personal"
     TRANSFER = "transfer"
+    FUNDING = "funding"
     ADVANCE = "advance"
     REIMBURSEMENT = "reimbursement"
+
+
+class TransferKind(StrEnum):
+    """What kind of link a :class:`~traccio.domain.models.Transfer` records.
+
+    A transfer pairs two of the user's own transactions so the same money is
+    not double-counted. The two kinds differ in the legs' signs and in how
+    ``effective_amount`` treats them.
+
+    Attributes
+    ----------
+    TWO_SIDED : str
+        The classic case: money left one account and arrived in another, so the
+        legs have **opposite signs**. Both legs become
+        :attr:`TransactionRole.TRANSFER` and contribute zero.
+    FUNDED_PAYMENT : str
+        One outflow funds another: a card charge on a real account tops up a
+        wallet (e.g. PayPal drawing on a Revolut card) so the wallet can pay a
+        merchant. The bank never reports the top-up as its own credit, so both
+        legs are **outflows (same sign)**. Only the funding leg becomes
+        :attr:`TransactionRole.FUNDING` (zeroed); the funded leg stays
+        :attr:`TransactionRole.PERSONAL` and keeps the real merchant and
+        category — it is the actual expense.
+    """
+
+    TWO_SIDED = "two_sided"
+    FUNDED_PAYMENT = "funded_payment"
 
 
 class AdvanceStatus(StrEnum):
@@ -211,11 +247,20 @@ class KeyStrategy(StrEnum):
         A user-entered movement on a manual account (ADR 0020). There is no
         bank key to deduplicate against; ``stable_key`` is the transaction's
         own id, unique by construction and stable across edits.
+    IMPORTED : str
+        A movement created by importing a file onto a manual account (ADR
+        0023). ``stable_key`` is ``"{profile}:{external_id}"`` (or a
+        ``"{profile}:{hash}"`` fallback when the file has no id column), so
+        re-importing the same file adds nothing — the ``(account_id,
+        stable_key)`` uniqueness does the deduplication. Distinct from
+        :attr:`MANUAL` so a hand-entered row and an imported one on the same
+        account are never confused; hand-entered rows still have no dedup.
     """
 
     ENTRY_REFERENCE = "entry_reference"
     DERIVED_HASH = "derived_hash"
     MANUAL = "manual"
+    IMPORTED = "imported"
 
 
 class RuleMatchKind(StrEnum):

@@ -9,6 +9,10 @@ public enum TransactionRole: String, Codable, Sendable, CaseIterable {
     /// One leg of a transfer between the user's own accounts;
     /// `effective_amount` is zero.
     case transfer
+    /// The funding leg of a `funded_payment` transfer — a card charge that
+    /// tops up a wallet for a payment made elsewhere. `effective_amount` is
+    /// zero; the real spending is the funded leg, which stays `.personal`.
+    case funding
     /// Money laid out on someone else's behalf; `effective_amount` is the
     /// user's own declared share, not the full amount.
     case advance

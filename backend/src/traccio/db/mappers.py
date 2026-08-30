@@ -250,6 +250,7 @@ def transfer_to_row(transfer: Transfer) -> TransferRow:
     return TransferRow(
         id=transfer.id,
         user_id=transfer.user_id,
+        kind=transfer.kind,
         outgoing_transaction_id=transfer.outgoing_transaction_id,
         incoming_transaction_id=transfer.incoming_transaction_id,
         created_at=transfer.created_at,
@@ -261,6 +262,7 @@ def row_to_transfer(row: TransferRow) -> Transfer:
     return Transfer(
         id=row.id,
         user_id=row.user_id,
+        kind=row.kind,
         outgoing_transaction_id=row.outgoing_transaction_id,
         incoming_transaction_id=row.incoming_transaction_id,
         created_at=row.created_at,

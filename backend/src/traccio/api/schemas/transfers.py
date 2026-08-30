@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from traccio.domain.enums import TransferKind
 from traccio.domain.models import Transfer
 from traccio.services.transfers import TransferSuggestion
 
@@ -27,16 +28,20 @@ class TransferSuggestionResponse(BaseModel):
 
     Attributes
     ----------
+    kind : TransferKind
+        ``two_sided`` (opposite-sign pair) or ``funded_payment`` (two outflows,
+        the ``incoming`` leg on a wallet is the real purchase).
     outgoing_transaction_id : UUID
-        The negative leg (money left an account).
+        Two-sided: the negative leg. Funded payment: the funding leg.
     incoming_transaction_id : UUID
-        The positive leg (money arrived in another account).
+        Two-sided: the positive leg. Funded payment: the funded (wallet) leg.
     currency : str
         ISO 4217 code shared by both legs.
     outgoing_amount : int
-        The outgoing leg's amount in minor units (negative).
+        The outgoing leg's amount in minor units (negative for both kinds).
     incoming_amount : int
-        The incoming leg's amount in minor units (positive).
+        The incoming leg's amount in minor units (positive for a two-sided
+        transfer, negative for a funded payment).
     amount_delta : int
         Absolute difference between the legs' magnitudes (``>= 0``); a small
         non-zero value is a fee or rounding.
@@ -44,6 +49,7 @@ class TransferSuggestionResponse(BaseModel):
         Whole days between the legs' effective dates (``>= 0``).
     """
 
+    kind: TransferKind
     outgoing_transaction_id: UUID
     incoming_transaction_id: UUID
     currency: str
@@ -67,6 +73,7 @@ class TransferSuggestionResponse(BaseModel):
             The client-facing view of ``suggestion``.
         """
         return cls(
+            kind=suggestion.kind,
             outgoing_transaction_id=suggestion.outgoing_transaction_id,
             incoming_transaction_id=suggestion.incoming_transaction_id,
             currency=suggestion.currency,
@@ -95,18 +102,28 @@ class TransferSuggestionsResponse(BaseModel):
 class ConfirmTransferRequest(BaseModel):
     """Body for confirming a suggestion as a transfer.
 
-    Names the two legs by role: the outgoing (negative) leg left one account and
-    the incoming (positive) leg arrived in another. Both must belong to the
-    caller.
+    ``kind`` decides the sign rule and which legs are zeroed:
+
+    - ``two_sided`` (the default) — ``outgoing`` negative, ``incoming``
+      positive; **both** legs become ``role=transfer``.
+    - ``funded_payment`` — **both** legs are outflows; ``outgoing`` is the
+      funding leg (set to ``role=funding``) and ``incoming`` is the funded leg,
+      the real expense, left ``personal``.
+
+    Both legs must belong to the caller.
 
     Attributes
     ----------
+    kind : TransferKind
+        Which pairing to confirm. Defaults to ``two_sided`` for compatibility
+        with pre-existing clients.
     outgoing_transaction_id : UUID
-        The negative leg (money left an account).
+        Two-sided: the negative leg. Funded payment: the funding leg.
     incoming_transaction_id : UUID
-        The positive leg (money arrived in another account).
+        Two-sided: the positive leg. Funded payment: the funded leg.
     """
 
+    kind: TransferKind = TransferKind.TWO_SIDED
     outgoing_transaction_id: UUID
     incoming_transaction_id: UUID
 
@@ -133,23 +150,30 @@ class RejectTransferRequest(BaseModel):
 class TransferResponse(BaseModel):
     """One confirmed transfer as returned to the client.
 
-    Projects :class:`~traccio.domain.models.Transfer`. Both legs already carry
-    ``role=transfer``, so their ``effective_amount`` is zero on
-    ``GET /transactions``.
+    Projects :class:`~traccio.domain.models.Transfer`. For a ``two_sided``
+    transfer both legs carry ``role=transfer``; for a ``funded_payment`` only
+    ``outgoing_transaction_id`` carries ``role=funding`` and
+    ``incoming_transaction_id`` stays ``personal`` (the real expense). Either
+    way the zeroed legs read ``effective_amount == 0`` on ``GET /transactions``.
 
     Attributes
     ----------
     id : UUID
         Stable identifier of the transfer.
+    kind : TransferKind
+        ``two_sided`` or ``funded_payment``.
     outgoing_transaction_id : UUID
-        The negative leg (money left an account).
+        Two-sided: the negative leg. Funded payment: the funding leg
+        (``role=funding``).
     incoming_transaction_id : UUID
-        The positive leg (money arrived in another account).
+        Two-sided: the positive leg. Funded payment: the funded leg, the real
+        expense (left ``personal``).
     created_at : datetime
         When the transfer was confirmed (timezone-aware, UTC).
     """
 
     id: UUID
+    kind: TransferKind
     outgoing_transaction_id: UUID
     incoming_transaction_id: UUID
     created_at: datetime
@@ -170,6 +194,7 @@ class TransferResponse(BaseModel):
         """
         return cls(
             id=transfer.id,
+            kind=transfer.kind,
             outgoing_transaction_id=transfer.outgoing_transaction_id,
             incoming_transaction_id=transfer.incoming_transaction_id,
             created_at=transfer.created_at,

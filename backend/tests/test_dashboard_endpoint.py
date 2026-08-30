@@ -122,13 +122,19 @@ def _seed_category(
         return str(category.id)
 
 
-def _seed_account(engine: Engine, *, user_id: UUID, alias: str | None = None) -> str:
+def _seed_account(
+    engine: Engine,
+    *,
+    user_id: UUID,
+    alias: str | None = None,
+    kind: AccountKind = AccountKind.CURRENT,
+) -> str:
     with Session(engine) as session:
         account = AccountRow(
             id=uuid4(),
             user_id=user_id,
             connection_id=uuid4(),
-            kind=AccountKind.CURRENT,
+            kind=kind,
             currency="EUR",
             identification_hash=f"HASH-{uuid4()}",
             name="Provider Account",
@@ -226,6 +232,40 @@ def test_summary_excludes_a_confirmed_transfer() -> None:
     assert summary["spending"] == 1200
     assert summary["income"] == 0
     assert summary["transaction_count"] == 3
+
+
+def test_summary_counts_a_funded_payment_once() -> None:
+    """A card-funded wallet payment (``TransferKind.FUNDED_PAYMENT``) must not
+    double-count: the funding leg is zeroed, the wallet leg is the real spend."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    bank_id = _seed_account(engine, user_id=dev_user_id, kind=AccountKind.CURRENT)
+    wallet_id = _seed_account(engine, user_id=dev_user_id, kind=AccountKind.WALLET)
+    funding_id = _seed_tx(
+        engine, user_id=dev_user_id, amount=-1290, stable_key="CARD", account_id=UUID(bank_id)
+    )
+    funded_id = _seed_tx(
+        engine, user_id=dev_user_id, amount=-1290, stable_key="WALLET", account_id=UUID(wallet_id)
+    )
+    client = _client(engine)
+    confirm = client.post(
+        "/transfers/confirm",
+        json={
+            "kind": "funded_payment",
+            "outgoing_transaction_id": funding_id,
+            "incoming_transaction_id": funded_id,
+        },
+    )
+    assert confirm.status_code == 201
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    # 12.90 once, not 25.80: only the funded (wallet) leg counts.
+    assert summary["spending"] == 1290
+    assert summary["income"] == 0
+    assert summary["transaction_count"] == 2
 
 
 def test_summary_filters_by_period() -> None:

@@ -29,6 +29,7 @@ from traccio.domain.enums import (
     SyncTrigger,
     TransactionRole,
     TransactionStatus,
+    TransferKind,
 )
 from traccio.domain.money import CurrencyCode, Money
 
@@ -276,13 +277,24 @@ class Transaction(BaseModel):
 class Transfer(BaseModel):
     """A confirmed link between two transactions moving the same money.
 
-    Two of the user's own accounts, opposite signs: the outgoing leg left one
-    account and the incoming leg arrived in another (see ``docs/domain.md``). A
-    ``Transfer`` exists only because the user confirmed a suggestion — detection
-    never links (``docs/architecture.md``). Confirming sets both legs'
-    ``role`` to :attr:`TransactionRole.TRANSFER`, which zeroes their
-    ``effective_amount``; deleting the ``Transfer`` reverts both to
-    ``personal``.
+    A ``Transfer`` exists only because the user confirmed a suggestion —
+    detection never links (``docs/architecture.md``). Deleting it reverts every
+    leg it touched to ``personal``.
+
+    ``kind`` decides what the two id fields mean and which legs get zeroed:
+
+    - :attr:`TransferKind.TWO_SIDED` (the default) — two of the user's accounts,
+      **opposite signs**: ``outgoing_transaction_id`` is the negative leg that
+      left one account, ``incoming_transaction_id`` the positive leg that
+      arrived in another. Confirming sets **both** to
+      :attr:`TransactionRole.TRANSFER`.
+    - :attr:`TransferKind.FUNDED_PAYMENT` — one outflow funds another (a card
+      charge topping up a wallet that then pays a merchant), so **both legs are
+      outflows**. ``outgoing_transaction_id`` is the *funding* leg (the card
+      charge) and is set to :attr:`TransactionRole.FUNDING` (zeroed);
+      ``incoming_transaction_id`` is the *funded* leg (the real purchase) and
+      stays :attr:`TransactionRole.PERSONAL`. The field names are historical —
+      for this kind neither leg is literally "incoming".
 
     Attributes
     ----------
@@ -290,10 +302,15 @@ class Transfer(BaseModel):
         Stable identifier of the transfer within Traccio.
     user_id : UUID
         Owning user. Both legs belong to this user.
+    kind : TransferKind
+        Which pairing this records; see above. Defaults to
+        :attr:`TransferKind.TWO_SIDED`.
     outgoing_transaction_id : UUID
-        The negative leg (money left an account).
+        Two-sided: the negative leg. Funded payment: the funding leg (set to
+        ``role=funding``).
     incoming_transaction_id : UUID
-        The positive leg (money arrived in another account).
+        Two-sided: the positive leg. Funded payment: the funded leg (the real
+        expense, left ``personal``).
     created_at : datetime
         When the transfer was confirmed (timezone-aware, UTC).
     """
@@ -302,6 +319,7 @@ class Transfer(BaseModel):
 
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
+    kind: TransferKind = TransferKind.TWO_SIDED
     outgoing_transaction_id: UUID
     incoming_transaction_id: UUID
     created_at: datetime = Field(default_factory=_now)
