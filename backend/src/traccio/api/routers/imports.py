@@ -47,6 +47,7 @@ from traccio.domain.enums import (
     TransactionStatus,
 )
 from traccio.domain.imports import PROFILES, ParsedImport, parse_import
+from traccio.domain.imports.columns import remap_rows, resolve_columns
 from traccio.domain.imports.models import TARGET_VOUCHER, ParsedMovement
 from traccio.domain.imports.profiles import ImportProfile
 from traccio.domain.models import Account, Transaction
@@ -108,11 +109,11 @@ def _prepare(body: ImportPreviewRequest, session: Session, user_id: UUID) -> _Pr
         header, rows = decode_rows(content, filename=body.filename)
     except ImportDecodeError as exc:
         raise HTTPException(status_code=422, detail=exc.reason) from exc
-    missing = [h for h in profile.required_headers if h not in header]
-    if missing:
+    resolution = resolve_columns(header, profile=profile)
+    if resolution.missing:
         raise HTTPException(status_code=422, detail="missing_columns")
 
-    parsed = parse_import(rows, profile=profile)
+    parsed = parse_import(remap_rows(rows, resolution.columns), profile=profile)
 
     if any(m.target == TARGET_VOUCHER for m in parsed.movements) and voucher is None:
         raise HTTPException(status_code=422, detail="voucher_account_required")

@@ -26,6 +26,10 @@ from traccio.db.models import AccountRow
 from traccio.db.session import get_session
 from traccio.domain.enums import AccountKind
 
+# The id column as a real Satispay export labels it — a canonical ``"ID"`` with
+# a parenthesised note. ``resolve_columns`` matches it by word-boundary prefix.
+_SATISPAY_ID_HEADER = "ID (Comunicalo all'Assistenza Clienti in caso di problemi)"
+
 _SATISPAY_HEADER = [
     "Data",
     "Nome",
@@ -36,7 +40,7 @@ _SATISPAY_HEADER = [
     "Disponibilità",
     "Buoni Pasto",
     "Disponibilità dopo la transazione",
-    "ID",
+    _SATISPAY_ID_HEADER,
 ]
 
 
@@ -81,11 +85,13 @@ def _account(engine: Engine, *, user_id: UUID, kind: AccountKind, manual: bool) 
     return account_id
 
 
-def _satispay_xlsx(rows: Sequence[Sequence[object]]) -> str:
+def _satispay_xlsx(
+    rows: Sequence[Sequence[object]], *, header: Sequence[str] = _SATISPAY_HEADER
+) -> str:
     workbook = Workbook()
     sheet = workbook.active
     assert sheet is not None
-    sheet.append(_SATISPAY_HEADER)
+    sheet.append(list(header))
     for row in rows:
         sheet.append(list(row))
     buffer = io.BytesIO()
@@ -274,6 +280,48 @@ def test_missing_columns_is_422() -> None:
 
     assert response.status_code == 422
     assert response.json()["detail"] == "missing_columns"
+
+
+def test_a_short_id_header_and_odd_casing_still_resolve() -> None:
+    # An export (or the older fixture) that labels the id column plainly "ID"
+    # and varies case/spacing on the rest must still import — resolve_columns
+    # matches canonical names, not literals.
+    user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    primary = _account(engine, user_id=user_id, kind=AccountKind.WALLET, manual=True)
+    voucher = _account(engine, user_id=user_id, kind=AccountKind.CASH, manual=True)
+    header = [
+        "Data",
+        "NOME",
+        "Descrizione",
+        " Importo ",
+        "Tipo",
+        "stato",
+        "Disponibilità",
+        "Buoni Pasto",
+        "Disponibilità dopo la transazione",
+        "ID",
+    ]
+    content = _satispay_xlsx([_satispay_row()], header=header)
+
+    response = _client(engine).post(
+        "/imports/preview",
+        json={
+            "account_id": str(primary),
+            "voucher_account_id": str(voucher),
+            "profile": "satispay",
+            "filename": "satispay-old.xlsx",
+            "content_base64": content,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["summary"] == {
+        "new": 2,
+        "already_imported": 0,
+        "invalid": 0,
+        "total": 2,
+    }
 
 
 def test_a_file_over_the_size_limit_is_413() -> None:

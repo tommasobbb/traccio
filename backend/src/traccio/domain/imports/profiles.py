@@ -1,10 +1,17 @@
 """Import profiles: a file layout described as data, not code (ADR 0023).
 
-A profile names the columns (by header text, so a reordered export still
-works), the date format and timezone, the decimal conventions, the fixed
-currency, and — for a source that splits an amount across two accounts, like
-Satispay's balance vs. meal vouchers — a :class:`SplitRule`. Adding a second
-source is a new :class:`ImportProfile` constant here, not new parsing code.
+A profile names the columns by *canonical* header text, the date format and
+timezone, the decimal conventions, the fixed currency, and — for a source that
+splits an amount across two accounts, like Satispay's balance vs. meal
+vouchers — a :class:`SplitRule`. Adding a second source is a new
+:class:`ImportProfile` constant here, not new parsing code.
+
+The names here are canonical, not literal: a real export may reorder them,
+change their case or spacing, or append a note in parentheses (Satispay labels
+its id column ``"ID (Comunicalo all'Assistenza Clienti…)"``).
+:func:`traccio.domain.imports.columns.resolve_columns` maps the file's real
+headers onto these — an exact normalised match, then a unique word-boundary
+prefix match — so the parser can keep looking each column up by the short name.
 
 This module imports nothing outside ``domain/``.
 """
@@ -44,8 +51,9 @@ class ImportProfile(BaseModel):
     key : str
         Stable identifier, also the ``stable_key`` prefix (``"satispay:..."``).
     required_headers : tuple[str, ...]
-        Headers that must be present; a missing one is a ``422`` before any
-        row is read.
+        Canonical names that must resolve to a column
+        (:func:`traccio.domain.imports.columns.resolve_columns`); one that does
+        not is a ``422`` before any row is read.
     date_column : str
         Header of the value date.
     date_formats : tuple[str, ...]

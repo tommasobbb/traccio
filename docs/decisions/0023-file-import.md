@@ -24,6 +24,18 @@ status column, and — for a source that splits an amount — a `SplitRule`.
 `SATISPAY` and a bare `GENERIC` (date/amount/description CSV) are the two
 profiles; a third source is a new constant, not new parsing code.
 
+The header text in a profile is *canonical*, not literal:
+`domain/imports/columns.resolve_columns` maps the file's real headers onto it
+— an exact match after Unicode/case/whitespace normalisation, then a *unique*
+word-boundary prefix match for whatever is left. Two things forced this: the
+real Satispay export labels its id column `ID (Comunicalo all'Assistenza
+Clienti in caso di problemi)`, not `ID`, and a second exporter of the same
+feed can shift the case or Unicode form of an accented header. An ambiguous
+prefix resolves to nothing and the column is reported missing — a clear `422
+missing_columns` beats guessing the wrong column on financial data. `parse`
+still looks each column up by the short canonical name; the resolver rekeys
+the rows first.
+
 **2. Read xlsx and csv from one path.** `services/imports.decode_rows`
 sniffs the ZIP magic, reads xlsx with `openpyxl` (`read_only`, `data_only`)
 or CSV with the stdlib `csv` (delimiter-sniffed, BOM-tolerant), and yields
@@ -78,7 +90,7 @@ or an amount.
 
 ## Consequences
 
-- New: `domain/imports/` (`models`, `profiles`, `parse`),
+- New: `domain/imports/` (`models`, `profiles`, `parse`, `columns`),
   `services/imports.py`, `api/routers/imports.py` + `api/schemas/imports.py`,
   `imported_stable_keys` / `create_imported_transactions` in
   `db/repositories.py`, `KeyStrategy.IMPORTED`, `Settings.import_max_bytes`.

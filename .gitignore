@@ -28,6 +28,12 @@ xcuserdata/
 # contiene solo dati sintetici del seed, ma non va comunque versionato.
 *.db
 
+# --- file da importare (ADR 0023) ---
+# Export bancari veri (Satispay .xlsx, CSV) usati solo per provare l'import:
+# dati finanziari reali, mai versionati, mai in una fixture (data-safety.md).
+*.xlsx
+*.csv
+
 # --- segreti e ambiente ---
 .env
 .env.*
