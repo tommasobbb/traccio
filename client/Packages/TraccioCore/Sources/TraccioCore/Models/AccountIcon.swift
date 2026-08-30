@@ -13,4 +13,6 @@ public enum AccountIcon: String, Codable, Sendable, CaseIterable {
     case savings
     case cash
     case phone
+    case voucher
+    case investment
 }

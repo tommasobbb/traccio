@@ -399,6 +399,12 @@ class AccountIcon(StrEnum):
         A cash-like account.
     PHONE : str
         A mobile-first account (e.g. a phone-based neobank).
+    VOUCHER : str
+        A meal-voucher / benefit balance (e.g. a Satispay "Buoni Pasto"
+        account created for a file import, ADR 0023).
+    INVESTMENT : str
+        A pass-through account for money moved into investments — there is no
+        ``AccountKind.investment`` (ADR 0020), only an icon to tell one apart.
     """
 
     BANK = "bank"
@@ -407,6 +413,8 @@ class AccountIcon(StrEnum):
     SAVINGS = "savings"
     CASH = "cash"
     PHONE = "phone"
+    VOUCHER = "voucher"
+    INVESTMENT = "investment"
 
 
 class CategoryIcon(StrEnum):
@@ -416,43 +424,101 @@ class CategoryIcon(StrEnum):
     :class:`AccountIcon`, and a separate enum from it for the same reason:
     the two vocabularies are disjoint (a category picker has no use for
     "wallet", an account picker has no use for a dozen food/shopping icons).
-    Covers both :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE`'s
-    roots and its first set of children; a user-created category not covered
-    here picks the closest fit or ``OTHER``.
+    Covers :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE`'s roots
+    and children plus a broad spread a user is likely to reach for when they
+    create their own; a category not covered picks the closest fit or
+    ``OTHER``. Members are grouped below only for the reader — the enum is a
+    flat set, and the client owns the grouping shown in its picker
+    (presentation, ADR 0017).
 
     Attributes
     ----------
-    GROCERIES, DINING, COFFEE, TAKEOUT, TRANSPORT, FUEL, PUBLIC_TRANSPORT,
-    HOUSING, RENT, MAINTENANCE, UTILITIES, HEALTH, SHOPPING, CLOTHING,
-    ELECTRONICS, ENTERTAINMENT, STREAMING, MOVIES, TRAVEL, SUBSCRIPTIONS,
-    FEES, INCOME, OTHER : str
-        One per default root or child category — see
-        :data:`~traccio.domain.categories.DEFAULT_CATEGORY_TREE` for which is
-        which.
+    Food and drink : str
+        ``GROCERIES``, ``DINING``, ``COFFEE``, ``TAKEOUT``, ``BAKERY``,
+        ``BAR``.
+    Transport : str
+        ``TRANSPORT``, ``FUEL``, ``PUBLIC_TRANSPORT``, ``CAR``, ``PARKING``,
+        ``BIKE``, ``TRAIN``.
+    Home : str
+        ``HOUSING``, ``RENT``, ``MAINTENANCE``, ``UTILITIES``, ``FURNITURE``,
+        ``INTERNET``, ``PHONE_BILL``.
+    Health and personal care : str
+        ``HEALTH``, ``PHARMACY``, ``DENTIST``, ``FITNESS``, ``PERSONAL_CARE``.
+    Family : str
+        ``KIDS``, ``PETS``, ``EDUCATION``, ``BOOKS``, ``GIFTS``.
+    Money : str
+        ``FEES``, ``INCOME``, ``SAVINGS``, ``INVESTMENTS``, ``TAXES``,
+        ``INSURANCE``, ``DONATIONS``.
+    Shopping : str
+        ``SHOPPING``, ``CLOTHING``, ``ELECTRONICS``, ``ONLINE_SHOPPING``.
+    Leisure : str
+        ``ENTERTAINMENT``, ``STREAMING``, ``MOVIES``, ``MUSIC``, ``GAMES``,
+        ``SPORTS``, ``HOBBIES``, ``SUBSCRIPTIONS``.
+    Other : str
+        ``TRAVEL``, ``HOTEL``, ``WORK``, ``OTHER``.
     """
 
+    # Food and drink
     GROCERIES = "groceries"
     DINING = "dining"
     COFFEE = "coffee"
     TAKEOUT = "takeout"
+    BAKERY = "bakery"
+    BAR = "bar"
+    # Transport
     TRANSPORT = "transport"
     FUEL = "fuel"
     PUBLIC_TRANSPORT = "public_transport"
+    CAR = "car"
+    PARKING = "parking"
+    BIKE = "bike"
+    TRAIN = "train"
+    # Home
     HOUSING = "housing"
     RENT = "rent"
     MAINTENANCE = "maintenance"
     UTILITIES = "utilities"
+    FURNITURE = "furniture"
+    INTERNET = "internet"
+    PHONE_BILL = "phone_bill"
+    # Health and personal care
     HEALTH = "health"
+    PHARMACY = "pharmacy"
+    DENTIST = "dentist"
+    FITNESS = "fitness"
+    PERSONAL_CARE = "personal_care"
+    # Family
+    KIDS = "kids"
+    PETS = "pets"
+    EDUCATION = "education"
+    BOOKS = "books"
+    GIFTS = "gifts"
+    # Money
+    FEES = "fees"
+    INCOME = "income"
+    SAVINGS = "savings"
+    INVESTMENTS = "investments"
+    TAXES = "taxes"
+    INSURANCE = "insurance"
+    DONATIONS = "donations"
+    # Shopping
     SHOPPING = "shopping"
     CLOTHING = "clothing"
     ELECTRONICS = "electronics"
+    ONLINE_SHOPPING = "online_shopping"
+    # Leisure
     ENTERTAINMENT = "entertainment"
     STREAMING = "streaming"
     MOVIES = "movies"
-    TRAVEL = "travel"
+    MUSIC = "music"
+    GAMES = "games"
+    SPORTS = "sports"
+    HOBBIES = "hobbies"
     SUBSCRIPTIONS = "subscriptions"
-    FEES = "fees"
-    INCOME = "income"
+    # Other
+    TRAVEL = "travel"
+    HOTEL = "hotel"
+    WORK = "work"
     OTHER = "other"
 
 

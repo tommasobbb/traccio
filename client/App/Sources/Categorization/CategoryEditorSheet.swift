@@ -113,22 +113,40 @@ struct CategoryEditorSheet: View {
         }
     }
 
+    /// Sectioned so the ~55 icons stay scannable (a flat 5-column wall of
+    /// tiles is not). The section titles and grouping are a presentation
+    /// fact, defined next to the SF Symbol mapping in `CategoryIcon.pickerSections`.
     private var iconGrid: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
-        return LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(CategoryIcon.allCases, id: \.self) { candidate in
-                Button {
-                    icon = candidate
-                } label: {
-                    IconTile(systemImage: candidate.systemImageName, color: color, diameter: 36)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                                .strokeBorder(Palette.ink, lineWidth: candidate == icon ? 2 : 0)
-                        )
+        return VStack(alignment: .leading, spacing: 14) {
+            ForEach(CategoryIcon.pickerSections, id: \.title) { section in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(section.title)
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.inkSecondary)
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(section.icons, id: \.self) { candidate in
+                            Button {
+                                icon = candidate
+                            } label: {
+                                IconTile(
+                                    systemImage: candidate.systemImageName,
+                                    color: color,
+                                    diameter: 36
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                                        .strokeBorder(
+                                            Palette.ink, lineWidth: candidate == icon ? 2 : 0
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(candidate.rawValue)
+                            .accessibilityAddTraits(candidate == icon ? .isSelected : [])
+                        }
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(candidate.rawValue)
-                .accessibilityAddTraits(candidate == icon ? .isSelected : [])
             }
         }
     }
