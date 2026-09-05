@@ -101,6 +101,7 @@ struct DashboardView: View {
                     Image(systemName: "chevron.right")
                 }
                 .accessibilityLabel("Periodo successivo")
+                .disabled(!model.canGoToNext)
             }
             .buttonStyle(.plain)
             .foregroundStyle(Palette.inkTertiary)

@@ -11,6 +11,16 @@ import TraccioCore
 struct DashboardViewModelTests {
     private static let fixedNow = Date(timeIntervalSince1970: 1_755_000_000)  // 2025-08-12
 
+    /// A UTC instant, for pinning a `CalendarPeriod`'s "now" in a test.
+    private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = day
+        components.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .gregorian).date(from: components) ?? Self.fixedNow
+    }
+
     private static func makeSummary(currency: String = "EUR") -> DashboardSummaryResponse {
         DashboardSummaryResponse(
             currencies: [
@@ -106,14 +116,83 @@ struct DashboardViewModelTests {
 
     @Test func goToNextStepsForwardAndReloads() async throws {
         let client = FakeAPIClient()
-        let period = CalendarPeriod.current(now: Self.fixedNow)
-        let model = DashboardViewModel(client: client, period: period)
+        // Two months before "now", so the next period is still in the past and
+        // `canGoToNext` allows the step.
+        let period = CalendarPeriod.current(now: Self.fixedNow).previous().previous()
+        let model = DashboardViewModel(
+            client: client, period: period, now: { Self.fixedNow }
+        )
 
         await model.goToNext()
 
         #expect(model.period == period.next())
         let requests = await client.receivedDashboardSummaryRequests
         #expect(requests.last?.start == period.next().start)
+    }
+
+    @Test func canGoToNextIsFalseForThePeriodContainingNow() async throws {
+        let model = DashboardViewModel(
+            client: FakeAPIClient(),
+            period: .current(now: Self.fixedNow),
+            now: { Self.fixedNow }
+        )
+
+        #expect(model.canGoToNext == false)
+    }
+
+    @Test func goToNextIsANoOpWhenTheNextPeriodHasNotBegun() async throws {
+        let client = FakeAPIClient()
+        let period = CalendarPeriod.current(now: Self.fixedNow)
+        let model = DashboardViewModel(client: client, period: period, now: { Self.fixedNow })
+
+        await model.goToNext()
+
+        #expect(model.period == period)
+        #expect(await client.receivedDashboardSummaryRequests.isEmpty)
+    }
+
+    @Test func canGoToPreviousFloorsAtTheEarliestMovementWhenNoTrackingStartIsSet() async throws {
+        func modelAt(_ period: CalendarPeriod) async -> DashboardViewModel {
+            let client = FakeAPIClient()
+            await client.setSettings(TrackingStartResponse(trackingStartDate: nil))
+            await client.setTrackingStartSuggestion(
+                TrackingStartSuggestionResponse(
+                    suggestion: nil, constrainingAccountID: nil,
+                    accounts: [
+                        AccountEarliestResponse(
+                            accountID: UUID(), displayName: "TEST CURRENT 01",
+                            // A floor comfortably inside July, away from any
+                            // month boundary, so the assertions don't hinge on
+                            // the test machine's time zone.
+                            earliest: CalendarDate(year: 2025, month: 7, day: 20)
+                        )
+                    ]
+                )
+            )
+            let model = DashboardViewModel(client: client, period: period, now: { Self.fixedNow })
+            await model.load()
+            return model
+        }
+
+        // Viewing July: the previous period (June) is entirely before the
+        // floor, so there is nothing to step back to.
+        let julyModel = await modelAt(CalendarPeriod.current(now: Self.date(2025, 7, 15)))
+        #expect(julyModel.earliestMovement == CalendarDate(year: 2025, month: 7, day: 20).date())
+        #expect(julyModel.canGoToPrevious == false)
+
+        // Viewing August: the previous period (July) still contains the floor.
+        let augustModel = await modelAt(CalendarPeriod.current(now: Self.date(2025, 8, 15)))
+        #expect(augustModel.canGoToPrevious == true)
+    }
+
+    @Test func canGoToPreviousIsTrueWhenNeitherFloorIsKnown() async throws {
+        let model = DashboardViewModel(
+            client: FakeAPIClient(),
+            period: .current(now: Self.fixedNow),
+            now: { Self.fixedNow }
+        )
+
+        #expect(model.canGoToPrevious == true)
     }
 
     // MARK: changeUnit

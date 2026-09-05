@@ -87,6 +87,12 @@ needs the same hand-written `encode(to:)` to emit an explicit `null`.
   fetches the floor on `load()` and disables the ◀ period button when the
   previous period lies entirely before it. Movimenti's `.all` preset is
   relabelled "Dall'inizio" — it still stops at the floor server-side.
+  *(2026-09-05 refinement)*: the ◀ button also falls back to the earliest
+  movement date (`GET /settings/tracking-start/suggestion`'s
+  `accounts[].earliest`, min) when no explicit floor is set, and a new ▶
+  button disable stops paging into a period that has not begun —
+  `CalendarPeriod.isEntirelyAfter(_:)`. The per-period `settings()` round
+  trip moved to a `load()`-only path (`reloadSummary()` handles navigation).
 - A dateless movement (no `booked_at`, no `value_date`) is hidden while a
   floor is set. This matches how every other date bound treats one; the user
   who wants to see them clears the date.

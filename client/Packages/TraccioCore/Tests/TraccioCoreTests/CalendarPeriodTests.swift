@@ -146,4 +146,29 @@ struct CalendarPeriodTests {
                 .granularity == .month
         )
     }
+
+    // MARK: contains / isEntirelyAfter
+
+    @Test func containsIsHalfOpen() {
+        let august = CalendarPeriod.current(
+            unit: .month, calendar: Self.utcCalendar, now: Self.date(2026, 8, 18)
+        )
+
+        #expect(august.contains(Self.date(2026, 8, 1)))  // start is inclusive
+        #expect(august.contains(Self.date(2026, 8, 31, hour: 23)))
+        #expect(!august.contains(Self.date(2026, 9, 1)))  // end is exclusive
+        #expect(!august.contains(Self.date(2026, 7, 31, hour: 23)))
+    }
+
+    @Test func isEntirelyAfterIsTrueOnlyOnceTheWholePeriodPostdates() {
+        let september = CalendarPeriod.current(
+            unit: .month, calendar: Self.utcCalendar, now: Self.date(2026, 9, 15)
+        )
+
+        // A "now" before September starts: the whole month is still ahead.
+        #expect(september.isEntirelyAfter(Self.date(2026, 8, 31, hour: 23)))
+        // A "now" inside September: not entirely after.
+        #expect(!september.isEntirelyAfter(Self.date(2026, 9, 1)))
+        #expect(!september.isEntirelyAfter(Self.date(2026, 9, 30)))
+    }
 }

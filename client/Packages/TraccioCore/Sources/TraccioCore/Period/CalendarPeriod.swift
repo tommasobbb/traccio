@@ -66,6 +66,19 @@ public struct CalendarPeriod: Sendable, Equatable {
         Self.period(containing: end, unit: unit, calendar: calendar)
     }
 
+    /// Whether `date` falls inside this half-open interval (`start` inclusive,
+    /// `end` exclusive).
+    public func contains(_ date: Date) -> Bool {
+        start <= date && date < end
+    }
+
+    /// Whether this whole period lies strictly after `date` — its inclusive
+    /// start is already past `date`, so nothing in it has happened yet. Used
+    /// to stop the dashboard paging into a period that has not begun.
+    public func isEntirelyAfter(_ date: Date) -> Bool {
+        start > date
+    }
+
     /// The `by_bucket` granularity `GET /dashboard/summary` should use for
     /// this period — coarse enough not to overwhelm the trend chart (a year
     /// at daily granularity would be 365 bars), fine enough to stay readable.

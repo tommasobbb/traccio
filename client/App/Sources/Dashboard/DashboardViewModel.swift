@@ -48,17 +48,35 @@ final class DashboardViewModel {
     /// previous period's (possibly differently-sized) series carries no
     /// meaning in a new one.
     private(set) var selectedBucketIndex: Int?
-    /// The user's tracking start date (ADR 0024), refreshed on every `load()`.
-    /// The backend floors every total at it regardless; this is only so the
-    /// period picker can stop the user paging to a period entirely before it,
-    /// which would just show an empty screen. `nil` = no floor.
+    /// The user's tracking start date (ADR 0024), refreshed on every `load()`
+    /// (it can change from Impostazioni while the app runs). The backend
+    /// floors every total at it regardless; this is only so the period picker
+    /// can stop the user paging to a period entirely before it, which would
+    /// just show an empty screen. `nil` = no explicit floor.
     private(set) var trackingStart: CalendarDate?
+    /// The earliest movement date across all accounts, from
+    /// `GET /settings/tracking-start/suggestion` — fetched once, since it only
+    /// moves when a new account is connected (not a `DataFreshness.dashboard`
+    /// event). The backward floor when no explicit `trackingStart` is set:
+    /// there is simply nothing to show before it. `nil` until loaded, or if
+    /// no account has a dated movement.
+    private(set) var earliestMovement: Date?
+    private var didLoadEarliestMovement = false
 
     /// Whether stepping to the previous period would still overlap the
-    /// tracking-start floor. `true` when there is no floor.
+    /// backward floor — the explicit tracking start if set, otherwise the
+    /// earliest movement date. `true` when neither is known.
     var canGoToPrevious: Bool {
-        guard let floor = trackingStart?.date() else { return true }
+        guard let floor = trackingStart?.date() ?? earliestMovement else { return true }
         return period.previous().end > floor
+    }
+
+    /// Whether stepping forward lands on a period that has already begun.
+    /// `false` stops the user paging into empty future months — there is
+    /// nothing there yet, and the tracking-start feature exists precisely to
+    /// bound the window that is worth counting.
+    var canGoToNext: Bool {
+        !period.next().isEntirelyAfter(now())
     }
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
@@ -66,6 +84,9 @@ final class DashboardViewModel {
     /// depends on a protocol and tests inject a fake") — a test can supply a
     /// fake without a network stub.
     private let client: any APIClientProtocol
+    /// Wall clock, injectable so a test can pin "now" rather than depend on
+    /// the real date when checking `canGoToNext`.
+    private let now: () -> Date
 
     /// Create the view model.
     ///
@@ -76,24 +97,52 @@ final class DashboardViewModel {
     ///     pointed at the local dev backend.
     /// period:
     ///     The period to load initially. Defaults to the current month.
-    init(client: any APIClientProtocol = APIClient.current, period: CalendarPeriod = .current()) {
+    /// now:
+    ///     The wall clock. Defaults to `Date.init`; a test injects a fixed
+    ///     date to exercise `canGoToNext`.
+    init(
+        client: any APIClientProtocol = APIClient.current,
+        period: CalendarPeriod = .current(),
+        now: @escaping () -> Date = Date.init
+    ) {
         self.client = client
         self.period = period
+        self.now = now
     }
 
-    /// Fetch the summary for `period` and publish the outcome.
+    /// Reload the summary *and* refresh the period-picker bounds (the
+    /// tracking start and the earliest-movement floor). For the first appear
+    /// and a `DataFreshness.dashboard` bump; period navigation calls
+    /// `reloadSummary()` alone, since the bounds do not depend on which
+    /// period is shown.
+    ///
+    /// The bounds fetches are best-effort — a failure just leaves the picker
+    /// unconstrained, never `.failed`.
+    func load() async {
+        await reloadSummary()
+        // The tracking start can change from Impostazioni between loads.
+        // Best-effort: a failure just leaves the picker unconstrained.
+        if let settings = try? await client.settings() {
+            trackingStart = settings.trackingStartDate
+        }
+        // The earliest-movement floor only moves when an account is
+        // connected — not a .dashboard event — so fetch it once.
+        if !didLoadEarliestMovement {
+            didLoadEarliestMovement = true
+            if let suggestion = try? await client.trackingStartSuggestion() {
+                earliestMovement = suggestion.accounts.compactMap { $0.earliest?.date() }.min()
+            }
+        }
+    }
+
+    /// Fetch the summary for `period` and publish the outcome. Clears
+    /// `selectedCategoryID`/`expandedRootIDs`/`selectedBucketIndex`, since any
+    /// can reload with different data.
     ///
     /// Requests a comparison against `period.previous()` unconditionally —
     /// `ComparisonCard` always has something to show — and sends
-    /// `period.granularity` and the device's own time zone, so `by_bucket`
-    /// is bucketed the way the trend chart actually needs (day/week/month
-    /// per unit) and in the zone the user actually reads dates in, not UTC.
-    ///
-    /// A failure is surfaced as `.failed` without carrying the error into the
-    /// UI — error details may reference the response and must not be shown
-    /// or logged. Also clears `selectedCategoryID`/`expandedRootIDs`/
-    /// `selectedBucketIndex`, since any can reload with different data.
-    func load() async {
+    /// `period.granularity` and the device's own time zone.
+    func reloadSummary() async {
         state = .loading
         selectedCategoryID = .none
         expandedRootIDs = []
@@ -108,26 +157,25 @@ final class DashboardViewModel {
         } catch {
             state = .failed
         }
-        // Best-effort: a failure here just leaves the picker unconstrained.
-        if let settings = try? await client.settings() {
-            trackingStart = settings.trackingStartDate
-        }
     }
 
-    /// Step to the previous period (same unit) and reload.
+    /// Step to the previous period (same unit) and reload the summary.
     ///
-    /// A no-op when the previous period lies entirely before the tracking
-    /// start (ADR 0024) — there is nothing there to show.
+    /// A no-op when the previous period lies entirely before the backward
+    /// floor (`canGoToPrevious`) — there is nothing there to show.
     func goToPrevious() async {
         guard canGoToPrevious else { return }
         period = period.previous()
-        await load()
+        await reloadSummary()
     }
 
-    /// Step to the next period (same unit) and reload.
+    /// Step to the next period (same unit) and reload the summary.
+    ///
+    /// A no-op when the next period has not begun yet (`canGoToNext`).
     func goToNext() async {
+        guard canGoToNext else { return }
         period = period.next()
-        await load()
+        await reloadSummary()
     }
 
     /// Switch the period picker's unit (Mese/Trimestre/Anno) and reload.
@@ -145,7 +193,7 @@ final class DashboardViewModel {
     func changeUnit(_ unit: CalendarPeriod.Unit) async {
         guard unit != period.unit else { return }
         period = .current(unit: unit)
-        await load()
+        await reloadSummary()
     }
 
     /// Select or deselect a category on the donut/breakdown list.
