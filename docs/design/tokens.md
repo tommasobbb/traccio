@@ -180,6 +180,29 @@ a tracked cleanup in `tasks/backlog.md`).
 - Weight scale used across the canvas: regular (400) body text, semibold (600)
   labels and secondary figures, bold (700) headlines and primary amounts.
 
+## Text never wraps
+
+A row, badge, chip, or any label that shares a line with siblings is
+**single-line with an explicit truncation policy** — a second line makes a
+list ragged and is nearly always worse than an ellipsis. Concretely:
+
+- A **fixed-width tag** (`Badge`, `FilterChip`) carries
+  `.lineLimit(1).fixedSize(horizontal: true, vertical: false)` so it keeps its
+  intrinsic width and a flexible sibling truncates instead of it.
+- A **flexible label** in a row (a transaction description, a caption) carries
+  `.lineLimit(1)` and is the element that gives — it truncates with the
+  default tail ellipsis.
+- A **row of tags that can outgrow the width** (Movimenti's filter chips)
+  goes in a `ScrollView(.horizontal, showsIndicators: false)` with
+  `.scrollClipDisabled()`, not an `HStack` that compresses or wraps.
+- A control that toggles into a row (the transfer-pairing checkbox)
+  **replaces** an existing element of the same footprint rather than being
+  inserted beside one — inserting shifts every sibling and forces a wrap.
+
+Multi-line is fine for a standalone paragraph (an `EmptyState` description, a
+card's explanatory sentence) — the rule is about anything laid out in a line
+with other things.
+
 ## Spacing
 
 Named in Swift as `Spacing.<name>` (`App/Sources/DesignSystem/Spacing.swift`,

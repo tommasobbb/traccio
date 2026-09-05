@@ -74,18 +74,7 @@ struct TransactionRow: View {
     var body: some View {
         if let selection {
             Button(action: selection.onToggle) {
-                HStack(spacing: 12) {
-                    Image(
-                        systemName: selection.isSelected ? "checkmark.circle.fill" : "circle"
-                    )
-                    .font(.system(size: 20))
-                    .foregroundStyle(
-                        selection.isSelected
-                            ? Palette.accent
-                            : (selection.isSelectable ? Palette.inkTertiary : Palette.inkQuaternary)
-                    )
-                    rowContent
-                }
+                rowContent
             }
             .buttonStyle(.plain)
             .disabled(!selection.isSelectable && !selection.isSelected)
@@ -114,7 +103,7 @@ struct TransactionRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            IconTile(systemImage: categoryTileIcon, color: categoryTileColor, diameter: 28)
+            leadingTile
             VStack(alignment: .leading, spacing: 3) {
                 Text(transaction.displayDescription ?? transaction.description)
                     .font(Typography.body.weight(.semibold))
@@ -127,14 +116,36 @@ struct TransactionRow: View {
         }
         .padding(14)
         .background(isMuted ? Palette.neutralFill : Palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
                 .strokeBorder(
                     isMuted ? Palette.separator : Palette.separatorSubtle,
                     style: isMuted ? StrokeStyle(lineWidth: 1, dash: [4, 3]) : StrokeStyle(lineWidth: 1)
                 )
         )
+    }
+
+    /// The 28pt leading element: normally the category `IconTile`, but a
+    /// selection checkbox *in its place* while transfer-pairing mode is
+    /// active. Same footprint either way, so entering selection mode does not
+    /// change the row's layout or steal width from the description
+    /// (`docs/design/tokens.md`: never wrap) — unlike the old checkbox, which
+    /// sat outside the card and shifted everything.
+    @ViewBuilder
+    private var leadingTile: some View {
+        if let selection {
+            Image(systemName: selection.isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 22))
+                .foregroundStyle(
+                    selection.isSelected
+                        ? Palette.accent
+                        : (selection.isSelectable ? Palette.inkTertiary : Palette.inkQuaternary)
+                )
+                .frame(width: 28, height: 28)
+        } else {
+            IconTile(systemImage: categoryTileIcon, color: categoryTileColor, diameter: 28)
+        }
     }
 
     /// This row's advance, when it is one and the fetch resolved it.
@@ -269,7 +280,7 @@ struct TransactionRow: View {
                     font: Typography.compactFigure
                 )
                 Text("non conteggiato")
-                    .font(.system(size: 10))
+                    .font(Typography.eyebrow)
                     .foregroundStyle(Palette.inkQuaternary)
             } else {
                 AmountText(

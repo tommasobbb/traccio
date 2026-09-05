@@ -45,6 +45,11 @@ struct Badge: View {
         Text(text.uppercased())
             .font(Typography.eyebrow)
             .foregroundStyle(style.foreground)
+            // Never wrap (`docs/design/tokens.md`): a two-word label like
+            // "IN LAVORAZIONE" keeps its own width and lets a sibling caption
+            // truncate instead of the badge breaking onto a second line.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(style.background)

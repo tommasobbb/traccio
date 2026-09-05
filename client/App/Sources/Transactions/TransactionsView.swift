@@ -197,6 +197,20 @@ struct TransactionsView: View {
     /// Always visible, independent of `model.state` — these are controls, not
     /// content, so a load failure or an empty result doesn't hide them.
     private var filterRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            filterChips
+                .padding(.horizontal, 20)
+        }
+        .scrollClipDisabled()
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    /// The three filter menus in one row. Split out of `filterRow` so the row
+    /// can put them inside a horizontal `ScrollView` — a long account or
+    /// category label then scrolls into view instead of squeezing the other
+    /// chips or wrapping (`docs/design/tokens.md`: never wrap).
+    private var filterChips: some View {
         HStack(spacing: 8) {
             Menu {
                 Button("Tutti i conti") { applyAccountFilter(nil) }
@@ -236,11 +250,7 @@ struct TransactionsView: View {
             } label: {
                 FilterChip(title: periodFilterTitle, isActive: selectedPeriodPreset != .all)
             }
-            Spacer()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
     }
 
     /// The preset last applied via the period chip. Not derived from

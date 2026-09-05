@@ -23,6 +23,11 @@ struct FilterChip: View {
             Text(title)
                 .font(Typography.caption.weight(.semibold))
                 .foregroundStyle(isActive ? Palette.accent : Palette.ink)
+                // Never wrap (`docs/design/tokens.md`): a long active-filter
+                // label ("Abbonamenti e servizi") keeps the chip on one line;
+                // the row it sits in scrolls horizontally instead.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Image(systemName: "chevron.down")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(isActive ? Palette.accent : Palette.inkTertiary)
