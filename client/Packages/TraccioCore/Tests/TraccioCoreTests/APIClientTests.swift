@@ -41,6 +41,17 @@ struct APIClientTests {
         }
         """
 
+    @Test func defaultSessionCarriesFiniteTimeouts() {
+        // A caller that injects no session must not inherit
+        // URLSessionConfiguration's 7-day resource default (backlog task 1d,
+        // ADR 0025) — that is what turns a wedged backend into an endless
+        // spinner.
+        let configuration = APIClient.defaultSession.configuration
+        #expect(configuration.timeoutIntervalForRequest == 30)
+        #expect(configuration.timeoutIntervalForResource == 120)
+        #expect(configuration.waitsForConnectivity == false)
+    }
+
     /// Build an `APIClient` whose session answers every request with `handler`.
     private static func makeClient(
         apiToken: String? = nil,

@@ -10,15 +10,42 @@ import Foundation
 /// plain bearer header, never a bank credential.
 ///
 /// The `URLSession` is injectable so tests can drive the client with a stub
-/// transport (a `URLProtocol`) instead of hitting the network.
+/// transport (a `URLProtocol`) instead of hitting the network; a caller that
+/// does not inject one gets `defaultSession`, which carries explicit timeouts
+/// (see below) rather than `URLSessionConfiguration`'s 7-day resource default.
 public struct APIClient: Sendable {
+    /// Seconds a single request may stall — no bytes moving in either
+    /// direction — before it fails. An idle timeout, reset whenever data
+    /// arrives, so a slow-but-progressing response (a large sync) is fine;
+    /// 30s of total silence is a wedged backend, not slowness.
+    private static let requestTimeout: TimeInterval = 30
+    /// Hard ceiling on a whole request/response including connection setup.
+    /// Generous enough for the one genuinely long call (a first
+    /// `POST /connections/{id}/sync` over years of history), short enough
+    /// that a hung backend surfaces as an error in a couple of minutes
+    /// instead of an indefinite spinner.
+    private static let resourceTimeout: TimeInterval = 120
+
+    /// The session used when a caller injects none: the default
+    /// configuration plus the two timeouts above, and `waitsForConnectivity`
+    /// left off so an offline request fails fast instead of parking until
+    /// `resourceTimeout`. One shared instance — `URLSession` is thread-safe
+    /// and reusing it is the intended usage.
+    public static let defaultSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
+        configuration.waitsForConnectivity = false
+        return URLSession(configuration: configuration)
+    }()
+
     /// Base URL the endpoints are resolved against, e.g. `http://localhost:8000`.
     private let baseURL: URL
     /// Sent as `Authorization: Bearer <apiToken>` on every request when set;
     /// omitted entirely when `nil` (a backend with no `TRACCIO_API_TOKEN`
     /// configured, e.g. local `make run`).
     private let apiToken: String?
-    /// The session used for requests; defaults to `.shared`.
+    /// The session used for requests; defaults to `defaultSession`.
     private let session: URLSession
 
     /// Create a client.
@@ -32,8 +59,8 @@ public struct APIClient: Sendable {
     ///     the type's doc comment.
     /// session:
     ///     Transport to use; inject a stubbed session in tests. Defaults to
-    ///     `URLSession.shared`.
-    public init(baseURL: URL, apiToken: String? = nil, session: URLSession = .shared) {
+    ///     `defaultSession` (explicit timeouts).
+    public init(baseURL: URL, apiToken: String? = nil, session: URLSession = APIClient.defaultSession) {
         self.baseURL = baseURL
         self.apiToken = apiToken
         self.session = session

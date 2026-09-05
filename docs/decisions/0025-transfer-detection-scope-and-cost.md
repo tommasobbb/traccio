@@ -30,9 +30,11 @@ other screen stopped loading too. Three things compounded:
    uvicorn process on Fly `shared-cpu-1x`. That is why the freeze was
    app-wide, not confined to one screen.
 
-The client amplified all of this: an unbounded per-leg fan-out (below), no
-request timeout, and the endpoint fired on every Movimenti load. The last two
-are separate client-side changes, tracked in `tasks/backlog.md`.
+The client amplified all of this: an unbounded per-leg fan-out (below), a
+`URLSession` with `URLSessionConfiguration`'s 7-day resource-timeout default
+so nothing ever gave up, and the endpoint fired on every Movimenti load. The
+fan-out and the timeout are addressed here; splitting the Movimenti load is a
+separate client change tracked in `tasks/backlog.md`.
 
 ## Decision
 
@@ -68,7 +70,15 @@ client's `1 + 2N` fan-out — the previous client fetched every leg with a
 separate `GET /transactions/{id}` in an unbounded task group, so 50
 suggestions meant 100 concurrent requests against the same small pool.
 
-**5. The app engine's connection pool is configurable.**
+**5. The client's default `URLSession` has explicit timeouts.**
+`APIClient.defaultSession` (used whenever a caller injects no session — every
+production path does) sets `timeoutIntervalForRequest = 30` (an idle
+timeout, so a slow-but-progressing sync is unaffected) and
+`timeoutIntervalForResource = 120` (a hard ceiling, generous enough for a
+first years-of-history sync). Without this a wedged backend hung the screen
+on the 7-day default. Tests inject their own stub session and are unaffected.
+
+**6. The app engine's connection pool is configurable.**
 `create_engine` in `db/session.py` now takes `pool_size` / `max_overflow` /
 `pool_pre_ping` from `Settings` (`db_pool_size=5`, `db_max_overflow=10`,
 `db_pool_pre_ping=True` — SQLAlchemy's own defaults, plus pre-ping). This does
