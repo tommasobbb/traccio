@@ -39,6 +39,26 @@ struct AccountsViewModelTests {
         )
     }
 
+    private static func makeConnection(
+        id: UUID = UUID(), institutionLogo: String? = nil
+    ) -> ConnectionResponse {
+        ConnectionResponse(
+            id: id,
+            provider: "enable_banking",
+            institutionName: "TEST BANK 01",
+            institutionLogo: institutionLogo,
+            status: .active,
+            consentState: .active,
+            daysUntilExpiry: 60,
+            expiresAt: Date(timeIntervalSince1970: 1_760_000_000),
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000),
+            lastSyncedAt: nil,
+            backgroundSyncEnabled: false,
+            syncBudgetRemaining: nil,
+            nextSyncAt: nil
+        )
+    }
+
     @Test func loadPublishesAccountsAlongsideConnections() async throws {
         let client = FakeAPIClient()
         await client.setAccounts([Self.makeAccount()])
@@ -51,6 +71,47 @@ struct AccountsViewModelTests {
             return
         }
         #expect(model.accounts.map(\.id) == [Self.accountID])
+    }
+
+    @Test func loadBackfillsLogosOnceWhenAConnectionIsMissingOne() async throws {
+        let client = FakeAPIClient()
+        await client.setConnectionsToReturn([Self.makeConnection(institutionLogo: nil)])
+        await client.setBackfillConnectionLogosResult(BackfillLogosResponse(updated: 1))
+        let model = AccountsViewModel(client: client)
+
+        await model.load()
+        await model.load()
+
+        // Backfill is attempted exactly once, and a non-zero result triggers
+        // one extra connections re-fetch to pick up the filled logo.
+        #expect(await client.backfillConnectionLogosCallCount == 1)
+        #expect(await client.connectionsFetchCount == 3)  // load, re-fetch, load
+    }
+
+    @Test func loadDoesNotBackfillWhenEveryConnectionHasALogo() async throws {
+        let client = FakeAPIClient()
+        await client.setConnectionsToReturn([
+            Self.makeConnection(institutionLogo: "https://logos.example.test/tb01/")
+        ])
+        let model = AccountsViewModel(client: client)
+
+        await model.load()
+
+        #expect(await client.backfillConnectionLogosCallCount == 0)
+    }
+
+    @Test func loadSurvivesABackfillFailure() async throws {
+        let client = FakeAPIClient()
+        await client.setConnectionsToReturn([Self.makeConnection(institutionLogo: nil)])
+        await client.setBackfillConnectionLogosError(FakeAPIError())
+        let model = AccountsViewModel(client: client)
+
+        await model.load()
+
+        guard case .loaded = model.state else {
+            Issue.record("a backfill failure must not fail the screen")
+            return
+        }
     }
 
     @Test func renameAccountReplacesTheAccountInPlaceWithTheServerResult() async throws {

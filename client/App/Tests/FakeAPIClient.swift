@@ -100,6 +100,7 @@ actor FakeAPIClient: APIClientProtocol {
     var reimbursementsError: Error?
     var deleteReimbursementError: Error?
     var connectionsToReturn: [ConnectionResponse] = []
+    private(set) var connectionsFetchCount = 0
     var institutionsToReturn: [InstitutionResponse] = []
     var institutionsError: Error?
     var startConnectionToReturn = StartConnectionResponse(
@@ -110,6 +111,9 @@ actor FakeAPIClient: APIClientProtocol {
     var reauthorizeConnectionToReturn = StartConnectionResponse(
         connectionID: UUID(), authorizationURL: "https://sca.example.test/go"
     )
+    var backfillConnectionLogosToReturn = BackfillLogosResponse(updated: 0)
+    var backfillConnectionLogosError: Error?
+    private(set) var backfillConnectionLogosCallCount = 0
     var transferSuggestionsToReturn: [TransferSuggestionResponse] = []
     var transferSuggestionsError: Error?
     private(set) var transferSuggestionsFetchCount = 0
@@ -289,6 +293,18 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setAccountsError(_ error: Error) {
         accountsError = error
+    }
+
+    func setConnectionsToReturn(_ connections: [ConnectionResponse]) {
+        connectionsToReturn = connections
+    }
+
+    func setBackfillConnectionLogosResult(_ result: BackfillLogosResponse) {
+        backfillConnectionLogosToReturn = result
+    }
+
+    func setBackfillConnectionLogosError(_ error: Error) {
+        backfillConnectionLogosError = error
     }
 
     func setRenameAccountResult(_ account: AccountResponse) {
@@ -934,7 +950,8 @@ actor FakeAPIClient: APIClientProtocol {
     }
 
     func connections() async throws -> [ConnectionResponse] {
-        connectionsToReturn
+        connectionsFetchCount += 1
+        return connectionsToReturn
     }
 
     func institutions(country: String) async throws -> [InstitutionResponse] {
@@ -959,6 +976,12 @@ actor FakeAPIClient: APIClientProtocol {
 
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse {
         reauthorizeConnectionToReturn
+    }
+
+    func backfillConnectionLogos() async throws -> BackfillLogosResponse {
+        backfillConnectionLogosCallCount += 1
+        if let backfillConnectionLogosError { throw backfillConnectionLogosError }
+        return backfillConnectionLogosToReturn
     }
 
     func transferSuggestions() async throws -> [TransferSuggestionResponse] {

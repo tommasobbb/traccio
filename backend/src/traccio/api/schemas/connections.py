@@ -259,3 +259,17 @@ class ConnectionsResponse(BaseModel):
     """
 
     connections: list[ConnectionResponse]
+
+
+class BackfillLogosResponse(BaseModel):
+    """Result of ``POST /connections/backfill-logos``.
+
+    Attributes
+    ----------
+    updated : int
+        How many connections gained an ``institution_logo`` this call. ``0``
+        when every connection already had one (the endpoint is idempotent) or
+        none could be matched to a provider institution.
+    """
+
+    updated: int

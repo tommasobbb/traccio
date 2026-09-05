@@ -101,6 +101,10 @@ final class AccountsViewModel {
     /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
     /// inject a fake.
     private let client: any APIClientProtocol
+    /// Set once `backfillLogosIfNeeded(_:)` has run, so the one-time
+    /// provider-backed logo backfill is attempted at most once per launch —
+    /// not on every `load()` (pull-to-refresh, post-sync reload).
+    private var didAttemptLogoBackfill = false
 
     /// Create the view model.
     ///
@@ -126,6 +130,7 @@ final class AccountsViewModel {
         do {
             let connections = try await client.connections()
             state = .loaded(connections)
+            await backfillLogosIfNeeded(connections)
         } catch {
             state = .failed
             return
@@ -134,6 +139,29 @@ final class AccountsViewModel {
         if let fetchedAccounts = try? await accountsResult {
             accounts = fetchedAccounts
         }
+    }
+
+    /// One-time, best-effort: if any connection still has no institution logo
+    /// (authorized before `institution_logo` was persisted), ask the backend
+    /// to backfill it from the provider, and re-publish the connections if it
+    /// filled any. Silent on failure — a lettermark is a fine fallback, so
+    /// this must never turn into `.failed`.
+    ///
+    /// Parameters
+    /// ----------
+    /// connections:
+    ///     The connections just loaded, checked for a missing logo.
+    private func backfillLogosIfNeeded(_ connections: [ConnectionResponse]) async {
+        guard !didAttemptLogoBackfill,
+            connections.contains(where: { $0.institutionLogo == nil })
+        else { return }
+        didAttemptLogoBackfill = true
+
+        guard let result = try? await client.backfillConnectionLogos(),
+            result.updated > 0,
+            let refreshed = try? await client.connections()
+        else { return }
+        state = .loaded(refreshed)
     }
 
     /// Sync one connection's accounts and transactions with the bank.

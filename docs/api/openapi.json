@@ -398,6 +398,20 @@
         "title": "AssignTransactionRequest",
         "type": "object"
       },
+      "BackfillLogosResponse": {
+        "description": "Result of ``POST /connections/backfill-logos``.\n\nAttributes\n----------\nupdated : int\n    How many connections gained an ``institution_logo`` this call. ``0``\n    when every connection already had one (the endpoint is idempotent) or\n    none could be matched to a provider institution.",
+        "properties": {
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "updated"
+        ],
+        "title": "BackfillLogosResponse",
+        "type": "object"
+      },
       "BucketGranularity": {
         "description": "How ``GET /dashboard/summary``'s ``by_bucket`` groups transactions in time.\n\nBucketing happens in the request's local timezone (``domain/dashboard.py``'s\n``tz`` parameter), not UTC \u2014 at ``MONTH`` granularity in particular, a\nUTC-bucketed month can visibly misplace the first and last day of a local\nmonth.\n\nAttributes\n----------\nDAY : str\n    One bucket per calendar day.\nWEEK : str\n    One bucket per ISO week, starting Monday.\nMONTH : str\n    One bucket per calendar month.",
         "enum": [
@@ -4046,6 +4060,53 @@
           }
         },
         "summary": "Start Connection"
+      }
+    },
+    "/connections/backfill-logos": {
+      "post": {
+        "description": "Fill in ``institution_logo`` for connections that predate it.\n\n``institution_logo`` is written only when a connection is first created\n(``POST /connections``); connections authorized before that column existed\n(migration ``e5f6a7b8c9d0``) carry ``NULL`` and show a lettermark in the\nclient. This looks each one up in the provider's institution list for its\nstored ``country``, matches by ``institution_name``, and writes the logo\nURL the provider reports.\n\nIdempotent and safe to call repeatedly: a connection that already has a\nlogo, has no stored ``country``, or matches no provider institution is\nleft untouched. One provider lookup per distinct country, not per\nconnection.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose connections to backfill.\nprovider : BankProvider\n    The bank adapter (Enable Banking).\n\nReturns\n-------\nBackfillLogosResponse\n    How many connections gained a logo this call.\n\nRaises\n------\nHTTPException\n    502 if a provider institution lookup fails.",
+        "operationId": "backfill_connection_logos_connections_backfill_logos_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillLogosResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Backfill Connection Logos"
       }
     },
     "/connections/callback": {

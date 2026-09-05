@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_user_id, get_bank_provider, get_token_cipher_dep
 from traccio.api.schemas.connections import (
+    BackfillLogosResponse,
     ConnectionResponse,
     ConnectionsResponse,
     InstitutionResponse,
@@ -48,8 +49,10 @@ from traccio.db.repositories import (
     find_pending_connection_id,
     get_connection,
     list_connections,
+    list_connections_without_logo,
     oldest_recent_sync_run_started_at,
     set_connection_auth_state,
+    set_connection_logo,
 )
 from traccio.db.session import get_session
 from traccio.domain.consent import consent_state as derive_consent_state
@@ -480,3 +483,74 @@ def reauthorize_connection(
     return StartConnectionResponse(
         connection_id=connection_id, authorization_url=start.authorization_url
     )
+
+
+@router.post("/connections/backfill-logos", response_model=BackfillLogosResponse)
+def backfill_connection_logos(
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+    provider: Annotated[BankProvider, Depends(get_bank_provider)],
+) -> BackfillLogosResponse:
+    """Fill in ``institution_logo`` for connections that predate it.
+
+    ``institution_logo`` is written only when a connection is first created
+    (``POST /connections``); connections authorized before that column existed
+    (migration ``e5f6a7b8c9d0``) carry ``NULL`` and show a lettermark in the
+    client. This looks each one up in the provider's institution list for its
+    stored ``country``, matches by ``institution_name``, and writes the logo
+    URL the provider reports.
+
+    Idempotent and safe to call repeatedly: a connection that already has a
+    logo, has no stored ``country``, or matches no provider institution is
+    left untouched. One provider lookup per distinct country, not per
+    connection.
+
+    Parameters
+    ----------
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user whose connections to backfill.
+    provider : BankProvider
+        The bank adapter (Enable Banking).
+
+    Returns
+    -------
+    BackfillLogosResponse
+        How many connections gained a logo this call.
+
+    Raises
+    ------
+    HTTPException
+        502 if a provider institution lookup fails.
+    """
+    pending = list_connections_without_logo(session, user_id)
+    logos_by_country: dict[str, dict[str, str]] = {}
+    updated = 0
+    for connection in pending:
+        country = connection.country
+        if country is None:
+            continue
+        if country not in logos_by_country:
+            try:
+                institutions = provider.list_institutions(country=country)
+            except ProviderError as exc:
+                raise HTTPException(
+                    status_code=502, detail="provider institution lookup failed"
+                ) from exc
+            logos_by_country[country] = {
+                institution.name: institution.logo
+                for institution in institutions
+                if institution.logo is not None
+            }
+        logo = logos_by_country[country].get(connection.institution_name)
+        if logo is None:
+            continue
+        set_connection_logo(
+            session, user_id=user_id, connection_id=connection.id, logo=logo
+        )
+        updated += 1
+
+    session.commit()
+    logger.info("connections.backfill_logos", pending=len(pending), updated=updated)
+    return BackfillLogosResponse(updated=updated)

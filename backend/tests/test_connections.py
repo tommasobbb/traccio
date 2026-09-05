@@ -611,3 +611,112 @@ def test_reauthorize_without_a_stored_country_is_refused() -> None:
 
     assert response.status_code == 409
     assert response.json()["detail"] == "country_unknown"
+
+
+def _seed_connection(
+    engine: Engine,
+    *,
+    user_id: UUID,
+    institution_name: str,
+    country: str | None,
+    institution_logo: str | None = None,
+) -> UUID:
+    """Insert one active connection row and return its id."""
+    connection_id = uuid4()
+    with Session(engine) as session:
+        session.add(
+            ConnectionRow(
+                id=connection_id,
+                user_id=user_id,
+                provider="enable_banking",
+                institution_name=institution_name,
+                institution_logo=institution_logo,
+                country=country,
+                status=ConnectionStatus.ACTIVE,
+                expires_at=datetime(2027, 1, 1, tzinfo=UTC),
+                created_at=datetime(2026, 1, 1, tzinfo=UTC),
+                encrypted_credentials=None,
+                auth_state=None,
+            )
+        )
+        session.commit()
+    return connection_id
+
+
+def _connection(engine: Engine, connection_id: UUID) -> ConnectionRow:
+    with Session(engine) as session:
+        row = session.get(ConnectionRow, connection_id)
+        assert row is not None
+        return row
+
+
+def test_backfill_logos_fills_a_connection_missing_one_and_is_idempotent() -> None:
+    engine = _sqlite_engine()
+    connection_id = _seed_connection(
+        engine, user_id=get_settings().dev_user_id, institution_name="Test Bank 01", country="IT"
+    )
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    first = client.post("/connections/backfill-logos")
+    assert first.status_code == 200
+    assert first.json() == {"updated": 1}
+    assert (
+        _connection(engine, connection_id).institution_logo
+        == "https://logos.example.test/it/tb01/"
+    )
+
+    # A second call changes nothing — the connection already has its logo.
+    assert client.post("/connections/backfill-logos").json() == {"updated": 0}
+
+
+def test_backfill_logos_skips_a_connection_with_no_stored_country() -> None:
+    engine = _sqlite_engine()
+    connection_id = _seed_connection(
+        engine, user_id=get_settings().dev_user_id, institution_name="Test Bank 01", country=None
+    )
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    assert client.post("/connections/backfill-logos").json() == {"updated": 0}
+    assert _connection(engine, connection_id).institution_logo is None
+
+
+def test_backfill_logos_leaves_an_unmatched_institution_alone() -> None:
+    engine = _sqlite_engine()
+    # "Test Bank 02" exists in the provider list but with logo=None; the other
+    # name matches no institution at all. Neither can be filled.
+    logoless = _seed_connection(
+        engine, user_id=get_settings().dev_user_id, institution_name="Test Bank 02", country="IT"
+    )
+    unknown = _seed_connection(
+        engine, user_id=get_settings().dev_user_id, institution_name="NO SUCH BANK", country="IT"
+    )
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    assert client.post("/connections/backfill-logos").json() == {"updated": 0}
+    assert _connection(engine, logoless).institution_logo is None
+    assert _connection(engine, unknown).institution_logo is None
+
+
+def test_backfill_logos_wraps_a_provider_error_as_502() -> None:
+    engine = _sqlite_engine()
+    _seed_connection(
+        engine, user_id=get_settings().dev_user_id, institution_name="Test Bank 01", country="IT"
+    )
+    client = _client(
+        engine,
+        TokenCipher(Fernet.generate_key().decode()),
+        provider=FakeProvider(institutions_error=True),
+    )
+
+    assert client.post("/connections/backfill-logos").status_code == 502
+
+
+def test_backfill_logos_excludes_other_users() -> None:
+    engine = _sqlite_engine()
+    stranger_connection = _seed_connection(
+        engine, user_id=uuid4(), institution_name="Test Bank 01", country="IT"
+    )
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    assert client.post("/connections/backfill-logos").json() == {"updated": 0}
+    assert _connection(engine, stranger_connection).institution_logo is None

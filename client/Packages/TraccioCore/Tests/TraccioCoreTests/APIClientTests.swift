@@ -1449,6 +1449,19 @@ struct APIClientTests {
         #expect(result.authorizationURL == "https://sca.example/go")
     }
 
+    @Test func backfillConnectionLogosPostsAndDecodesTheCount() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/connections/backfill-logos")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{ "updated": 2 }"#.utf8))
+        }
+
+        #expect(try await client.backfillConnectionLogos().updated == 2)
+    }
+
     @Test func startConnectionPostsTheInstitutionCountryAndLogoAsSnakeCaseJSON() async throws {
         let client = Self.makeClient { request in
             #expect(request.httpMethod == "POST")

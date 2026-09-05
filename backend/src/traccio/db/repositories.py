@@ -737,6 +737,61 @@ def list_connections(session: Session, user_id: UUID) -> list[Connection]:
     return [row_to_connection(row) for row in rows]
 
 
+def list_connections_without_logo(session: Session, user_id: UUID) -> list[Connection]:
+    """Return the user's connections that carry no ``institution_logo`` yet.
+
+    Scoped by ``user_id``. For the one-time logo backfill: connections created
+    before ``institution_logo`` was persisted (migration ``e5f6a7b8c9d0``)
+    have ``NULL`` there and fall back to a lettermark in the client. Ordered
+    oldest first, matching :func:`list_connections`.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose connections to return; the query is scoped to it.
+
+    Returns
+    -------
+    list[Connection]
+        The connections with no logo (empty if none).
+    """
+    rows = session.scalars(
+        select(ConnectionRow)
+        .where(ConnectionRow.user_id == user_id, ConnectionRow.institution_logo.is_(None))
+        .order_by(ConnectionRow.created_at)
+    ).all()
+    return [row_to_connection(row) for row in rows]
+
+
+def set_connection_logo(
+    session: Session, *, user_id: UUID, connection_id: UUID, logo: str
+) -> None:
+    """Persist an institution logo URL on one connection.
+
+    Scoped by ``user_id`` — the ``WHERE`` combines it with ``connection_id``,
+    so another user's row is never touched. A no-op if the id is unknown or
+    not the caller's. The caller commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the connection; the update is scoped to it.
+    connection_id : UUID
+        The connection to update.
+    logo : str
+        The logo URL to store.
+    """
+    session.execute(
+        update(ConnectionRow)
+        .where(ConnectionRow.id == connection_id, ConnectionRow.user_id == user_id)
+        .values(institution_logo=logo)
+    )
+
+
 def list_all_transactions(
     session: Session, user_id: UUID, *, since: date | None = None
 ) -> list[Transaction]:

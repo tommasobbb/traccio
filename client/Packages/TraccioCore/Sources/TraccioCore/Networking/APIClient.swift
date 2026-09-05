@@ -950,6 +950,19 @@ public struct APIClient: Sendable {
         try await post("connections/\(connectionID.uuidString)/reauthorize")
     }
 
+    /// Backfill missing institution logos on the caller's connections.
+    ///
+    /// Mirrors `POST /connections/backfill-logos`. Idempotent — a connection
+    /// that already has a logo, has no stored country, or matches no provider
+    /// institution is left untouched.
+    ///
+    /// Returns
+    /// -------
+    /// How many connections gained a logo.
+    public func backfillConnectionLogos() async throws -> BackfillLogosResponse {
+        try await post("connections/backfill-logos")
+    }
+
     /// Suggest transfers among the caller's transactions.
     ///
     /// Mirrors `GET /transfers/suggestions`. Detection only *suggests* — see

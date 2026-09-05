@@ -77,6 +77,7 @@ public protocol APIClientProtocol: Sendable {
     ) async throws -> StartConnectionResponse
     func syncConnection(connectionID: UUID) async throws -> SyncResponse
     func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
+    func backfillConnectionLogos() async throws -> BackfillLogosResponse
     func transferSuggestions() async throws -> [TransferSuggestionResponse]
     func transfers() async throws -> [TransferResponse]
     func confirmTransfer(
