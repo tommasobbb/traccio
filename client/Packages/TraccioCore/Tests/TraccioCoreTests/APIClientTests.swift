@@ -1475,7 +1475,20 @@ struct APIClientTests {
         _ = try await client.startConnection(institution: "TEST BANK 01", country: "IT", logo: nil)
     }
 
-    /// A representative `GET /transfers/suggestions` envelope: one suggestion.
+    /// A `TransactionResponse` object as embedded in a suggestion's legs.
+    private static func transferLeg(id: String, amount: Int) -> String {
+        """
+        { "id": "\(id)", "account_id": "99999999-9999-9999-9999-999999999999",
+          "amount": \(amount), "effective_amount": \(amount), "currency": "EUR",
+          "booked_at": "2026-08-20T09:30:00+00:00", "value_date": null,
+          "description": "TEST MERCHANT 01", "display_description": null,
+          "status": "booked", "role": "personal", "suggested_category_id": null,
+          "confirmed_category_id": null, "effective_category_id": null, "event_id": null }
+        """
+    }
+
+    /// A representative `GET /transfers/suggestions` envelope: one suggestion
+    /// with both legs embedded.
     private static let transferSuggestionsEnvelope = """
         { "suggestions": [
           {
@@ -1486,7 +1499,9 @@ struct APIClientTests {
             "outgoing_amount": -25000,
             "incoming_amount": 25000,
             "amount_delta": 0,
-            "day_gap": 0
+            "day_gap": 0,
+            "outgoing": \(Self.transferLeg(id: "11111111-1111-1111-1111-111111111111", amount: -25000)),
+            "incoming": \(Self.transferLeg(id: "22222222-2222-2222-2222-222222222222", amount: 25000))
           }
         ] }
         """

@@ -1,11 +1,11 @@
 import Foundation
 
-/// One suggested transfer, with both legs resolved to their
-/// `TransactionResponse` — what `TransfersView` actually renders.
+/// One suggested transfer, flattened for the view: the suggestion plus its
+/// two legs lifted out of it, and a stable `id` for `ForEach`.
 ///
-/// `TransferSuggestionResponse` alone carries no description, date, or
-/// account, so a screen needs both legs' full transactions to show anything
-/// meaningful (`docs/api/openapi.json`'s `TransferSuggestionResponse` schema).
+/// `TransferSuggestionResponse` already embeds both legs (`outgoing` /
+/// `incoming`); this type just gives `TransfersView` an `Identifiable` value
+/// keyed on the leg-id pair (a suggestion carries no id of its own).
 public struct TransferSuggestionPair: Identifiable, Equatable, Sendable {
     public let suggestion: TransferSuggestionResponse
     public let outgoing: TransactionResponse
@@ -25,37 +25,30 @@ public struct TransferSuggestionPair: Identifiable, Equatable, Sendable {
 }
 
 extension TraccioCore {
-    /// Resolve each suggestion's two legs against a pool of transactions.
+    /// Flatten each suggestion into a `TransferSuggestionPair`.
     ///
-    /// Pure and order-preserving: does not sort — `suggestions` is expected
-    /// in the order `GET /transfers/suggestions` returns (most confident
-    /// first) — it only attaches each suggestion's legs. A suggestion whose
-    /// legs are not both present in `transactions` is **dropped** rather than
-    /// rendered half-empty, mirroring the best-effort posture
-    /// `TransactionsViewModel.categoryNames` already takes for a failed
-    /// lookup.
+    /// Pure and order-preserving: `suggestions` is expected in the order
+    /// `GET /transfers/suggestions` returns (most confident first), and the
+    /// legs come straight off each `TransferSuggestionResponse` — the
+    /// backend embeds them, so nothing can fail to resolve here.
     ///
     /// Parameters
     /// ----------
     /// suggestions:
     ///     Suggestions in display order.
-    /// transactions:
-    ///     The pool to resolve legs against — need not be exhaustive; only
-    ///     ids matching a suggestion's legs matter.
     ///
     /// Returns
     /// -------
-    /// One pair per suggestion whose legs both resolved, in input order.
+    /// One pair per suggestion, in input order.
     public static func pairSuggestions(
-        _ suggestions: [TransferSuggestionResponse],
-        transactions: [TransactionResponse]
+        _ suggestions: [TransferSuggestionResponse]
     ) -> [TransferSuggestionPair] {
-        let transactionsByID = Dictionary(uniqueKeysWithValues: transactions.map { ($0.id, $0) })
-        return suggestions.compactMap { suggestion in
-            guard let outgoing = transactionsByID[suggestion.outgoingTransactionID],
-                let incoming = transactionsByID[suggestion.incomingTransactionID]
-            else { return nil }
-            return TransferSuggestionPair(suggestion: suggestion, outgoing: outgoing, incoming: incoming)
+        suggestions.map { suggestion in
+            TransferSuggestionPair(
+                suggestion: suggestion,
+                outgoing: suggestion.outgoing,
+                incoming: suggestion.incoming
+            )
         }
     }
 }

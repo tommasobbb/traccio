@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from traccio.api.schemas.transactions import TransactionResponse
 from traccio.domain.enums import TransferKind
 from traccio.domain.models import Transfer
 from traccio.services.transfers import TransferSuggestion
@@ -47,6 +48,12 @@ class TransferSuggestionResponse(BaseModel):
         non-zero value is a fee or rounding.
     day_gap : int
         Whole days between the legs' effective dates (``>= 0``).
+    outgoing : TransactionResponse
+        The full outgoing leg, the same projection ``GET /transactions``
+        returns. Embedded so a client can render a suggestion (description,
+        date, account) without a follow-up request per leg.
+    incoming : TransactionResponse
+        The full incoming leg, likewise embedded.
     """
 
     kind: TransferKind
@@ -57,15 +64,26 @@ class TransferSuggestionResponse(BaseModel):
     incoming_amount: int
     amount_delta: int
     day_gap: int
+    outgoing: TransactionResponse
+    incoming: TransactionResponse
 
     @classmethod
-    def from_domain(cls, suggestion: TransferSuggestion) -> "TransferSuggestionResponse":
+    def from_domain(
+        cls,
+        suggestion: TransferSuggestion,
+        *,
+        outgoing: TransactionResponse,
+        incoming: TransactionResponse,
+    ) -> "TransferSuggestionResponse":
         """Project a :class:`~traccio.services.transfers.TransferSuggestion`.
 
         Parameters
         ----------
         suggestion : TransferSuggestion
             The detected suggestion to project.
+        outgoing, incoming : TransactionResponse
+            The two legs, already projected by the caller (which holds the
+            transaction pool detection ran over), embedded into the response.
 
         Returns
         -------
@@ -81,6 +99,8 @@ class TransferSuggestionResponse(BaseModel):
             incoming_amount=suggestion.incoming_amount,
             amount_delta=suggestion.amount_delta,
             day_gap=suggestion.day_gap,
+            outgoing=outgoing,
+            incoming=incoming,
         )
 
 

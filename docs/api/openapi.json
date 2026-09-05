@@ -2618,7 +2618,7 @@
         "type": "object"
       },
       "TransferSuggestionResponse": {
-        "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\nkind : TransferKind\n    ``two_sided`` (opposite-sign pair) or ``funded_payment`` (two outflows,\n    the ``incoming`` leg on a wallet is the real purchase).\noutgoing_transaction_id : UUID\n    Two-sided: the negative leg. Funded payment: the funding leg.\nincoming_transaction_id : UUID\n    Two-sided: the positive leg. Funded payment: the funded (wallet) leg.\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative for both kinds).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive for a two-sided\n    transfer, negative for a funded payment).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).",
+        "description": "One suggested transfer as returned to the client.\n\nMirrors :class:`~traccio.services.transfers.TransferSuggestion`. Amounts are\ninteger minor units (cents); the two legs share ``currency``.\n\nAttributes\n----------\nkind : TransferKind\n    ``two_sided`` (opposite-sign pair) or ``funded_payment`` (two outflows,\n    the ``incoming`` leg on a wallet is the real purchase).\noutgoing_transaction_id : UUID\n    Two-sided: the negative leg. Funded payment: the funding leg.\nincoming_transaction_id : UUID\n    Two-sided: the positive leg. Funded payment: the funded (wallet) leg.\ncurrency : str\n    ISO 4217 code shared by both legs.\noutgoing_amount : int\n    The outgoing leg's amount in minor units (negative for both kinds).\nincoming_amount : int\n    The incoming leg's amount in minor units (positive for a two-sided\n    transfer, negative for a funded payment).\namount_delta : int\n    Absolute difference between the legs' magnitudes (``>= 0``); a small\n    non-zero value is a fee or rounding.\nday_gap : int\n    Whole days between the legs' effective dates (``>= 0``).\noutgoing : TransactionResponse\n    The full outgoing leg, the same projection ``GET /transactions``\n    returns. Embedded so a client can render a suggestion (description,\n    date, account) without a follow-up request per leg.\nincoming : TransactionResponse\n    The full incoming leg, likewise embedded.",
         "properties": {
           "amount_delta": {
             "title": "Amount Delta",
@@ -2632,6 +2632,9 @@
             "title": "Day Gap",
             "type": "integer"
           },
+          "incoming": {
+            "$ref": "#/components/schemas/TransactionResponse"
+          },
           "incoming_amount": {
             "title": "Incoming Amount",
             "type": "integer"
@@ -2643,6 +2646,9 @@
           },
           "kind": {
             "$ref": "#/components/schemas/TransferKind"
+          },
+          "outgoing": {
+            "$ref": "#/components/schemas/TransactionResponse"
           },
           "outgoing_amount": {
             "title": "Outgoing Amount",
@@ -2662,7 +2668,9 @@
           "outgoing_amount",
           "incoming_amount",
           "amount_delta",
-          "day_gap"
+          "day_gap",
+          "outgoing",
+          "incoming"
         ],
         "title": "TransferSuggestionResponse",
         "type": "object"
@@ -6136,7 +6144,7 @@
     },
     "/transfers/suggestions": {
       "get": {
-        "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). Pairs the user has rejected are\nexcluded via stored dismissals, so a rejected suggestion does not reappear.\nScoped to the current user; the tolerance and window come from settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
+        "description": "Suggest transfers among the current user's transactions.\n\nComputed on demand and **read-only**: detection only proposes pairs, it never\nlinks them (``docs/architecture.md``). Pairs the user has rejected are\nexcluded via stored dismissals, so a rejected suggestion does not reappear.\nScoped to the current user; the tolerance and window come from settings.\n\nDetection runs from the user's ``tracking_start_date`` (ADR 0024) forward,\nnot over full history: the pre-cutoff months carry data from only whichever\naccounts were connected first, so pairing there is unreliable, and scanning\nthem made the pure detector's cost grow with total history (ADR 0025).\n\nParameters\n----------\nsession : Session\n    Request-scoped database session (see :func:`get_session`).\nuser_id : UUID\n    The user whose transactions to search.\ntracking_start : date or None\n    The user's tracking-start floor; detection ignores rows before it.\n\nReturns\n-------\nTransferSuggestionsResponse\n    The suggested transfers, most confident first (empty if none).",
         "operationId": "transfer_suggestions_transfers_suggestions_get",
         "parameters": [
           {

@@ -2,20 +2,16 @@ import Foundation
 import Observation
 import TraccioCore
 
-/// Drives `TransfersView`: loads suggested transfer pairs (resolving both
-/// legs' full `TransactionResponse`), and confirms or rejects them.
+/// Drives `TransfersView`: loads suggested transfer pairs and confirms or
+/// rejects them.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
 /// (`client/CLAUDE.md`). Nothing here logs or prints a transaction: legs
 /// carry amounts and raw bank descriptions, both sensitive
 /// (`.claude/rules/data-safety.md`).
 ///
-/// `TransferSuggestionResponse` carries only ids, currency, and the two
-/// amounts — no description, date, or account. Resolving those needs each
-/// leg's full `TransactionResponse`, fetched here by id
-/// (`APIClientProtocol.transaction(id:)`) rather than resolved against
-/// `TransactionsViewModel`'s loaded page, which only holds the first page —
-/// a real suggestion outside it would otherwise silently vanish.
+/// `GET /transfers/suggestions` embeds both legs' full `TransactionResponse`
+/// in each suggestion, so `load()` is a single request — no per-leg fan-out.
 @MainActor
 @Observable
 final class TransfersViewModel {
@@ -88,14 +84,13 @@ final class TransfersViewModel {
         self.onDashboardStale = onDashboardStale
     }
 
-    /// Fetch suggestions, resolve both legs of each, and publish the result.
+    /// Fetch the suggestions (legs embedded) and publish the result.
     ///
     /// A failure to list suggestions is surfaced as `.failed`. A failure to
     /// fetch `accounts()` is best-effort and does not fail the screen — see
     /// `accountsByID`.
     func load() async {
         state = .loading
-        let client = self.client
 
         let suggestions: [TransferSuggestionResponse]
         do {
@@ -104,20 +99,7 @@ final class TransfersViewModel {
             state = .failed
             return
         }
-
-        let legIDs = Set(suggestions.flatMap { [$0.outgoingTransactionID, $0.incomingTransactionID] })
-        var legsByID: [UUID: TransactionResponse] = [:]
-        await withTaskGroup(of: (UUID, TransactionResponse?).self) { group in
-            for id in legIDs {
-                group.addTask {
-                    (id, try? await client.transaction(id: id))
-                }
-            }
-            for await (id, transaction) in group {
-                if let transaction { legsByID[id] = transaction }
-            }
-        }
-        state = .loaded(TraccioCore.pairSuggestions(suggestions, transactions: Array(legsByID.values)))
+        state = .loaded(TraccioCore.pairSuggestions(suggestions))
 
         if let accounts = try? await client.accounts() {
             accountsByID = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) })

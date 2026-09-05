@@ -30,9 +30,9 @@ other screen stopped loading too. Three things compounded:
    uvicorn process on Fly `shared-cpu-1x`. That is why the freeze was
    app-wide, not confined to one screen.
 
-The client amplifies all of this (an unbounded per-leg fan-out, no request
-timeout, the endpoint fired on every Movimenti load); that is a separate
-change on the client side and is not covered here.
+The client amplified all of this: an unbounded per-leg fan-out (below), no
+request timeout, and the endpoint fired on every Movimenti load. The last two
+are separate client-side changes, tracked in `tasks/backlog.md`.
 
 ## Decision
 
@@ -59,7 +59,16 @@ otherwise have changed. Two more key components — the outgoing then incoming
 transaction id — make the result deterministic and independent of input
 order. New test: `test_tie_break_is_deterministic_across_input_orders`.
 
-**4. The app engine's connection pool is configurable.**
+**4. Each suggestion embeds both legs.**
+`TransferSuggestionResponse` gains `outgoing` / `incoming`, the full
+`TransactionResponse` projection `GET /transactions` already returns. The
+router has every leg in memory (detection's own input pool) and resolves
+event membership for the leg ids in one batched query. This kills the
+client's `1 + 2N` fan-out — the previous client fetched every leg with a
+separate `GET /transactions/{id}` in an unbounded task group, so 50
+suggestions meant 100 concurrent requests against the same small pool.
+
+**5. The app engine's connection pool is configurable.**
 `create_engine` in `db/session.py` now takes `pool_size` / `max_overflow` /
 `pool_pre_ping` from `Settings` (`db_pool_size=5`, `db_max_overflow=10`,
 `db_pool_pre_ping=True` — SQLAlchemy's own defaults, plus pre-ping). This does
@@ -80,6 +89,12 @@ build is untouched.
   by-id lookup and is not floored (ADR 0024 §5).
 - New settings `TRACCIO_DB_POOL_SIZE` / `TRACCIO_DB_MAX_OVERFLOW` /
   `TRACCIO_DB_POOL_PRE_PING`, documented in `.env.example`.
+- `TransferSuggestionResponse` gains required `outgoing` / `incoming`
+  objects — a wire change, so `docs/api/openapi.json` is regenerated and the
+  Swift `TransferSuggestionResponse` model + its decode tests follow.
+  `TraccioCore.pairSuggestions` loses its transaction-pool parameter (the
+  legs are on the suggestion now) and can no longer drop a half-resolved
+  pair, so `TransfersViewModel.load()` is a single request.
 - `docs/domain.md` §Transfer is unaffected — the matching rules are the same.
 
 ## Alternatives considered

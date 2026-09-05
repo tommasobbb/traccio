@@ -4,10 +4,10 @@ import Foundation
 ///
 /// Mirrors the `TransferSuggestionResponse` schema in
 /// `docs/api/openapi.json`. Detection only *suggests* — nothing is written
-/// until the user confirms or rejects it (see `docs/architecture.md`). This
-/// type carries no description, date, or account: rendering a suggestion
-/// needs the two legs' `TransactionResponse`, resolved separately (see
-/// `pairSuggestions(_:transactions:)`).
+/// until the user confirms or rejects it (see `docs/architecture.md`). Both
+/// legs are embedded as their full `TransactionResponse` (`outgoing` /
+/// `incoming`), the same projection `GET /transactions` returns, so a screen
+/// renders a suggestion without a follow-up request per leg.
 public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
     /// Which pairing this suggests — `.twoSided` (opposite-sign pair) or
     /// `.fundedPayment` (two outflows, `incomingTransactionID` on a wallet is
@@ -29,6 +29,12 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
     public let amountDelta: Int
     /// Whole days between the legs' effective dates (`>= 0`).
     public let dayGap: Int
+    /// The full outgoing leg — two-sided: the negative leg; funded payment:
+    /// the funding leg.
+    public let outgoing: TransactionResponse
+    /// The full incoming leg — two-sided: the positive leg; funded payment:
+    /// the funded (wallet) leg.
+    public let incoming: TransactionResponse
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -39,6 +45,8 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
         case incomingAmount = "incoming_amount"
         case amountDelta = "amount_delta"
         case dayGap = "day_gap"
+        case outgoing
+        case incoming
     }
 
     public init(
@@ -49,7 +57,9 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
         outgoingAmount: Int,
         incomingAmount: Int,
         amountDelta: Int,
-        dayGap: Int
+        dayGap: Int,
+        outgoing: TransactionResponse,
+        incoming: TransactionResponse
     ) {
         self.kind = kind
         self.outgoingTransactionID = outgoingTransactionID
@@ -59,5 +69,7 @@ public struct TransferSuggestionResponse: Codable, Sendable, Equatable {
         self.incomingAmount = incomingAmount
         self.amountDelta = amountDelta
         self.dayGap = dayGap
+        self.outgoing = outgoing
+        self.incoming = incoming
     }
 }

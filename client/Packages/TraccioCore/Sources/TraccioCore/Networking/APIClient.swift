@@ -927,7 +927,8 @@ public struct APIClient: Sendable {
     ///
     /// Mirrors `GET /transfers/suggestions`. Detection only *suggests* — see
     /// `confirmTransfer(outgoingID:incomingID:)` for the write that acts on
-    /// one.
+    /// one. Each suggestion embeds both legs' full `TransactionResponse`, so
+    /// rendering one needs no follow-up request per leg.
     ///
     /// Returns
     /// -------

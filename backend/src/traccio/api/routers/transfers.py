@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_tracking_start, current_user_id
+from traccio.api.schemas.transactions import TransactionResponse
 from traccio.api.schemas.transfers import (
     ConfirmTransferRequest,
     RejectTransferRequest,
@@ -37,6 +38,7 @@ from traccio.db.repositories import (
     create_transfer,
     create_transfer_dismissal,
     delete_transfer,
+    event_ids_for_transactions,
     get_transaction,
     list_accounts,
     list_all_transactions,
@@ -116,10 +118,32 @@ def transfer_suggestions(
         account_kinds=account_kinds,
         dismissed_pairs=dismissed,
     )
+    # Embed both legs so the client renders a suggestion in one round-trip
+    # rather than a follow-up GET /transactions/{id} per leg. Every leg id is
+    # in `transactions` — detection only pairs ids from that pool — and a
+    # suggestion leg is always role=personal, so no advance share is needed.
+    by_id = {transaction.id: transaction for transaction in transactions}
+    leg_ids = [
+        leg_id
+        for suggestion in suggestions
+        for leg_id in (suggestion.outgoing_transaction_id, suggestion.incoming_transaction_id)
+    ]
+    event_by_leg = event_ids_for_transactions(session, user_id=user_id, transaction_ids=leg_ids)
+
+    def _leg(leg_id: UUID) -> TransactionResponse:
+        return TransactionResponse.from_domain(by_id[leg_id], event_id=event_by_leg.get(leg_id))
+
     # Log a count, never transaction contents (see data-safety rules).
     logger.info("transfers.suggestions", count=len(suggestions))
     return TransferSuggestionsResponse(
-        suggestions=[TransferSuggestionResponse.from_domain(s) for s in suggestions]
+        suggestions=[
+            TransferSuggestionResponse.from_domain(
+                s,
+                outgoing=_leg(s.outgoing_transaction_id),
+                incoming=_leg(s.incoming_transaction_id),
+            )
+            for s in suggestions
+        ]
     )
 
 

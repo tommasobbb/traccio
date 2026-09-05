@@ -93,6 +93,13 @@ def test_suggests_a_matching_pair_for_the_current_user() -> None:
     assert suggestion["incoming_transaction_id"] == in_id
     assert suggestion["currency"] == "EUR"
     assert suggestion["amount_delta"] == 0
+    # Both legs are embedded, the same projection GET /transactions returns,
+    # so the client needs no follow-up request per leg.
+    assert suggestion["outgoing"]["id"] == out_id
+    assert suggestion["outgoing"]["amount"] == -50000
+    assert suggestion["incoming"]["id"] == in_id
+    assert suggestion["incoming"]["amount"] == 50000
+    assert suggestion["incoming"]["description"] == "TEST MERCHANT 01"
 
 
 def test_never_pairs_across_users() -> None:

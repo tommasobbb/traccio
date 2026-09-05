@@ -36,15 +36,18 @@ struct TransfersViewModelTests {
     private static func makeSuggestion(
         kind: TransferKind = .twoSided
     ) -> TransferSuggestionResponse {
-        TransferSuggestionResponse(
+        let incomingAmount = kind == .fundedPayment ? -25000 : 25000
+        return TransferSuggestionResponse(
             kind: kind,
             outgoingTransactionID: outgoingID,
             incomingTransactionID: incomingID,
             currency: "EUR",
             outgoingAmount: -25000,
-            incomingAmount: kind == .fundedPayment ? -25000 : 25000,
+            incomingAmount: incomingAmount,
             amountDelta: 0,
-            dayGap: 0
+            dayGap: 0,
+            outgoing: makeTransaction(id: outgoingID, amount: -25000),
+            incoming: makeTransaction(id: incomingID, amount: incomingAmount)
         )
     }
 
@@ -71,6 +74,25 @@ struct TransfersViewModelTests {
         #expect(pairs.count == 1)
         #expect(pairs[0].outgoing.id == Self.outgoingID)
         #expect(pairs[0].incoming.id == Self.incomingID)
+    }
+
+    @Test func loadUsesTheEmbeddedLegsAndDoesNotFetchPerLeg() async throws {
+        // The suggestion carries both legs, so load() is one request — no
+        // GET /transactions/{id} fan-out (ADR 0025, backlog task 1c).
+        let client = FakeAPIClient()
+        await client.setTransferSuggestions([Self.makeSuggestion()])
+        let model = TransfersViewModel(client: client)
+
+        await model.load()
+
+        guard case .loaded(let pairs) = model.state else {
+            Issue.record("expected .loaded after load()")
+            return
+        }
+        #expect(pairs.count == 1)
+        #expect(pairs[0].outgoing.id == Self.outgoingID)
+        #expect(pairs[0].incoming.id == Self.incomingID)
+        #expect(await client.transactionFetchCount == 0)
     }
 
     @Test func loadFailureIsSurfacedAsFailed() async throws {
@@ -315,19 +337,4 @@ struct TransfersViewModelTests {
         )
     }
 
-    @Test func aSuggestionWhoseLegDoesNotResolveIsDropped() async throws {
-        let client = FakeAPIClient()
-        await client.setTransferSuggestions([Self.makeSuggestion()])
-        // Only the outgoing leg resolves; the incoming leg is left unconfigured.
-        await client.setTransaction(Self.makeTransaction(id: Self.outgoingID, amount: -25000), forID: Self.outgoingID)
-
-        let model = TransfersViewModel(client: client)
-        await model.load()
-
-        guard case .loaded(let pairs) = model.state else {
-            Issue.record("expected .loaded after load()")
-            return
-        }
-        #expect(pairs.isEmpty)
-    }
 }

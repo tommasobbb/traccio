@@ -82,7 +82,9 @@ struct TransactionsViewModelTests {
             TransferSuggestionResponse(
                 kind: .twoSided,
                 outgoingTransactionID: outgoingID, incomingTransactionID: incomingID,
-                currency: "EUR", outgoingAmount: -1000, incomingAmount: 1000, amountDelta: 0, dayGap: 0
+                currency: "EUR", outgoingAmount: -1000, incomingAmount: 1000, amountDelta: 0, dayGap: 0,
+                outgoing: Self.makeTransaction(id: outgoingID),
+                incoming: Self.makeTransaction(id: incomingID)
             )
         ])
         let transfer = TransferResponse(
