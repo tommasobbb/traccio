@@ -183,6 +183,23 @@ struct TransactionsViewModelTests {
         #expect(await client.receivedTransactionsOffsets.last == 0)
     }
 
+    @Test func applyFilterReloadsOnlyThePageNotTheContext() async throws {
+        // A filter change costs exactly one request — the page. The context
+        // (categories, accounts, suggestions, …) does not depend on the
+        // filter (backlog task 1e, ADR 0025).
+        let client = FakeAPIClient()
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        let pageFetchesAfterLoad = await client.receivedTransactionsFilters.count
+        let suggestionFetchesAfterLoad = await client.transferSuggestionsFetchCount
+
+        await model.applyFilter(TransactionFilter(accountID: UUID()))
+        await model.applyFilter(TransactionFilter(category: .uncategorized))
+
+        #expect(await client.receivedTransactionsFilters.count == pageFetchesAfterLoad + 2)
+        #expect(await client.transferSuggestionsFetchCount == suggestionFetchesAfterLoad)
+    }
+
     @Test func loadMoreSendsTheActiveFilter() async throws {
         // A full first page (pageSize rows) so `loadMore()` actually fires a
         // second request rather than treating the list as already exhausted.

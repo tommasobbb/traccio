@@ -30,11 +30,11 @@ other screen stopped loading too. Three things compounded:
    uvicorn process on Fly `shared-cpu-1x`. That is why the freeze was
    app-wide, not confined to one screen.
 
-The client amplified all of this: an unbounded per-leg fan-out (below), a
+The client amplified all of this: an unbounded per-leg fan-out (§4), a
 `URLSession` with `URLSessionConfiguration`'s 7-day resource-timeout default
-so nothing ever gave up, and the endpoint fired on every Movimenti load. The
-fan-out and the timeout are addressed here; splitting the Movimenti load is a
-separate client change tracked in `tasks/backlog.md`.
+so nothing ever gave up (§5), and `TransactionsViewModel.load()` firing seven
+requests — including `/transfers/suggestions` — on every open, filter change,
+and pull-to-refresh (§6).
 
 ## Decision
 
@@ -78,7 +78,15 @@ timeout, so a slow-but-progressing sync is unaffected) and
 first years-of-history sync). Without this a wedged backend hung the screen
 on the 7-day default. Tests inject their own stub session and are unaffected.
 
-**6. The app engine's connection pool is configurable.**
+**6. `TransactionsViewModel.load()` is split.** `loadPage()` fetches the
+first page for the current filter and owns `state`; `loadContext()` fetches
+the six filter-independent maps (categories, accounts, advances, transfers,
+suggestions, events) best-effort. `load()` runs both (first appear,
+pull-to-refresh, a `DataFreshness.transactions` bump); `applyFilter(_:)` and
+the debounced search run `loadPage()` alone. Changing a filter was seven
+requests, one of them the expensive suggestions scan; now it is one.
+
+**7. The app engine's connection pool is configurable.**
 `create_engine` in `db/session.py` now takes `pool_size` / `max_overflow` /
 `pool_pre_ping` from `Settings` (`db_pool_size=5`, `db_max_overflow=10`,
 `db_pool_pre_ping=True` — SQLAlchemy's own defaults, plus pre-ping). This does

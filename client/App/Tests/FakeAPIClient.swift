@@ -112,6 +112,7 @@ actor FakeAPIClient: APIClientProtocol {
     )
     var transferSuggestionsToReturn: [TransferSuggestionResponse] = []
     var transferSuggestionsError: Error?
+    private(set) var transferSuggestionsFetchCount = 0
     var transfersToReturn: [TransferResponse] = []
     var confirmTransferToReturn: TransferResponse?
     var confirmTransferError: Error?
@@ -961,6 +962,7 @@ actor FakeAPIClient: APIClientProtocol {
     }
 
     func transferSuggestions() async throws -> [TransferSuggestionResponse] {
+        transferSuggestionsFetchCount += 1
         if let transferSuggestionsError { throw transferSuggestionsError }
         return transferSuggestionsToReturn
     }

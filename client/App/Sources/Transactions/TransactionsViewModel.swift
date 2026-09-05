@@ -157,27 +157,33 @@ final class TransactionsViewModel {
         self.filter = initialFilter
     }
 
-    /// Fetch the first page of transactions plus the category/advance/account
-    /// data, and publish the outcome. Resets any pagination state from a
-    /// prior load.
+    /// Fetch the first page of transactions *and* the surrounding context
+    /// (categories, accounts, advances, transfers, suggestions, events), and
+    /// publish the outcome.
     ///
-    /// A failure is surfaced as `.failed` without carrying the error into the
-    /// UI — error details may reference the response and must not be shown
-    /// or logged.
+    /// The two halves are independent: `loadPage()` depends on `filter` and
+    /// owns `state`; `loadContext()` does not depend on `filter` and never
+    /// fails the screen. `applyFilter(_:)` calls `loadPage()` alone, so
+    /// changing a filter is one request — `load()` is for the first appear, a
+    /// pull-to-refresh, and a `DataFreshness.transactions` bump, where the
+    /// context genuinely may have changed too.
     func load() async {
+        async let context: Void = loadContext()
+        await loadPage()
+        await context
+    }
+
+    /// Fetch the first page for the current `filter` and publish it, resetting
+    /// pagination. The only part that depends on `filter`, and the only part
+    /// that can set `.failed` — an error is surfaced without carrying its
+    /// text into the UI (it may reference the response).
+    func loadPage() async {
         state = .loading
         offset = 0
         reachedEnd = false
-        // A reload is a context change: drop any in-progress row selection so
-        // `selectedIDs` never points at rows no longer on the page.
+        // A page reload is a context change: drop any in-progress row
+        // selection so `selectedIDs` never points at rows no longer shown.
         exitSelection()
-
-        async let categoriesResult = client.categories()
-        async let advancesResult = client.advances()
-        async let accountsResult = client.accounts()
-        async let transferSuggestionsResult = client.transferSuggestions()
-        async let transfersResult = client.transfers()
-        async let eventsResult = client.events()
 
         do {
             let page = try await client.transactions(filter: filter, limit: pageSize, offset: 0)
@@ -186,8 +192,19 @@ final class TransactionsViewModel {
             reachedEnd = page.count < pageSize
         } catch {
             state = .failed
-            return
         }
+    }
+
+    /// Fetch everything used to label and link rows — none of it filtered,
+    /// all of it best-effort (a failed fetch leaves that map as it was rather
+    /// than failing the screen, since the list is the primary content).
+    func loadContext() async {
+        async let categoriesResult = client.categories()
+        async let advancesResult = client.advances()
+        async let accountsResult = client.accounts()
+        async let transferSuggestionsResult = client.transferSuggestions()
+        async let transfersResult = client.transfers()
+        async let eventsResult = client.events()
 
         if let fetchedCategories = try? await categoriesResult {
             categories = fetchedCategories
@@ -401,10 +418,11 @@ final class TransactionsViewModel {
     /// Create a user-entered movement on a manual account (ADR 0020), then
     /// reload the first page so it lands in day order.
     ///
-    /// Reloads rather than inserting in place: a back-dated entry belongs
-    /// mid-list, and `load()` already rebuilds the page in the backend's
-    /// order. A `409` surfaces as `.accountNotManual`, any other failure as
-    /// `.generic`.
+    /// Reloads the page rather than inserting in place: a back-dated entry
+    /// belongs mid-list, and `loadPage()` rebuilds it in the backend's order.
+    /// The context (accounts, categories) is unchanged by a create, so it is
+    /// not re-fetched. A `409` surfaces as `.accountNotManual`, any other
+    /// failure as `.generic`.
     ///
     /// Parameters
     /// ----------
@@ -443,7 +461,7 @@ final class TransactionsViewModel {
                     confirmedCategoryID: confirmedCategoryID
                 )
             )
-            await load()
+            await loadPage()
             successTick += 1
             return true
         } catch APIError.badStatus(409) {
@@ -455,12 +473,12 @@ final class TransactionsViewModel {
         }
     }
 
-    /// Change the active filter and reload from the first page.
+    /// Change the active filter and reload the first page — only the page.
     ///
-    /// Always resets `offset`/`reachedEnd` — a different filter means a
-    /// different result set, so any already-loaded page is stale. `load()`
-    /// itself does the same reset; this just also updates `filter` first, so
-    /// both entry points share one reload path.
+    /// The context (categories, accounts, …) does not depend on the filter,
+    /// so a filter change costs exactly one request. `loadPage()` resets
+    /// `offset`/`reachedEnd`, since a different filter is a different result
+    /// set.
     ///
     /// Parameters
     /// ----------
@@ -468,7 +486,7 @@ final class TransactionsViewModel {
     ///     The filter to apply from now on, including to `loadMore()`.
     func applyFilter(_ newFilter: TransactionFilter) async {
         filter = newFilter
-        await load()
+        await loadPage()
     }
 
     /// Update the search term, debounced ~300ms so a fast typist fires one
