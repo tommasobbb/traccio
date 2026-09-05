@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     database_url : str
         PostgreSQL DSN. Declared now but unused until persistence lands; kept
         here so ``.env.example`` stays a complete reference.
+    db_pool_size : int
+        Persistent connections the app engine's pool keeps open
+        (``db/session.py``). SQLAlchemy's own default is 5; named here so a
+        deployment on a small managed Postgres can lower it. Ignored by the
+        SQLite pool the tests build.
+    db_max_overflow : int
+        Extra connections the pool may open beyond :attr:`db_pool_size` under
+        load, closed again when returned. SQLAlchemy's default is 10.
+    db_pool_pre_ping : bool
+        Check a pooled connection with a lightweight round-trip on checkout and
+        transparently replace it if the server or a proxy dropped it while
+        idle. ``True`` by default — one cheap query per checkout in exchange
+        for not surfacing a stale-connection error to a request.
     dev_user_id : UUID
         Stand-in for the authenticated user until real auth lands (blocked on
         the M4 decision). Traccio is built for one user, so every request is
@@ -181,6 +194,13 @@ class Settings(BaseSettings):
     log_json: bool = False
     # Declared now, unused until persistence lands; keeps .env.example useful.
     database_url: str = "postgresql+psycopg://localhost/traccio"
+    # Connection-pool sizing for the app engine (db/session.py). Defaults match
+    # SQLAlchemy's own; raise or lower per deployment without a code change.
+    # pool_pre_ping trades one lightweight query per checkout for immunity to a
+    # connection the server/proxy dropped while idle.
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_pre_ping: bool = True
     # Fixed single-user id until real auth (M4). See the class docstring.
     dev_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     # Fernet key for encrypting stored bank credentials; None until set so the

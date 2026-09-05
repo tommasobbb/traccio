@@ -15,13 +15,14 @@ Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
 counts — never amounts or descriptions.
 """
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_tracking_start, current_user_id
 from traccio.api.schemas.transfers import (
     ConfirmTransferRequest,
     RejectTransferRequest,
@@ -74,6 +75,7 @@ def _load_leg(session: Session, *, user_id: UUID, transaction_id: UUID) -> Trans
 def transfer_suggestions(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
+    tracking_start: Annotated[date | None, Depends(current_tracking_start)],
 ) -> TransferSuggestionsResponse:
     """Suggest transfers among the current user's transactions.
 
@@ -82,12 +84,19 @@ def transfer_suggestions(
     excluded via stored dismissals, so a rejected suggestion does not reappear.
     Scoped to the current user; the tolerance and window come from settings.
 
+    Detection runs from the user's ``tracking_start_date`` (ADR 0024) forward,
+    not over full history: the pre-cutoff months carry data from only whichever
+    accounts were connected first, so pairing there is unreliable, and scanning
+    them made the pure detector's cost grow with total history (ADR 0025).
+
     Parameters
     ----------
     session : Session
         Request-scoped database session (see :func:`get_session`).
     user_id : UUID
         The user whose transactions to search.
+    tracking_start : date or None
+        The user's tracking-start floor; detection ignores rows before it.
 
     Returns
     -------
@@ -95,7 +104,7 @@ def transfer_suggestions(
         The suggested transfers, most confident first (empty if none).
     """
     settings = get_settings()
-    transactions = list_all_transactions(session, user_id)
+    transactions = list_all_transactions(session, user_id, since=tracking_start)
     dismissed = list_transfer_dismissals(session, user_id)
     # Account kinds let detection spot the wallet leg of a funded payment.
     account_kinds = {account.id: account.kind for account in list_accounts(session, user_id)}

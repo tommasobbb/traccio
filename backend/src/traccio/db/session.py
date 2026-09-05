@@ -16,8 +16,17 @@ from sqlalchemy.orm import Session, sessionmaker
 from traccio.core.config import get_settings
 
 # One engine per process. Created lazily on import; the connection pool it holds
-# is only opened on first use.
-engine: Engine = create_engine(get_settings().database_url)
+# is only opened on first use. Pool sizing and pre-ping come from settings so a
+# small managed Postgres can be given a smaller pool without a code change, and
+# a connection dropped while idle is replaced on checkout rather than surfacing
+# as a request error.
+_settings = get_settings()
+engine: Engine = create_engine(
+    _settings.database_url,
+    pool_size=_settings.db_pool_size,
+    max_overflow=_settings.db_max_overflow,
+    pool_pre_ping=_settings.db_pool_pre_ping,
+)
 
 # ``expire_on_commit=False`` keeps mapped attributes readable after commit,
 # which the mappers rely on when translating a just-persisted row back to a

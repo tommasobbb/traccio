@@ -316,6 +316,39 @@ def test_dismissing_one_pair_leaves_another_match() -> None:
     }
 
 
+def test_window_scan_still_pairs_after_an_out_of_window_candidate() -> None:
+    """Sorting candidates by date and stopping the inner scan at the window
+    edge must not hide a valid nearby pair that sits after a far-apart one."""
+    a, b, c = uuid4(), uuid4(), uuid4()
+    stale = _tx(account_id=a, amount=-50000, booked_at=_BASE)
+    out = _tx(account_id=b, amount=-50000, booked_at=_BASE + timedelta(days=30))
+    inc = _tx(account_id=c, amount=50000, booked_at=_BASE + timedelta(days=31))
+
+    suggestions = detect_transfers([stale, out, inc])
+
+    assert len(suggestions) == 1
+    assert {suggestions[0].outgoing_transaction_id, suggestions[0].incoming_transaction_id} == {
+        out.id,
+        inc.id,
+    }
+
+
+def test_tie_break_is_deterministic_across_input_orders() -> None:
+    """Two equally good partners for one leg (same amount delta, same day gap)
+    resolve by transaction id, so the result never depends on input order."""
+    a, b, c = uuid4(), uuid4(), uuid4()
+    out = _tx(account_id=a, amount=-50000)
+    inc1 = _tx(account_id=b, amount=50000)
+    inc2 = _tx(account_id=c, amount=50000)
+
+    forward = detect_transfers([out, inc1, inc2])
+    backward = detect_transfers([out, inc2, inc1])
+
+    assert len(forward) == len(backward) == 1
+    assert forward[0].incoming_transaction_id == backward[0].incoming_transaction_id
+    assert forward[0].incoming_transaction_id == min(inc1.id, inc2.id, key=str)
+
+
 def test_validate_transfer_pair_accepts_a_clean_pair() -> None:
     """A structurally valid opposite-sign pair validates without raising."""
     out = _tx(account_id=uuid4(), amount=-50000)

@@ -13,7 +13,6 @@ This module is pure (no I/O) and imports only ``domain``.
 
 from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
-from itertools import combinations
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -146,9 +145,18 @@ def detect_transfers(
       link it explicitly.
 
     Both kinds compete in **one** greedy, one-to-one assignment ranked by
-    closeness (amount difference, then day gap, then two-sided before funded),
-    so no transaction appears in two suggestions. A leg with no counterpart (a
-    half-transfer to an unconnected account) simply yields nothing.
+    closeness (amount difference, then day gap, then two-sided before funded,
+    then transaction id for a total order), so no transaction appears in two
+    suggestions. A leg with no counterpart (a half-transfer to an unconnected
+    account) simply yields nothing.
+
+    The candidate pairs are found with a forward window rather than an
+    every-pair scan: candidates are sorted by effective date and each is
+    compared only with the following ones until the day gap exceeds
+    ``window_days`` (ADR 0025). The pairs considered are exactly those an
+    every-pair scan would keep; the change only avoids building the ones it
+    would immediately discard, which kept detection from degrading
+    quadratically once it ran over full account history.
 
     Parameters
     ----------
@@ -193,69 +201,82 @@ def detect_transfers(
             candidates.append((tx, date))
 
     dismissed = set(dismissed_pairs)
-    # (amount_delta, day_gap, kind_rank, suggestion) — kind_rank orders a
-    # two-sided pair (0) ahead of a funded-payment guess (1) on a tie.
-    scored: list[tuple[int, int, int, TransferSuggestion]] = []
-    for (first, first_date), (second, second_date) in combinations(candidates, 2):
-        if first.account_id == second.account_id:
-            continue
-        if first.money.currency != second.money.currency:
-            continue
-        if frozenset({first.id, second.id}) in dismissed:
-            continue
-        day_gap = abs((first_date - second_date).days)
-        if day_gap > window_days:
-            continue
-        amount_delta = abs(abs(first.money.amount) - abs(second.money.amount))
 
-        first_negative = first.money.amount < 0
-        second_negative = second.money.amount < 0
+    # Sorted by effective date so the day window is a contiguous forward slice:
+    # the inner scan can stop (not just skip) once the gap passes window_days.
+    candidates.sort(key=lambda item: item[1])
 
-        if first_negative != second_negative:
-            # Opposite signs -> a classic two-sided transfer.
-            if amount_delta > amount_tolerance_cents:
+    # (amount_delta, day_gap, kind_rank, out_id, in_id, suggestion) — kind_rank
+    # orders a two-sided pair (0) ahead of a funded-payment guess (1) on a tie,
+    # the two ids give a total order so the greedy pass below is deterministic
+    # regardless of the order pairs were discovered in.
+    scored: list[tuple[int, int, int, str, str, TransferSuggestion]] = []
+    for i in range(len(candidates)):
+        first, first_date = candidates[i]
+        for j in range(i + 1, len(candidates)):
+            second, second_date = candidates[j]
+            day_gap = (second_date - first_date).days
+            if day_gap > window_days:
+                break
+            if first.account_id == second.account_id:
                 continue
-            outgoing, incoming = (first, second) if first_negative else (second, first)
-            kind = TransferKind.TWO_SIDED
-        elif first_negative and second_negative:
-            # Two outflows -> only a funded payment, and only when exactly one
-            # leg is on a wallet: that leg is the real purchase, the other one
-            # funds it. Without that signal we cannot tell which is which.
-            if amount_delta > funding_amount_tolerance_cents:
+            if first.money.currency != second.money.currency:
                 continue
-            first_wallet = kinds.get(first.account_id) is AccountKind.WALLET
-            second_wallet = kinds.get(second.account_id) is AccountKind.WALLET
-            if first_wallet == second_wallet:
+            if frozenset({first.id, second.id}) in dismissed:
                 continue
-            incoming, outgoing = (first, second) if first_wallet else (second, first)
-            kind = TransferKind.FUNDED_PAYMENT
-        else:
-            # Two inflows are never a transfer of either kind.
-            continue
+            amount_delta = abs(abs(first.money.amount) - abs(second.money.amount))
 
-        scored.append(
-            (
-                amount_delta,
-                day_gap,
-                0 if kind is TransferKind.TWO_SIDED else 1,
-                TransferSuggestion(
-                    kind=kind,
-                    outgoing_transaction_id=outgoing.id,
-                    incoming_transaction_id=incoming.id,
-                    currency=outgoing.money.currency,
-                    outgoing_amount=outgoing.money.amount,
-                    incoming_amount=incoming.money.amount,
-                    amount_delta=amount_delta,
-                    day_gap=day_gap,
-                ),
+            first_negative = first.money.amount < 0
+            second_negative = second.money.amount < 0
+
+            if first_negative != second_negative:
+                # Opposite signs -> a classic two-sided transfer.
+                if amount_delta > amount_tolerance_cents:
+                    continue
+                outgoing, incoming = (first, second) if first_negative else (second, first)
+                kind = TransferKind.TWO_SIDED
+            elif first_negative and second_negative:
+                # Two outflows -> only a funded payment, and only when exactly
+                # one leg is on a wallet: that leg is the real purchase, the
+                # other one funds it. Without that signal we cannot tell which
+                # is which.
+                if amount_delta > funding_amount_tolerance_cents:
+                    continue
+                first_wallet = kinds.get(first.account_id) is AccountKind.WALLET
+                second_wallet = kinds.get(second.account_id) is AccountKind.WALLET
+                if first_wallet == second_wallet:
+                    continue
+                incoming, outgoing = (first, second) if first_wallet else (second, first)
+                kind = TransferKind.FUNDED_PAYMENT
+            else:
+                # Two inflows are never a transfer of either kind.
+                continue
+
+            scored.append(
+                (
+                    amount_delta,
+                    day_gap,
+                    0 if kind is TransferKind.TWO_SIDED else 1,
+                    str(outgoing.id),
+                    str(incoming.id),
+                    TransferSuggestion(
+                        kind=kind,
+                        outgoing_transaction_id=outgoing.id,
+                        incoming_transaction_id=incoming.id,
+                        currency=outgoing.money.currency,
+                        outgoing_amount=outgoing.money.amount,
+                        incoming_amount=incoming.money.amount,
+                        amount_delta=amount_delta,
+                        day_gap=day_gap,
+                    ),
+                )
             )
-        )
 
     # Rank by closeness, then assign greedily so each transaction appears once.
-    scored.sort(key=lambda item: (item[0], item[1], item[2]))
+    scored.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
     used: set[UUID] = set()
     suggestions: list[TransferSuggestion] = []
-    for _, _, _, suggestion in scored:
+    for *_, suggestion in scored:
         if suggestion.outgoing_transaction_id in used or suggestion.incoming_transaction_id in used:
             continue
         used.add(suggestion.outgoing_transaction_id)

@@ -7,7 +7,7 @@ synthetic (see ``.claude/rules/data-safety.md``).
 """
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -19,6 +19,7 @@ from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.db.base import Base
 from traccio.db.models import AccountRow, TransactionRow
+from traccio.db.repositories import set_tracking_start_date
 from traccio.db.session import get_session
 from traccio.domain.enums import AccountKind, KeyStrategy, TransactionStatus
 
@@ -120,6 +121,34 @@ def test_empty_when_user_has_no_transactions() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"suggestions": []}
+
+
+def test_suggestions_start_from_the_tracking_start_floor() -> None:
+    """A pair dated entirely before the user's ``tracking_start_date`` is not
+    suggested (ADR 0024/0025); a pair after the floor still is."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    old_day = datetime(2025, 1, 1, tzinfo=UTC)
+    with Session(engine) as session:
+        old_out = _tx(user_id=dev_user_id, account_id=uuid4(), amount=-50000, stable_key="OLD-OUT")
+        old_inc = _tx(user_id=dev_user_id, account_id=uuid4(), amount=50000, stable_key="OLD-IN")
+        for row in (old_out, old_inc):
+            row.booked_at = old_day
+            row.value_date = old_day
+        new_out = _tx(user_id=dev_user_id, account_id=uuid4(), amount=-25000, stable_key="NEW-OUT")
+        new_inc = _tx(user_id=dev_user_id, account_id=uuid4(), amount=25000, stable_key="NEW-IN")
+        session.add_all([old_out, old_inc, new_out, new_inc])
+        set_tracking_start_date(session, user_id=dev_user_id, value=date(2026, 1, 1))
+        session.commit()
+        new_ids = {str(new_out.id), str(new_inc.id)}
+
+    suggestions = _client(engine).get("/transfers/suggestions").json()["suggestions"]
+
+    assert len(suggestions) == 1
+    assert {
+        suggestions[0]["outgoing_transaction_id"],
+        suggestions[0]["incoming_transaction_id"],
+    } == new_ids
 
 
 def _seed_pair(engine: Engine, *, user_id: UUID) -> tuple[str, str]:

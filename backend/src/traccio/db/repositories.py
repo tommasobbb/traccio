@@ -737,14 +737,15 @@ def list_connections(session: Session, user_id: UUID) -> list[Connection]:
     return [row_to_connection(row) for row in rows]
 
 
-def list_all_transactions(session: Session, user_id: UUID) -> list[Transaction]:
+def list_all_transactions(
+    session: Session, user_id: UUID, *, since: date | None = None
+) -> list[Transaction]:
     """Return every one of the user's transactions, most recent first.
 
     Scoped by ``user_id``. Unlike :func:`list_transactions` this is unpaginated:
     it feeds in-memory detection (e.g. transfer suggestions), which must see the
     whole pool to pair legs, not one page. Ordering matches the paginated reader
-    for consistency but detection does not depend on it. A windowed/incremental
-    variant is a later optimization, tied to the background sync scheduler.
+    for consistency but detection does not depend on it.
 
     Parameters
     ----------
@@ -752,17 +753,27 @@ def list_all_transactions(session: Session, user_id: UUID) -> list[Transaction]:
         Active database session.
     user_id : UUID
         Owner whose transactions to return; the query is scoped to it.
+    since : date or None, optional
+        When given, drop rows whose ``coalesce(booked_at, value_date)`` is
+        before UTC midnight of that day — the same
+        :func:`_tracking_floor` bound :func:`list_transactions` applies (ADR
+        0024). Transfer suggestions pass the user's ``tracking_start_date`` so
+        detection does not scan the partial-coverage history that setting
+        exists to hide (ADR 0025); rule application passes nothing, since a
+        rule categorizes every row regardless of the floor.
 
     Returns
     -------
     list[Transaction]
-        All domain transactions owned by ``user_id`` (empty if none), newest
-        first.
+        The matching domain transactions owned by ``user_id`` (empty if none),
+        newest first.
     """
+    statement = select(TransactionRow).where(TransactionRow.user_id == user_id)
+    floor = _tracking_floor(since)
+    if floor is not None:
+        statement = statement.where(_transaction_when() >= floor)
     rows = session.scalars(
-        select(TransactionRow)
-        .where(TransactionRow.user_id == user_id)
-        .order_by(_transaction_when().desc(), TransactionRow.id)
+        statement.order_by(_transaction_when().desc(), TransactionRow.id)
     ).all()
     return [row_to_transaction(row) for row in rows]
 
