@@ -34,7 +34,7 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 content
-                    .padding(20)
+                    .padding(Spacing.gutter)
             }
             .background(Palette.background)
             .navigationTitle("Panoramica")
@@ -60,12 +60,12 @@ struct DashboardView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 300)
         case .loaded(let summary):
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 periodPicker
                 summaryContent(summary)
             }
         case .failed:
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 periodPicker
                 EmptyState(
                     systemImage: "wifi.slash",
