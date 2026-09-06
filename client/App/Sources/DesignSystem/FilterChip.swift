@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// A pill-shaped filter control ("Tutti i conti" / "Categoria" in
-/// `docs/design/canvas/Transactions.dc.html`) — a label with a trailing
-/// chevron.
+/// A pill-shaped filter token — a label with a trailing glyph.
+///
+/// Used in Movimenti as a removable active-filter token (trailing `xmark`,
+/// tap to clear that dimension). A caller that instead presents a menu can
+/// pass `trailingSystemImage: "chevron.down"`.
 ///
 /// Built only from tokens already in `docs/design/tokens.md`: the pill
 /// radius (999), `Palette.card`/`Palette.separator` for the resting state,
 /// and the accent-vs-neutral convention `Badge.Style.accent` already uses
-/// for `isActive`. Presentation only — the caller wraps it in a `Menu` or
+/// for `isActive`. Presentation only — the caller wraps it in a `Button` or
 /// whatever interaction it needs; a design-system component holds no logic
 /// of its own.
 struct FilterChip: View {
@@ -17,6 +19,8 @@ struct FilterChip: View {
     /// filter stays visible even when its label alone ("Alimentari" instead
     /// of "Categoria") wouldn't say so.
     var isActive: Bool = false
+    /// The trailing glyph. `xmark` (default) reads as "tap to remove".
+    var trailingSystemImage: String = "xmark"
 
     var body: some View {
         HStack(spacing: 6) {
@@ -28,7 +32,7 @@ struct FilterChip: View {
                 // the row it sits in scrolls horizontally instead.
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            Image(systemName: "chevron.down")
+            Image(systemName: trailingSystemImage)
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(isActive ? Palette.accent : Palette.inkTertiary)
         }

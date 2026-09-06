@@ -10,10 +10,13 @@ import TraccioCore
 /// suggestion to confirm or reject.
 ///
 /// Follows `docs/design/canvas/TransactionsV2.dc.html` (Fase B redesign):
-/// toolbar down to "+" and a "•••" overflow, suggestions surfaced as a
-/// top-of-list card. Filtering happens server-side (`TransactionFilter`,
-/// `TransactionsViewModel.applyFilter(_:)`), never on an already-fetched
-/// page.
+/// toolbar down to a "•••" overflow, a filter button, and "+", suggestions
+/// surfaced as a top-of-list card. One filter entry point (the toolbar
+/// button opens `TransactionFiltersSheet`); the active filters show as
+/// removable tokens under the search field, and that row is absent entirely
+/// when nothing is filtered. Filtering happens server-side
+/// (`TransactionFilter`, `TransactionsViewModel.applyFilter(_:)`), never on
+/// an already-fetched page.
 struct TransactionsView: View {
     @State private var model: TransactionsViewModel
     /// Bound to `.searchable`. Kept separate from `model.filter.searchTerm`
@@ -110,10 +113,10 @@ struct TransactionsView: View {
                 Button("Fine") { model.exitSelection() }
             }
         } else {
-            // The toolbar is down to "+" plus a "•••" overflow: the transfer
-            // count moved to a card at the top of the list (more discoverable
-            // than a mute glyph that vanishes at zero), and "Collega
-            // trasferimento" is a secondary action, not a peer of "+".
+            // The toolbar is "•••" overflow, a filter button, and "+": the
+            // transfer count moved to a card at the top of the list (more
+            // discoverable than a mute glyph that vanishes at zero), and
+            // "Collega trasferimento" is a secondary action, not a peer of "+".
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -123,6 +126,19 @@ struct TransactionsView: View {
                     }
                 } label: {
                     Label("Altro", systemImage: "ellipsis")
+                }
+            }
+            // One entry point for all three filter dimensions. `.fill` when
+            // anything is filtered; the active filters themselves show as
+            // removable tokens under the search field (`filterRow`).
+            ToolbarItem(placement: .primaryAction) {
+                Button { isFilteringOpen = true } label: {
+                    Label(
+                        "Filtri",
+                        systemImage: hasActiveFilters
+                            ? "line.3.horizontal.decrease.circle.fill"
+                            : "line.3.horizontal.decrease.circle"
+                    )
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -256,40 +272,77 @@ struct TransactionsView: View {
         }
     }
 
-    // MARK: Filter chips
+    // MARK: Active-filter tokens
 
-    /// The three state-showing chips (`docs/design/canvas/TransactionsV2.dc.html`).
-    /// Always visible, independent of `model.state` — these are controls, not
-    /// content, so a load failure or an empty result doesn't hide them. Any
-    /// of them opens the shared `TransactionFiltersSheet`.
+    /// One removable token per active filter dimension, or nothing at all when
+    /// no filter is set — so the list starts right under the search field in
+    /// the common case. Setting a filter is the toolbar's filter button (which
+    /// opens `TransactionFiltersSheet`); this row only *shows and clears* what
+    /// is active. Independent of `model.state`: a load failure or an empty
+    /// result doesn't hide it.
+    @ViewBuilder
     private var filterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            filterChips
-                .padding(.horizontal, 20)
+        if hasActiveFilters {
+            ScrollView(.horizontal, showsIndicators: false) {
+                activeFilterTokens
+                    .padding(.horizontal, 20)
+            }
+            .scrollClipDisabled()
+            .padding(.top, 12)
+            .padding(.bottom, 4)
         }
-        .scrollClipDisabled()
-        .padding(.top, 12)
-        .padding(.bottom, 4)
     }
 
-    /// The three chips in one row, inside `filterRow`'s horizontal
-    /// `ScrollView` so a long active-filter label scrolls into view instead
-    /// of squeezing its neighbours or wrapping (`docs/design/tokens.md`:
-    /// never wrap). Each opens the same sheet — the native `Menu`s are gone
-    /// (Fase B redesign).
-    private var filterChips: some View {
+    /// The active tokens in one row, inside `filterRow`'s horizontal
+    /// `ScrollView` so a long label ("Abbonamenti e servizi") scrolls into
+    /// view instead of squeezing its neighbours or wrapping
+    /// (`docs/design/tokens.md`: never wrap). Tapping a token clears that one
+    /// dimension.
+    private var activeFilterTokens: some View {
         HStack(spacing: 8) {
-            Button { isFilteringOpen = true } label: {
-                FilterChip(title: accountFilterTitle, isActive: model.filter.accountID != nil)
+            if model.filter.accountID != nil {
+                Button {
+                    applyFilters(
+                        accountID: nil,
+                        category: model.filter.category,
+                        period: selectedPeriodPreset
+                    )
+                } label: {
+                    FilterChip(title: accountFilterTitle, isActive: true)
+                }
             }
-            Button { isFilteringOpen = true } label: {
-                FilterChip(title: categoryFilterTitle, isActive: model.filter.category != .any)
+            if model.filter.category != .any {
+                Button {
+                    applyFilters(
+                        accountID: model.filter.accountID,
+                        category: .any,
+                        period: selectedPeriodPreset
+                    )
+                } label: {
+                    FilterChip(title: categoryFilterTitle, isActive: true)
+                }
             }
-            Button { isFilteringOpen = true } label: {
-                FilterChip(title: periodFilterTitle, isActive: selectedPeriodPreset != .all)
+            if selectedPeriodPreset != .all {
+                Button {
+                    applyFilters(
+                        accountID: model.filter.accountID,
+                        category: model.filter.category,
+                        period: .all
+                    )
+                } label: {
+                    FilterChip(title: periodFilterTitle, isActive: true)
+                }
             }
         }
         .buttonStyle(.plain)
+    }
+
+    /// Whether any of the three dimensions is set — drives the toolbar
+    /// button's `.fill` variant and whether `filterRow` renders at all.
+    private var hasActiveFilters: Bool {
+        model.filter.accountID != nil
+            || model.filter.category != .any
+            || selectedPeriodPreset != .all
     }
 
     /// Presents `TransactionFiltersSheet`.
