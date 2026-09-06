@@ -37,18 +37,23 @@ resolution happens automatically; no view branches on light/dark itself.
 
 | Token          | Hex (light) | Hex (dark) | Swift name           | Use                                |
 | -------------- | --------- | --------- | ---------------------- | ------------------------------------ |
-| Accent         | `#5856D6` | `#7D7AFF` | `Palette.accent`       | Brand indigo — links, positive net, active tab |
-| Accent pressed | `#423FC0` | `#605DE0` | `Palette.accentPressed`| Pressed/hover state                  |
+| Accent         | `#0E7C86` | `#33B7BE` | `Palette.accent`       | Petrol green — links, primary buttons, positive net, active tab |
+| Accent pressed | `#0A626B` | `#2A9CA3` | `Palette.accentPressed`| Pressed/hover state                  |
 
-Dark accent is Apple's own `systemIndigo` dark value — lighter than the light
-variant (the usual dark-mode adjustment so a saturated color stays legible on
-a near-black background), not a re-derivation of the light hex.
+Dark accent is a luminosity-raised petrol — lighter and a touch less
+saturated than a straight scale of the light hex, so it stays legible on a
+near-black background without going neon-cyan. Not an opacity flip of the
+light value.
 
 The underlying asset is named `AccentColor`, not `Accent`: it doubles as the
 target's global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`
-in `client/Project.yml`, the tint system controls pick up automatically), so
+in `client/Project.yml`, so tint system controls pick it up automatically), so
 `Palette.accent` reads that one asset rather than keeping a second colorset
 in sync by hand.
+
+The accent was Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06
+(see History). That hex still exists as the `indigo` data tone below — accent
+and the indigo tone were the same colour by coincidence, now decoupled.
 
 ## Semantic
 
@@ -256,3 +261,14 @@ rotation and its five colorsets are deleted — a category's donut segment and
 breakdown-list row now draw from its own `PaletteColor` (the "Appearance
 tokens" section above), the same token ADR 0017/0018 already made every
 category carry. See "Category donut and breakdown list" above.
+
+**Accent moved from indigo to petrol green, 2026-09-06** (ADR 0008's accent
+revision, Fase B of the "Bella e affidabile" milestone). The brand accent
+changed from Apple system indigo `#5856D6` / `#7D7AFF` to petrol green
+`#0E7C86` / `#33B7BE` (pressed `#0A626B` / `#2A9CA3`), swapped in the
+`AccentColor` / `AccentPressed` colorsets — the only code change, since every
+call site reads `Palette.accent`. The owner found the indigo too close to a
+generic "AI product" look after months of daily use. `PaletteColor.indigo`
+(the data tone) is unchanged; accent and that tone are now separate colours.
+A per-user accent picker in Settings was considered and parked
+(`tasks/backlog.md`).

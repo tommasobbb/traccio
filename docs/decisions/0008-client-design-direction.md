@@ -315,3 +315,39 @@ granularity, time-zone, comparison-window, and bucket-drill-through cases).
 No backend change, no `make openapi`. Manual: still needed — dark/light,
 Dynamic Type, VoiceOver on the scrubber's adjustable action, and confirming
 a year period renders 12 bars, not 365.
+
+## 2026-09-06 revision: accent moved from indigo to petrol green
+
+Fase B of the "Bella e affidabile" milestone. After months of daily use the
+owner said the Apple system indigo accent (`#5856D6`) read as a generic "AI
+product" colour — the same failure mode this ADR's original review caught in
+the first canvas iteration's periwinkle, resurfacing on the "corrected"
+value. Seven alternatives were compared on a scratch artboard of the design
+canvas; the owner chose **petrol green**.
+
+**The brand accent is now petrol green** — `#0E7C86` light / `#33B7BE` dark,
+pressed `#0A626B` / `#2A9CA3`. The dark value is a luminosity-raised petrol
+tuned by eye to stay legible on near-black without turning neon-cyan, per
+this file's dark-mode revision convention.
+
+**One code change**: the `AccentColor` and `AccentPressed` colorsets in
+`App/Resources/Colors.xcassets`. Every call site already reads
+`Palette.accent` / `Palette.accentPressed`, and the global-accent asset name
+(`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`) is unchanged, so nothing
+in Swift or `Project.yml` moved. `docs/design/tokens.md`'s Accent table and
+History are updated.
+
+**`PaletteColor.indigo` is untouched** (`#5856D6` / `#7D7AFF`). Accent and
+that data tone happened to be the same colour; they are now independent. An
+account or category can still be "indigo".
+
+**A per-user accent picker was considered and rejected for now** — a curated
+set would each need a hand-tuned dark pair and would have to dodge the
+semantic colours (green = income, red = category icon, amber = warning),
+which is real work for a single-user app that can commit to one colour.
+Filed in `tasks/backlog.md` to revisit if one accent stops satisfying.
+
+**Verified**: colorset JSON only — `make lint` / `swift test` /
+`make test-app` unaffected (no code path changed). Manual: still needed —
+every screen in light and dark, confirming the petrol reads on the dashboard
+hero's positive `net`, the active tab, and primary buttons.
