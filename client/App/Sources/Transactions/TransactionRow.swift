@@ -186,21 +186,27 @@ struct TransactionRow: View {
         transaction.status == .pending || transaction.effectiveAmount == 0
     }
 
-    /// The subtitle is one truncating line, not the old mutually-exclusive
-    /// branches — a role/pending badge, the account (a 6pt dot, deliberately
-    /// too small to compete with the category tile's colour claim — the
-    /// account/category colour hierarchy described in the milestone plan),
-    /// and the category or advance caption can now all appear together.
+    /// The subtitle is one truncating line: a coloured glyph for the row's
+    /// role (a word here was the main cause of the list wrapping —
+    /// `docs/design/tokens.md`, "never wrap"), or a small dot for a pending
+    /// personal row; then the account as an 8pt colour swatch (deliberately
+    /// smaller than the category tile so category still leads the colour
+    /// hierarchy — the milestone plan); then the account name plus the
+    /// category or advance caption.
     @ViewBuilder
     private var subtitle: some View {
         HStack(spacing: 5) {
-            if let leadingBadge {
-                Badge(text: leadingBadge.text, style: leadingBadge.style)
+            if transaction.role != .personal {
+                roleGlyph
+            } else if transaction.status == .pending {
+                Circle()
+                    .fill(Palette.statusWarn)
+                    .frame(width: 6, height: 6)
             }
             if let account {
-                Circle()
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(Palette.color(account.tileColor))
-                    .frame(width: 6, height: 6)
+                    .frame(width: 8, height: 8)
             }
             if !captionText.isEmpty {
                 Text(captionText)
@@ -211,24 +217,44 @@ struct TransactionRow: View {
         }
     }
 
-    /// The one badge this row shows, if any — role takes precedence over the
-    /// pending marker (a pending transfer/advance still reads as that role
-    /// first), and a plain personal, settled row shows neither.
-    private var leadingBadge: (text: String, style: Badge.Style)? {
-        if transaction.role != .personal {
-            return (roleLabel, roleBadgeStyle)
+    /// A 16pt tile standing in for the role word: neutral for a transfer,
+    /// funding, or reimbursement leg; the accent (petrol) for an advance, the
+    /// one role that already carried the accent as a `Badge`.
+    private var roleGlyph: some View {
+        let spec = roleGlyphSpec
+        return Image(systemName: spec.icon)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(spec.isAccent ? Palette.accent : Palette.inkSecondary)
+            .frame(width: 16, height: 16)
+            .background(
+                spec.isAccent ? Palette.accent.opacity(0.15) : Palette.neutralFill,
+                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+            )
+            .accessibilityLabel(roleLabel)
+    }
+
+    /// SF Symbol and whether it takes the accent, per role. `.personal` is
+    /// unreachable — `subtitle` only renders the glyph when the role is not
+    /// personal.
+    private var roleGlyphSpec: (icon: String, isAccent: Bool) {
+        switch transaction.role {
+        case .personal: ("circle", false)
+        case .transfer: ("arrow.left.arrow.right", false)
+        case .funding: ("arrow.down", false)
+        case .advance: ("square.stack.3d.up.fill", true)
+        case .reimbursement: ("arrow.uturn.backward", false)
         }
-        if transaction.status == .pending {
-            return ("In lavorazione", .warning)
-        }
-        return nil
     }
 
     /// The account name, then either the advance quota or the category name
     /// — joined into the single trailing caption `subtitle` renders after the
-    /// badge and the account dot.
+    /// glyph and the account swatch. "In lavorazione" leads it for a pending
+    /// personal row (a pending role row shows its role glyph instead).
     private var captionPieces: [String] {
         var pieces: [String] = []
+        if transaction.role == .personal, transaction.status == .pending {
+            pieces.append("In lavorazione")
+        }
         if let account {
             pieces.append(account.displayName ?? "Conto")
         }
@@ -251,6 +277,8 @@ struct TransactionRow: View {
         captionPieces.joined(separator: " · ")
     }
 
+    /// Role name — now only the glyph's accessibility label (the visible
+    /// word is gone).
     private var roleLabel: String {
         switch transaction.role {
         case .personal: ""  // unreachable — guarded by `subtitle`'s condition
@@ -258,14 +286,6 @@ struct TransactionRow: View {
         case .funding: "Ricarica"
         case .advance: "Anticipo"
         case .reimbursement: "Rimborso"
-        }
-    }
-
-    private var roleBadgeStyle: Badge.Style {
-        switch transaction.role {
-        case .personal: .neutral  // unreachable — guarded by `subtitle`'s condition
-        case .transfer, .funding, .reimbursement: .neutral
-        case .advance: .accent
         }
     }
 

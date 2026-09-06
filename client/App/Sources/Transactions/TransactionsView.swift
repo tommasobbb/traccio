@@ -5,14 +5,15 @@ import TraccioCore
 /// (transfers, advances, reimbursements, categories) that has no other entry
 /// point in the client yet. Every row links to `TransactionDetailView`, where
 /// a category can be confirmed or cleared (see `TransactionRow`) — the
-/// client's first write-with-a-body flow. A toolbar badge links to
-/// `TransfersView` whenever there is at least one transfer suggestion to
-/// confirm or reject.
+/// client's first write-with-a-body flow. A card at the top of the list
+/// links to `TransfersView` whenever there is at least one transfer
+/// suggestion to confirm or reject.
 ///
-/// Follows `docs/design/canvas/Transactions.dc.html`, including the account/
-/// category filter chips — the filtering happens server-side
-/// (`TransactionFilter`, `TransactionsViewModel.applyFilter(_:)`), never on
-/// an already-fetched page.
+/// Follows `docs/design/canvas/TransactionsV2.dc.html` (Fase B redesign):
+/// toolbar down to "+" and a "•••" overflow, suggestions surfaced as a
+/// top-of-list card. Filtering happens server-side (`TransactionFilter`,
+/// `TransactionsViewModel.applyFilter(_:)`), never on an already-fetched
+/// page.
 struct TransactionsView: View {
     @State private var model: TransactionsViewModel
     /// Bound to `.searchable`. Kept separate from `model.filter.searchTerm`
@@ -96,25 +97,19 @@ struct TransactionsView: View {
                 Button("Fine") { model.exitSelection() }
             }
         } else {
-            if model.transferSuggestionCount > 0 {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        TransfersView(
-                            client: model.client,
-                            onUpdate: { model.replace($0) },
-                            onDashboardStale: { freshness.markStale([.dashboard]) }
-                        )
-                    } label: {
-                        Label(
-                            "\(model.transferSuggestionCount) trasferimenti",
-                            systemImage: "arrow.left.arrow.right"
-                        )
-                    }
-                }
-            }
+            // The toolbar is down to "+" plus a "•••" overflow: the transfer
+            // count moved to a card at the top of the list (more discoverable
+            // than a mute glyph that vanishes at zero), and "Collega
+            // trasferimento" is a secondary action, not a peer of "+".
             ToolbarItem(placement: .primaryAction) {
-                Button { model.enterSelection() } label: {
-                    Label("Collega trasferimento", systemImage: "arrow.triangle.merge")
+                Menu {
+                    Button {
+                        model.enterSelection()
+                    } label: {
+                        Label("Collega trasferimento", systemImage: "arrow.triangle.merge")
+                    }
+                } label: {
+                    Label("Altro", systemImage: "ellipsis")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -123,6 +118,63 @@ struct TransactionsView: View {
                 }
             }
         }
+    }
+
+    // MARK: Transfer-suggestions card
+
+    /// Shown at the top of the list whenever there is at least one transfer
+    /// suggestion to review — the discoverable replacement for the old
+    /// toolbar count. Tapping opens `TransfersView`.
+    private var transferSuggestionCard: some View {
+        NavigationLink {
+            TransfersView(
+                client: model.client,
+                onUpdate: { model.replace($0) },
+                onDashboardStale: { freshness.markStale([.dashboard]) }
+            )
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Palette.accent)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Palette.accent.opacity(0.14),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(transferSuggestionCardTitle)
+                        .font(Typography.body.weight(.semibold))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1)
+                    Text("Movimenti collegati tra i tuoi conti")
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.inkSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.accent)
+            }
+            .padding(14)
+            .background(
+                Palette.accent.opacity(0.08),
+                in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+                    .strokeBorder(Palette.accent.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var transferSuggestionCardTitle: String {
+        let n = model.transferSuggestionCount
+        return n == 1
+            ? "1 trasferimento da confermare"
+            : "\(n) trasferimenti da confermare"
     }
 
     // MARK: Transfer-pairing selection bar
@@ -375,9 +427,14 @@ struct TransactionsView: View {
     private func list(_ transactions: [TransactionResponse]) -> some View {
         let groups = TraccioCore.groupByDay(transactions)
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 22) {
-                ForEach(groups) { group in
-                    dayGroup(group, isLastGroup: group.id == groups.last?.id)
+            VStack(alignment: .leading, spacing: 16) {
+                if model.transferSuggestionCount > 0 {
+                    transferSuggestionCard
+                }
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    ForEach(groups) { group in
+                        dayGroup(group, isLastGroup: group.id == groups.last?.id)
+                    }
                 }
             }
             .padding(20)
