@@ -106,7 +106,7 @@ struct DashboardView: View {
                 .disabled(!model.canGoToNext)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Palette.inkTertiary)
+            .foregroundStyle(Palette.accent)
 
             Picker("Unità", selection: unitBinding) {
                 Text("Mese").tag(CalendarPeriod.Unit.month)
@@ -114,7 +114,13 @@ struct DashboardView: View {
                 Text("Anno").tag(CalendarPeriod.Unit.year)
             }
             .pickerStyle(.segmented)
+            .tint(Palette.accent)
         }
+        // A tinted control strip rather than bare text on the background —
+        // the top of the screen no longer reads as empty white.
+        .padding(Spacing.cardPadding)
+        .background(Palette.accentTint)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private var unitBinding: Binding<CalendarPeriod.Unit> {
@@ -219,18 +225,19 @@ struct DashboardView: View {
     }
 
     private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
-        Card {
-            EyebrowLabel(text: "Speso questo periodo")
+        HeroCard {
+            EyebrowLabel(text: "Speso questo periodo", color: Palette.onHeroSecondary)
             AmountText(
                 amount: summary.spending,
                 currencyCode: summary.currency,
                 kind: .spending,
-                font: Typography.heroFigure
+                font: Typography.heroFigure,
+                tone: .onHero
             )
             Text(summary.currency)
                 .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-
+                .foregroundStyle(Palette.onHeroSecondary)
+        } content: {
             categoryRibbon(summary)
 
             Divider().overlay(Palette.separator)
@@ -371,7 +378,7 @@ struct DashboardView: View {
         _ others: [CurrencySummaryResponse], combined: Bool
     ) -> some View {
         Card {
-            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute")
+            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.accent)
             HStack(spacing: 10) {
                 ForEach(others, id: \.currency) { summary in
                     VStack(alignment: .leading, spacing: 3) {
@@ -422,7 +429,7 @@ struct DashboardView: View {
 
         if !segments.isEmpty {
             Card {
-                EyebrowLabel(text: "Per categoria")
+                EyebrowLabel(text: "Per categoria", color: Palette.accent)
                 HStack {
                     Spacer(minLength: 0)
                     ZStack {
@@ -499,7 +506,7 @@ struct DashboardView: View {
 
         if !bars.isEmpty {
             Card {
-                EyebrowLabel(text: "Andamento spesa")
+                EyebrowLabel(text: "Andamento spesa", color: Palette.accent)
                 BucketBarsChart(
                     bars: bars,
                     currency: summary.currency,

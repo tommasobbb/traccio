@@ -23,7 +23,7 @@ struct ComparisonCard: View {
 
     var body: some View {
         Card {
-            EyebrowLabel(text: "Rispetto a \(previousPeriodLabel)")
+            EyebrowLabel(text: "Rispetto a \(previousPeriodLabel)", color: Palette.accent)
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: deltaSystemImage)
                     .font(Typography.body.weight(.semibold))
