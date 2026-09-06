@@ -4,18 +4,17 @@ import TraccioCore
 /// "Inizio tracciamento" — the screen where the user picks the day the
 /// dashboard and Movimenti begin from (ADR 0024).
 ///
-/// Months before every account has data show only the accounts connected
-/// earliest, so their totals mislead. This screen shows each account's first
-/// movement, suggests the earliest month all of them cover, and lets the user
-/// set, change, or clear the floor. Nothing is ever deleted — clearing brings
-/// every earlier movement back.
-///
-/// No mockup covers this; built from the same `Card` idiom as the rest of
-/// Impostazioni.
+/// Fase B redesign (`docs/design/canvas/TrackingStart.dc.html`): one
+/// question — "Da quando vuoi contare?" — a per-account timeline showing
+/// when each account's data starts and where the floor falls, and one
+/// primary action (use the suggested date), with "choose another date" and
+/// "show everything" as secondary paths. Replaces the old stack of four
+/// cards and two separate save buttons.
 struct TrackingStartView: View {
     @State private var model: TrackingStartViewModel
     @State private var pickedDate = Date()
     @State private var pickerSeeded = false
+    @State private var isPickingDate = false
 
     init(model: TrackingStartViewModel = TrackingStartViewModel()) {
         _model = State(wrappedValue: model)
@@ -23,7 +22,7 @@ struct TrackingStartView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 switch model.state {
                 case .loading:
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
@@ -40,120 +39,276 @@ struct TrackingStartView: View {
                     loaded(current: current, suggestion: suggestion)
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
         .background(Palette.background)
         .navigationTitle("Inizio tracciamento")
         .task { await model.load() }
     }
 
+    // MARK: Loaded
+
     @ViewBuilder
     private func loaded(
         current: CalendarDate?, suggestion: TrackingStartSuggestionResponse
     ) -> some View {
+        let timeline = TraccioCore.trackingTimeline(
+            suggestion: suggestion,
+            current: current,
+            now: CalendarDate(date: Date())
+        )
+
+        Text("Da quando vuoi contare?")
+            .font(.title2)
+            .fontWeight(.bold)
+            .foregroundStyle(Palette.ink)
+
         Text(
-            "La Panoramica e i Movimenti partono da questa data. Prima di qui i mesi hanno i dati solo di alcuni conti, quindi i totali ingannano. Cambiarla non cancella nulla."
+            "La Panoramica e i Movimenti mostrano solo ciò che è successo da questa data in poi. Prima di qui i mesi hanno i dati solo di alcuni conti, quindi i totali ingannano. Cambiarla non cancella nulla."
         )
         .font(Typography.caption)
         .foregroundStyle(Palette.inkSecondary)
 
         Card {
-            EyebrowLabel(text: "Data attuale")
-            Text(
-                current.map { TraccioCore.formatCalendarDate($0) }
-                    ?? "Nessuna — mostro tutti i movimenti"
-            )
-            .font(Typography.statFigure)
-            .foregroundStyle(Palette.ink)
+            EyebrowLabel(text: "I tuoi conti")
+            timelinePlot(timeline)
+            Divider().overlay(Palette.separator)
+            HStack(spacing: 8) {
+                Text("Conteggio da")
+                    .font(Typography.caption.weight(.semibold))
+                    .foregroundStyle(Palette.inkSecondary)
+                Text(
+                    current.map { TraccioCore.formatCalendarDate($0) }
+                        ?? "tutti i movimenti"
+                )
+                .font(Typography.statFigure)
+                .foregroundStyle(Palette.ink)
+            }
+        }
+
+        actions(current: current, suggestion: suggestion)
+    }
+
+    // MARK: Actions
+
+    @ViewBuilder
+    private func actions(
+        current: CalendarDate?, suggestion: TrackingStartSuggestionResponse
+    ) -> some View {
+        VStack(spacing: 10) {
+            if let suggested = suggestion.suggestion {
+                primaryButton(
+                    "Usa il \(TraccioCore.formatCalendarDate(suggested))",
+                    disabled: current == suggested
+                ) {
+                    Task { await model.save(suggested) }
+                }
+            }
+
+            secondaryButton(isPickingDate ? "Nascondi il calendario" : "Scegli un'altra data") {
+                if !pickerSeeded {
+                    pickerSeeded = true
+                    if let seed = (current ?? suggestion.suggestion)?.date() {
+                        pickedDate = seed
+                    }
+                }
+                withAnimation(.easeInOut(duration: 0.2)) { isPickingDate.toggle() }
+            }
+
+            if isPickingDate {
+                VStack(spacing: 10) {
+                    DatePicker(
+                        "Inizio tracciamento", selection: $pickedDate, displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                    primaryButton("Salva questa data") {
+                        Task { await model.save(CalendarDate(date: pickedDate)) }
+                    }
+                }
+                .padding(14)
+                .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                        .strokeBorder(Palette.separatorSubtle)
+                )
+            }
+
+            if current != nil {
+                Button {
+                    Task { await model.save(nil) }
+                } label: {
+                    Text("Mostra tutti i movimenti, dall'inizio")
+                        .font(Typography.caption.weight(.semibold))
+                        .foregroundStyle(Palette.warning)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isSaving)
+            }
+
             if model.saveFailed {
                 Text("Non è stato possibile salvare. Riprova.")
                     .font(Typography.caption)
                     .foregroundStyle(Palette.warning)
             }
         }
+    }
 
-        Card {
-            EyebrowLabel(text: "Primo movimento per conto")
-            ForEach(suggestion.accounts) { account in
-                accountRow(account, constraining: account.id == suggestion.constrainingAccountID)
-                if account.id != suggestion.accounts.last?.id {
-                    Divider().overlay(Palette.separator)
+    private func primaryButton(
+        _ title: String, disabled: Bool = false, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if model.isSaving {
+                    ProgressView().controlSize(.small).tint(.white)
                 }
+                Text(title).font(Typography.body.weight(.semibold))
             }
-            if suggestion.accounts.isEmpty {
-                Text("Nessun conto.").font(Typography.body).foregroundStyle(Palette.inkSecondary)
-            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(
+                (disabled || model.isSaving) ? Palette.accentPressed : Palette.accent,
+                in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+            )
+            .opacity(disabled ? 0.5 : 1)
         }
+        .buttonStyle(.plain)
+        .disabled(disabled || model.isSaving)
+    }
 
-        if let suggested = suggestion.suggestion {
-            Card {
-                EyebrowLabel(text: "Consigliata")
-                Text(TraccioCore.formatCalendarDate(suggested))
-                    .font(Typography.statFigure)
-                    .foregroundStyle(Palette.ink)
-                Text("Il primo mese in cui tutti i conti hanno movimenti.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-                PillButton(
-                    title: "Usa la data consigliata",
-                    isLoading: model.isSaving,
-                    action: { Task { await model.save(suggested) } }
+    private func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Typography.body.weight(.semibold))
+                .foregroundStyle(Palette.accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(
+                    Palette.card,
+                    in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
                 )
-                .disabled(current == suggested)
-            }
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+                        .strokeBorder(Palette.accent.opacity(0.3))
+                )
         }
+        .buttonStyle(.plain)
+        .disabled(model.isSaving)
+    }
 
-        Card {
-            EyebrowLabel(text: "Scegli una data")
-            DatePicker(
-                "Inizio tracciamento", selection: $pickedDate, displayedComponents: .date
-            )
-            .labelsHidden()
-            .onAppear {
-                guard !pickerSeeded else { return }
-                pickerSeeded = true
-                if let seed = (current ?? suggestion.suggestion)?.date() {
-                    pickedDate = seed
+    // MARK: Timeline
+
+    private var rowHeight: CGFloat { 50 }
+
+    @ViewBuilder
+    private func timelinePlot(_ timeline: TrackingTimeline) -> some View {
+        if timeline.bars.isEmpty {
+            Text("Nessun conto.")
+                .font(Typography.body)
+                .foregroundStyle(Palette.inkSecondary)
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                if let start = timeline.axisStart {
+                    HStack {
+                        Text(monthYear(start))
+                        Spacer()
+                        Text("adesso")
+                    }
+                    .font(Typography.eyebrow)
+                    .foregroundStyle(Palette.inkQuaternary)
                 }
-            }
-            PillButton(
-                title: "Salva",
-                isLoading: model.isSaving,
-                action: { Task { await model.save(CalendarDate(date: pickedDate)) } }
-            )
-        }
 
-        if current != nil {
-            Button {
-                Task { await model.save(nil) }
-            } label: {
-                Text("Azzera — mostra tutti i movimenti")
-                    .font(Typography.body)
-                    .foregroundStyle(Palette.warning)
+                GeometryReader { geo in
+                    ZStack(alignment: .topLeading) {
+                        VStack(spacing: 16) {
+                            ForEach(timeline.bars) { bar in
+                                barRow(bar, width: geo.size.width)
+                            }
+                        }
+                        if let fraction = timeline.thresholdFraction {
+                            Rectangle()
+                                .fill(Palette.accent)
+                                .frame(width: 2)
+                                .overlay(alignment: .top) {
+                                    Circle()
+                                        .fill(Palette.accent)
+                                        .frame(width: 8, height: 8)
+                                        .offset(y: -4)
+                                }
+                                .position(x: geo.size.width * fraction, y: geo.size.height / 2)
+                        }
+                    }
+                }
+                .frame(height: CGFloat(timeline.bars.count) * rowHeight)
             }
-            .buttonStyle(.plain)
-            .disabled(model.isSaving)
         }
     }
 
-    private func accountRow(_ account: AccountEarliestResponse, constraining: Bool) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.displayName ?? "Conto")
-                    .font(Typography.body)
+    private func barRow(_ bar: TrackingTimelineBar, width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(color(for: bar))
+                    .frame(width: 11, height: 11)
+                Text(bar.displayName ?? "Conto")
+                    .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                if constraining {
-                    Text("determina la data consigliata")
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.accent)
-                }
+                Spacer(minLength: 8)
+                barTrailingLabel(bar)
             }
-            Spacer()
-            Text(account.earliest.map { TraccioCore.formatCalendarDate($0) } ?? "nessun movimento")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
+            Capsule()
+                .fill(Palette.neutralFill)
+                .frame(height: 14)
+                .overlay(alignment: .leading) {
+                    if let fraction = bar.startFraction {
+                        Capsule()
+                            .fill(color(for: bar).opacity(0.9))
+                            .frame(width: max(width * (1 - fraction), 6))
+                            .offset(x: width * fraction)
+                    }
+                }
+                .overlay {
+                    if bar.isConstraining {
+                        Capsule().strokeBorder(Palette.accent.opacity(0.5), lineWidth: 2)
+                    }
+                }
         }
-        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private func barTrailingLabel(_ bar: TrackingTimelineBar) -> some View {
+        if bar.isConstraining {
+            Text("determina la data")
+                .font(Typography.eyebrow)
+                .foregroundStyle(Palette.accent)
+        } else if let earliest = bar.earliest {
+            Text("da \(monthYear(earliest))")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+                .lineLimit(1)
+        } else {
+            Text("nessun movimento")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkQuaternary)
+                .lineLimit(1)
+        }
+    }
+
+    private func color(for bar: TrackingTimelineBar) -> Color {
+        Palette.color(model.accountColors[bar.accountID] ?? .slate)
+    }
+
+    /// "mar 2026" — a short month/year for the axis and the per-account "da …"
+    /// labels. Locale-driven, same half-measure `DashboardView` uses.
+    private func monthYear(_ date: CalendarDate) -> String {
+        guard let d = date.date() else { return date.wireValue }
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM yyyy")
+        return formatter.string(from: d)
     }
 }

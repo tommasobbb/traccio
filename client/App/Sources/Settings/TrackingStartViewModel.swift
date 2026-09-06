@@ -22,6 +22,11 @@ final class TrackingStartViewModel {
     private(set) var isSaving = false
     /// The last save failed — the view shows a retry-able message.
     private(set) var saveFailed = false
+    /// Account id → its `PaletteColor` (falling back to `.slate`), so the
+    /// timeline can draw each account's bar in its own colour. Loaded
+    /// alongside the suggestion; empty until then and if the accounts call
+    /// fails (the timeline just falls back to `.slate`).
+    private(set) var accountColors: [UUID: PaletteColor] = [:]
 
     private let client: any APIClientProtocol
     /// Invoked after a successful save so the caller can mark the dashboard
@@ -45,13 +50,20 @@ final class TrackingStartViewModel {
         self.onChanged = onChanged
     }
 
-    /// Load the current value and the suggestion, in parallel.
+    /// Load the current value, the suggestion, and the accounts' colours, in
+    /// parallel.
     func load() async {
         state = .loading
         do {
             async let settings = client.settings()
             async let suggestion = client.trackingStartSuggestion()
-            let (current, suggested) = try await (settings.trackingStartDate, suggestion)
+            async let accounts = client.accounts()
+            let (current, suggested, accts) = try await (
+                settings.trackingStartDate, suggestion, accounts
+            )
+            accountColors = Dictionary(
+                accts.map { ($0.id, $0.color ?? .slate) }, uniquingKeysWith: { first, _ in first }
+            )
             state = .loaded(current: current, suggestion: suggested)
         } catch {
             state = .failed
