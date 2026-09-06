@@ -84,6 +84,19 @@ struct TransactionsView: View {
                     onCancel: { isCreatingTransaction = false }
                 )
             }
+            .sheet(isPresented: $isFilteringOpen) {
+                TransactionFiltersSheet(
+                    accountID: model.filter.accountID,
+                    category: model.filter.category,
+                    period: selectedPeriodPreset,
+                    accounts: sortedAccounts,
+                    categoryTree: TraccioCore.categoryTree(model.categories),
+                    periodTitle: { title(for: $0) },
+                    onApply: { accountID, category, period in
+                        applyFilters(accountID: accountID, category: category, period: period)
+                    }
+                )
+            }
         }
         .task(id: freshness.token(for: .transactions)) { await model.load() }
     }
@@ -245,9 +258,10 @@ struct TransactionsView: View {
 
     // MARK: Filter chips
 
-    /// "Tutti i conti" / "Categoria" chips (`docs/design/canvas/Transactions.dc.html`).
+    /// The three state-showing chips (`docs/design/canvas/TransactionsV2.dc.html`).
     /// Always visible, independent of `model.state` — these are controls, not
-    /// content, so a load failure or an empty result doesn't hide them.
+    /// content, so a load failure or an empty result doesn't hide them. Any
+    /// of them opens the shared `TransactionFiltersSheet`.
     private var filterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             filterChips
@@ -258,52 +272,28 @@ struct TransactionsView: View {
         .padding(.bottom, 4)
     }
 
-    /// The three filter menus in one row. Split out of `filterRow` so the row
-    /// can put them inside a horizontal `ScrollView` — a long account or
-    /// category label then scrolls into view instead of squeezing the other
-    /// chips or wrapping (`docs/design/tokens.md`: never wrap).
+    /// The three chips in one row, inside `filterRow`'s horizontal
+    /// `ScrollView` so a long active-filter label scrolls into view instead
+    /// of squeezing its neighbours or wrapping (`docs/design/tokens.md`:
+    /// never wrap). Each opens the same sheet — the native `Menu`s are gone
+    /// (Fase B redesign).
     private var filterChips: some View {
         HStack(spacing: 8) {
-            Menu {
-                Button("Tutti i conti") { applyAccountFilter(nil) }
-                if !model.accountsByID.isEmpty {
-                    Divider()
-                    ForEach(sortedAccounts) { account in
-                        Button(account.displayName ?? "Conto") { applyAccountFilter(account.id) }
-                    }
-                }
-            } label: {
+            Button { isFilteringOpen = true } label: {
                 FilterChip(title: accountFilterTitle, isActive: model.filter.accountID != nil)
             }
-            Menu {
-                Button("Tutte le categorie") { applyCategoryFilter(.any) }
-                Button("Senza categoria") { applyCategoryFilter(.uncategorized) }
-                if !model.categories.isEmpty {
-                    Divider()
-                    // Root, then its own children indented under it (a Menu
-                    // has no real indentation, so an arrow prefix stands in)
-                    // — mirrors the flat, backend-ordered list's own shape.
-                    ForEach(TraccioCore.categoryTree(model.categories)) { node in
-                        Button(node.category.name) { applyCategoryFilter(.some(node.category.id)) }
-                        ForEach(node.children) { child in
-                            Button("    ↳ \(child.name)") {
-                                applyCategoryFilter(.some(child.id))
-                            }
-                        }
-                    }
-                }
-            } label: {
+            Button { isFilteringOpen = true } label: {
                 FilterChip(title: categoryFilterTitle, isActive: model.filter.category != .any)
             }
-            Menu {
-                ForEach(TransactionPeriodPreset.allCases, id: \.self) { preset in
-                    Button(title(for: preset)) { applyPeriodFilter(preset) }
-                }
-            } label: {
+            Button { isFilteringOpen = true } label: {
                 FilterChip(title: periodFilterTitle, isActive: selectedPeriodPreset != .all)
             }
         }
+        .buttonStyle(.plain)
     }
+
+    /// Presents `TransactionFiltersSheet`.
+    @State private var isFilteringOpen = false
 
     /// The preset last applied via the period chip. Not derived from
     /// `model.filter.start`/`.end` — those are plain `Date?` and can't be
@@ -327,11 +317,20 @@ struct TransactionsView: View {
         }
     }
 
-    private func applyPeriodFilter(_ preset: TransactionPeriodPreset) {
-        selectedPeriodPreset = preset
-        let range = preset.range()
+    /// Apply the whole selection the sheet accumulated — account, category,
+    /// and period preset — in one `applyFilter` call, so the list behind the
+    /// sheet reloads once, not once per dimension.
+    private func applyFilters(
+        accountID: UUID?,
+        category: TransactionFilter.CategoryFilter,
+        period: TransactionPeriodPreset
+    ) {
+        selectedPeriodPreset = period
+        let range = period.range()
         Task {
             var newFilter = model.filter
+            newFilter.accountID = accountID
+            newFilter.category = category
             newFilter.start = range.start
             newFilter.end = range.end
             await model.applyFilter(newFilter)
@@ -356,21 +355,6 @@ struct TransactionsView: View {
         }
     }
 
-    private func applyAccountFilter(_ accountID: UUID?) {
-        Task {
-            var newFilter = model.filter
-            newFilter.accountID = accountID
-            await model.applyFilter(newFilter)
-        }
-    }
-
-    private func applyCategoryFilter(_ category: TransactionFilter.CategoryFilter) {
-        Task {
-            var newFilter = model.filter
-            newFilter.category = category
-            await model.applyFilter(newFilter)
-        }
-    }
 
     // MARK: Content
 
