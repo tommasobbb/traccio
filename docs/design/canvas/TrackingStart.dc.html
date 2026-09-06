@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #0E7C86; text-decoration: none; }
+    a:hover { color: #0A626B; }
+    .frame {
+      width: 390px; height: 844px; background: #F5F5F7; color: #1C1C1E;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; position: relative;
+      -webkit-font-smoothing: antialiased;
+    }
+    .navbar { flex-shrink: 0; padding: 16px 16px 10px; display: flex; align-items: center; gap: 6px; }
+    .nav-back { display: flex; align-items: center; gap: 2px; color: #0E7C86; font-size: 15px; font-weight: 500; }
+    .scroll { flex: 1; overflow-y: auto; padding: 8px 20px 28px; display: flex; flex-direction: column; gap: 20px; }
+    .headline { font-size: 25px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; }
+    .lede { font-size: 13.5px; color: #6E6E73; line-height: 1.45; margin-top: -10px; }
+    .card {
+      background: #FFFFFF; border-radius: 20px; padding: 18px; border: 1px solid rgba(60,60,67,.06);
+      box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 14px 28px -18px rgba(0,0,0,.22);
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #8E8E93; }
+    .tl-scale { display: flex; justify-content: space-between; margin: 0 2px 2px; }
+    .tl-scale span { font-size: 9.5px; font-weight: 600; color: #AEAEB2; }
+    .acct { display: flex; flex-direction: column; gap: 7px; }
+    .acct-head { display: flex; align-items: center; gap: 8px; }
+    .acct-sw { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+    .acct-name { font-size: 13.5px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .acct-since { font-size: 11px; color: #8E8E93; font-weight: 600; flex-shrink: 0; }
+    .acct-flag { font-size: 10px; font-weight: 700; letter-spacing: .02em; color: #0E7C86; text-transform: uppercase; flex-shrink: 0; }
+    .tl-track {
+      position: relative; height: 14px; border-radius: 7px; background: #E5E5EA; overflow: hidden;
+    }
+    .tl-data { position: absolute; top: 0; bottom: 0; border-radius: 7px; opacity: .85; }
+    .tl-row.constraining .tl-track { box-shadow: 0 0 0 2px rgba(14,124,134,.38); }
+    .threshold { position: absolute; top: 0; bottom: 0; width: 2px; background: #0E7C86; z-index: 2; }
+    .threshold::before {
+      content: ""; position: absolute; top: -5px; left: -4px; width: 10px; height: 10px; border-radius: 50%; background: #0E7C86;
+    }
+    .tl-wrap { position: relative; display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
+    .readout { display: flex; align-items: baseline; gap: 8px; padding-top: 4px; }
+    .readout .lbl { font-size: 12px; font-weight: 600; color: #6E6E73; }
+    .readout .date { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+    .actions { display: flex; flex-direction: column; gap: 10px; }
+    .btn-primary {
+      background: #0E7C86; color: #FFFFFF; font-size: 15px; font-weight: 700; padding: 15px; border-radius: 16px; text-align: center;
+    }
+    .btn-secondary {
+      background: #FFFFFF; color: #0E7C86; font-size: 14.5px; font-weight: 600; padding: 14px; border-radius: 16px; text-align: center;
+      border: 1px solid rgba(14,124,134,.32);
+    }
+    .btn-tertiary { color: #C2660A; font-size: 13.5px; font-weight: 600; padding: 6px; text-align: center; }
+  </style>
+</helmet>
+
+<div class="frame">
+  <div class="navbar">
+    <span class="nav-back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      Impostazioni
+    </span>
+  </div>
+
+  <div class="scroll">
+    <span class="headline">Da quando vuoi contare?</span>
+    <span class="lede">Panoramica e Movimenti mostrano solo ci&ograve; che &egrave; successo da questa data in poi. Puoi cambiarla quando vuoi.</span>
+
+    <div class="card">
+      <span class="eyebrow">I tuoi conti</span>
+
+      <div class="tl-scale">
+        <span>mar 2024</span>
+        <span>giu 2025</span>
+        <span>set 2026</span>
+      </div>
+
+      <div class="tl-wrap">
+        <div class="threshold" style="left: 90%"></div>
+
+        <div class="tl-row">
+          <div class="acct">
+            <div class="acct-head">
+              <span class="acct-sw" style="background: #2A78D6"></span>
+              <span class="acct-name">Revolut &middot; Conto corrente</span>
+              <span class="acct-since">da mar 2024</span>
+            </div>
+            <div class="tl-track">
+              <div class="tl-data" style="left: 0; right: 0; background: #2A78D6"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row">
+          <div class="acct">
+            <div class="acct-head">
+              <span class="acct-sw" style="background: #5856D6"></span>
+              <span class="acct-name">Isybank &middot; Conto corrente</span>
+              <span class="acct-since">da nov 2024</span>
+            </div>
+            <div class="tl-track">
+              <div class="tl-data" style="left: 27%; right: 0; background: #5856D6"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row">
+          <div class="acct">
+            <div class="acct-head">
+              <span class="acct-sw" style="background: #EDA100"></span>
+              <span class="acct-name">Contanti</span>
+              <span class="acct-since">da feb 2025</span>
+            </div>
+            <div class="tl-track">
+              <div class="tl-data" style="left: 37%; right: 0; background: #EDA100"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tl-row constraining">
+          <div class="acct">
+            <div class="acct-head">
+              <span class="acct-sw" style="background: #AF52DE"></span>
+              <span class="acct-name">PayPal &middot; Wallet</span>
+              <span class="acct-flag">determina la data</span>
+            </div>
+            <div class="tl-track">
+              <div class="tl-data" style="left: 90%; right: 0; background: #AF52DE"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="readout">
+        <span class="lbl">Conteggio da</span>
+        <span class="date">1 giugno 2026</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <div class="btn-primary">Usa il 1 giugno 2026</div>
+      <div class="btn-secondary">Scegli un&rsquo;altra data</div>
+      <div class="btn-tertiary">Mostra tutti i movimenti, dall&rsquo;inizio</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    a { color: #0E7C86; text-decoration: none; }
+    a:hover { color: #0A626B; }
+    .frame {
+      width: 390px; height: 844px; background: #F5F5F7; color: #1C1C1E;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; position: relative;
+      -webkit-font-smoothing: antialiased;
+    }
+    .topbar { flex-shrink: 0; padding: 22px 20px 12px; display: flex; flex-direction: column; gap: 14px; }
+    .title-row { display: flex; align-items: center; justify-content: space-between; }
+    .title { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+    .title-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 50%; background: #FFFFFF; border: 1px solid rgba(60,60,67,.08);
+      display: flex; align-items: center; justify-content: center; color: #6E6E73; flex-shrink: 0;
+    }
+    .icon-btn.primary { background: #0E7C86; border-color: #0E7C86; color: #FFFFFF; }
+    .filter-row { display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; margin: 0 -20px; padding: 0 20px; }
+    .filter-row::-webkit-scrollbar { display: none; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 6px; background: #FFFFFF; border: 1px solid rgba(60,60,67,.08);
+      border-radius: 999px; padding: 7px 12px 7px 13px; font-size: 12.5px; font-weight: 600; color: #1C1C1E;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .filter-chip svg { color: #8E8E93; }
+    .filter-chip.active {
+      background: rgba(14,124,134,.12); border-color: rgba(14,124,134,.32); color: #0E7C86;
+    }
+    .filter-chip.active svg { color: #0E7C86; }
+    .scroll { flex: 1; overflow-y: auto; padding: 4px 20px 40px; display: flex; flex-direction: column; gap: 22px; }
+    .suggest-card {
+      display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+      background: #EAF4F5; border: 1px solid #CFE6E8; border-radius: 16px; padding: 13px 14px;
+      font-family: inherit; color: inherit;
+    }
+    .suggest-icon {
+      width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; background: rgba(14,124,134,.14); color: #0E7C86;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .suggest-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .suggest-title { font-size: 13.5px; font-weight: 700; color: #1C1C1E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .suggest-sub { font-size: 11.5px; color: #6E6E73; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .suggest-card > svg { color: #0E7C86; flex-shrink: 0; }
+    .group { display: flex; flex-direction: column; gap: 2px; }
+    .group-label { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: #8E8E93; text-transform: uppercase; margin: 0 2px 2px; }
+    .row {
+      display: flex; align-items: center; gap: 12px; background: #FFFFFF; border-radius: 16px;
+      padding: 12px 14px; border: 1px solid rgba(60,60,67,.05);
+    }
+    .row + .row { margin-top: 6px; }
+    .row.muted { background: #E5E5EA; border-style: dashed; border-color: rgba(60,60,67,.12); }
+    .row-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .row-info { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+    .row-name { font-size: 14.5px; font-weight: 600; color: #1C1C1E; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .row-sub { font-size: 12px; color: #8E8E93; display: flex; align-items: center; gap: 6px; min-width: 0; }
+    .row-sub .sub-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .role-glyph {
+      width: 17px; height: 17px; border-radius: 5px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .role-glyph.transfer { background: #E5E5EA; color: #6E6E73; }
+    .role-glyph.advance { background: rgba(14,124,134,.16); color: #0E7C86; }
+    .role-glyph.reimb { background: #E5E5EA; color: #6E6E73; }
+    .acct-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .warn-dot { width: 7px; height: 7px; border-radius: 50%; background: #C2660A; flex-shrink: 0; }
+    .row-amt-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+    .row-amt { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: #1C1C1E; }
+    .row-amt.income { color: #248A3D; }
+    .row-amt.neutral { color: #AEAEB2; font-weight: 600; }
+    .row-note { font-size: 10px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #AEAEB2; }
+  </style>
+</helmet>
+
+<div class="frame">
+  <div class="topbar">
+    <div class="title-row">
+      <span class="title">Movimenti</span>
+      <div class="title-actions">
+        <div class="icon-btn" title="Altro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
+        </div>
+        <div class="icon-btn primary" title="Nuovo movimento">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </div>
+      </div>
+    </div>
+    <div class="filter-row">
+      <div class="filter-chip">
+        Tutti i conti
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div class="filter-chip">
+        Tutte le categorie
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+      <div class="filter-chip active">
+        Questo mese
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <button class="suggest-card">
+      <div class="suggest-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 5h18"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 19H3"></path></svg>
+      </div>
+      <div class="suggest-text">
+        <span class="suggest-title">3 trasferimenti da confermare</span>
+        <span class="suggest-sub">Movimenti collegati tra i tuoi conti</span>
+      </div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+    </button>
+
+    <div class="group">
+      <div class="group-label">Oggi</div>
+
+      <div class="row muted">
+        <div class="row-icon" style="background: #FBF0DA; color: #C2660A">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Caff&egrave; Moderno</span>
+          <span class="row-sub"><span class="warn-dot"></span><span class="sub-text">In lavorazione &middot; Revolut</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt">&minus;&#8364;4,50</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-icon" style="background: #FFEDEC; color: #D70015">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a2 2 0 0 0 4 0V3"></path><path d="M8 3v18"></path><path d="M17 3c-1.5 0-3 1.5-3 4v4h3"></path><path d="M17 11v10"></path></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Panificio Rossi</span>
+          <span class="row-sub"><span class="acct-swatch" style="background: #2A78D6"></span><span class="sub-text">Revolut &middot; Alimentari</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt">&minus;&#8364;12,30</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Ieri</div>
+
+      <div class="row muted">
+        <div class="row-icon" style="background: #E5E5EA; color: #6E6E73">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Verso Conto Risparmio</span>
+          <span class="row-sub"><span class="role-glyph transfer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 5h18"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 19H3"></path></svg></span><span class="sub-text">Revolut &rarr; Isybank</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt neutral">&#8364;300,00</span>
+          <span class="row-note">non conteggiato</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-icon" style="background: #FFEDEC; color: #D70015">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-7-7 19-4-8-8-4z"></path></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Ristorante Aurora</span>
+          <span class="row-sub"><span class="role-glyph advance"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg></span><span class="sub-text">quota &#8364;18 di &#8364;54</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt">&minus;&#8364;18,00</span>
+        </div>
+      </div>
+
+      <div class="row muted">
+        <div class="row-icon" style="background: #E5E5EA; color: #6E6E73">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Marco &mdash; rimborso cena</span>
+          <span class="row-sub"><span class="role-glyph reimb"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg></span><span class="sub-text">Anticipo Ristorante Aurora</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt neutral">&#8364;18,00</span>
+          <span class="row-note">non conteggiato</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">18 agosto</div>
+
+      <div class="row">
+        <div class="row-icon" style="background: #FBF0DA; color: #C2660A">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Bolletta Energia</span>
+          <span class="row-sub"><span class="acct-swatch" style="background: #5856D6"></span><span class="sub-text">Isybank &middot; Bollette</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt">&minus;&#8364;86,40</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-icon" style="background: #E2F7E6; color: #248A3D">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Stipendio</span>
+          <span class="row-sub"><span class="acct-swatch" style="background: #5856D6"></span><span class="sub-text">Isybank &middot; Entrate</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt income">+&#8364;2.100,00</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-icon" style="background: #F1EAFB; color: #AF52DE">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><line x1="8" y1="5" x2="8" y2="19"></line><line x1="16" y1="5" x2="16" y2="19"></line></svg>
+        </div>
+        <div class="row-info">
+          <span class="row-name">Cinema Astra</span>
+          <span class="row-sub"><span class="acct-swatch" style="background: #2A78D6"></span><span class="sub-text">Revolut &middot; Svago</span></span>
+        </div>
+        <div class="row-amt-wrap">
+          <span class="row-amt">&minus;&#8364;24,00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

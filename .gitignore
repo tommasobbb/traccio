@@ -50,6 +50,11 @@ secrets/
 CLAUDE.local.md
 .claude/settings.local.json
 
+# --- design canvas ---
+# Seeded, publishable payload built from the .dc.html sources by
+# seed-canvas.mjs (~2 MB of editor code). Regenerate, don't version.
+docs/design/canvas/traccio-app-design.html
+
 # --- macOS / editor ---
 .DS_Store
 .vscode/*

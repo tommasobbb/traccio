@@ -1,18 +1,27 @@
 # Design canvas sources
 
-Sources for the M3 design canvas (four mockup screens: Dashboard,
-Transactions, Transaction detail, Accounts). Settled tokens are recorded in
-`docs/design/tokens.md` — read that first; it's the file that costs almost
-nothing to load. Come here only when you need to look at a screen or edit the
-mockups directly.
+Sources for the design canvas. Two rows of artboards on one canvas:
+
+- **Row 1 — M3, as shipped** (`Main`, `Transactions`, `TransactionDetail`,
+  `Accounts`): the four screens ADR 0008 established.
+- **Row 2 — Fase B redesign** (`MainV2`, `TransactionsV2`,
+  `TransactionsFilters`, `TrackingStart`): proposals from the "Bella e
+  affidabile" milestone, to be judged visually before any SwiftUI is written.
+  `Accounts` is deliberately not reworked — it's the model the others follow.
+
+Settled tokens are recorded in `docs/design/tokens.md` — read that first; it's
+the file that costs almost nothing to load. Come here only when you need to
+look at a screen or edit the mockups directly.
 
 ## What these are
 
 `.dc.html` files authored with an AI-assisted design-canvas tool
 (`x-dc` custom element, `{{handlebars}}` template holes, `data-props` tweaks).
-`canvas.json` lays out the four artboards on one canvas. They do **not** open
+`canvas.json` lays out the eight artboards on one canvas. They do **not** open
 standalone in a browser — each references `./support.js`, which is provided by
-the canvas environment, not present here.
+the canvas environment, not present here. The seeded, publishable payload
+(`traccio-app-design.html`, ~2 MB) is a build artifact — regenerate it with
+`seed-canvas.mjs`, don't commit it.
 
 ## Published copy
 

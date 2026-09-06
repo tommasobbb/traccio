@@ -3,10 +3,16 @@
     { "file": "Main.dc.html", "title": "Dashboard", "x": 0, "y": 0, "w": 390, "h": 844 },
     { "file": "Transactions.dc.html", "title": "Movimenti", "x": 480, "y": 0, "w": 390, "h": 844 },
     { "file": "TransactionDetail.dc.html", "title": "Dettaglio anticipo", "x": 960, "y": 0, "w": 390, "h": 844 },
-    { "file": "Accounts.dc.html", "title": "Conti", "x": 1440, "y": 0, "w": 390, "h": 844 }
+    { "file": "Accounts.dc.html", "title": "Conti", "x": 1440, "y": 0, "w": 390, "h": 844 },
+    { "file": "MainV2.dc.html", "title": "Panoramica ripensata", "x": 0, "y": 1120, "w": 390, "h": 844 },
+    { "file": "TransactionsV2.dc.html", "title": "Movimenti ripensata", "x": 480, "y": 1120, "w": 390, "h": 844 },
+    { "file": "TransactionsFilters.dc.html", "title": "Foglio filtri", "x": 960, "y": 1120, "w": 390, "h": 844 },
+    { "file": "TrackingStart.dc.html", "title": "Inizio tracciamento ripensata", "x": 1440, "y": 1120, "w": 390, "h": 844 }
   ],
   "annotations": [
-    { "id": "brief-note", "x": 0, "y": -150, "w": 900, "text": "Traccio — M3 design canvas\nStile chiaro e ariato, dati sintetici. La quota anticipo (advance) sulla Dashboard e nel Dettaglio e' il pezzo che chiude il \"done when\" di M2. Le card con badge \"Concept\" (grafico per categoria, andamento) non hanno ancora dati dal backend." }
+    { "id": "brief-note", "x": 0, "y": -150, "w": 900, "text": "Traccio — M3 design canvas\nStile chiaro e ariato, dati sintetici. La quota anticipo (advance) sulla Dashboard e nel Dettaglio e' il pezzo che chiude il \"done when\" di M2. Le card con badge \"Concept\" (grafico per categoria, andamento) non hanno ancora dati dal backend." },
+    { "id": "row-m3", "x": 1920, "y": 0, "w": 360, "text": "RIGA 1 — M3, com'e' oggi.\nLe quattro schermate gia' costruite (ADR 0008), accento indaco #5856D6. Riferimento per il confronto. Conti resta il modello a cui le altre si allineano: non si tocca." },
+    { "id": "row-redesign", "x": 1920, "y": 1120, "w": 360, "text": "RIGA 2 — Redesign 2026-09 (Fase B \"Bella e affidabile\").\nProposte da giudicare a occhio prima di scrivere SwiftUI.\n\nAccento nuovo: verde-petrolio #0E7C86 al posto dell'indaco (revisione ADR 0008). Il colore di categorie e conti (nastro, donut, timeline) non dipende dall'accento — resta la palette a dieci toni; l'indaco #5856D6 vive ancora come tono-conto (Isybank).\n\n• Movimenti: toolbar ridotta a + e ..., suggerimenti trasferimento come card in cima, ruolo = glifo colorato al posto della parola, conto con una punta di colore dai dati.\n• Foglio filtri: bottom sheet coi token al posto dei Menu nativi; categoria a due livelli con vera gerarchia.\n• Inizio tracciamento: una domanda sola + timeline per conto, una primaria al posto di due bottoni-salva.\n• Panoramica: nastro di spesa per categoria sotto il totale (colore dai dati, by_category c'e' gia'); barre andamento colorate per categoria marcate Concept." }
   ],
   "launch": { "view": "canvas" }
 }
