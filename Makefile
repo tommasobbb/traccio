@@ -70,7 +70,10 @@ seed-dev: db-upgrade ## Popola il DB con l'utente dev e alcuni account sintetici
 xcode: ## Rigenera il progetto Xcode da Project.yml
 	cd client && xcodegen generate
 
+icon: ## Rigenera l'icona app e il launch mark dai token (scripts/gen-app-icon.swift)
+	swift scripts/gen-app-icon.swift
+
 openapi: ## Esporta lo schema OpenAPI in docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run run-tls eb-aspsps eb-connections eb-census repair-empty-fields test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode openapi
+.PHONY: help setup reset-venv run run-tls eb-aspsps eb-connections eb-census repair-empty-fields test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode icon openapi

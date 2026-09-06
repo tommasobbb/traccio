@@ -362,8 +362,19 @@ supersedes the 2026-09-06 petrol revision above (kept for the record).
 pressed `#124A31` / `#3E9E78`. The owner used the petrol accent for a day and
 preferred a deeper, less teal green. `#1B5E3F` clears AAA on white (7.7:1);
 the dark value is a luminosity-raised forest tuned by eye. Same one code
-change as last time: the `AccentColor` / `AccentPressed` colorsets only,
-every call site already goes through `Palette.accent`.
+change as last time for the tint itself: the `AccentColor` / `AccentPressed`
+colorsets only, every call site already goes through `Palette.accent`.
+
+**The app icon and launch mark are regenerated — and their generator is now
+committed.** The 2026-08-25 icon revision made the PNGs with a CoreGraphics
+script that was never checked in, which is why the indigo→petrol swap left
+the home-screen icon indigo and the petrol→forest swap would have left it
+petrol. `scripts/gen-app-icon.swift` (+ `make icon`) is that script,
+committed this time: the hero-band gradient behind three ascending white
+bars (echoing `BucketBarsChart`), the iOS 1024 opaque and alpha-free, the
+macOS ten-slot set with the squircle baked in at Apple's ~9% inset, the
+launch mark the accent bars alone on transparent. The next colour change is
+one command.
 
 **Accent is now close in hue to `income` / the `green` data tone.** They were
 different colours before; they now stay apart only by a ~17° hue shift and a
