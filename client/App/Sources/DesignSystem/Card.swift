@@ -10,14 +10,16 @@ struct Card<Content: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             content
         }
-        .padding(20)
+        .padding(Spacing.cardPadding)
         .background(Palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
         )
+        // Two layers per `docs/design/tokens.md`: a tight near shadow and a
+        // soft far one. `cardShadow` is opaque black; the opacity lives here.
         .shadow(color: Palette.cardShadow.opacity(0.04), radius: 1, x: 0, y: 1)
-        .shadow(color: Palette.cardShadow.opacity(0.10), radius: 14, x: 0, y: 8)
+        .shadow(color: Palette.cardShadow.opacity(0.22), radius: 14, x: 0, y: 8)
     }
 }

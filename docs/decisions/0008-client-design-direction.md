@@ -351,3 +351,50 @@ Filed in `tasks/backlog.md` to revisit if one accent stops satisfying.
 `make test-app` unaffected (no code path changed). Manual: still needed —
 every screen in light and dark, confirming the petrol reads on the dashboard
 hero's positive `net`, the active tab, and primary buttons.
+
+## 2026-09-07 revision: forest green, a coloured hero, and a shadow bug
+
+Fase C of the "Bella e affidabile" milestone — the on-device pass Fase B
+deferred surfaced six items, three of them about colour. This revision
+supersedes the 2026-09-06 petrol revision above (kept for the record).
+
+**The brand accent is now forest green** — `#1B5E3F` light / `#58BF95` dark,
+pressed `#124A31` / `#3E9E78`. The owner used the petrol accent for a day and
+preferred a deeper, less teal green. `#1B5E3F` clears AAA on white (7.7:1);
+the dark value is a luminosity-raised forest tuned by eye. Same one code
+change as last time: the `AccentColor` / `AccentPressed` colorsets only,
+every call site already goes through `Palette.accent`.
+
+**Accent is now close in hue to `income` / the `green` data tone.** They were
+different colours before; they now stay apart only by a ~17° hue shift and a
+lightness gap. The load-bearing pairing is a positive `net` (accent) beside
+`Entrate` (income) in the dashboard hero — checked in the visual pass. If it
+ever reads as one colour, `income` moves, not the accent.
+
+**"Too white" — the accent had no presence on the first screen.**
+`DashboardView` used `Palette.accent` zero times, and `Card`'s drop shadows
+were double-multiplied (`Palette.cardShadow` carried `.opacity(0.16)`, then
+the modifiers multiplied it again — the far shadow rendered at ~1/14 of the
+value in `docs/design/tokens.md`), so cards had almost no elevation against
+the background. Fixed together:
+
+- `Palette.cardShadow` is now opaque `Color.black`; the `Card` modifiers
+  carry the documented `.04` / `.22`.
+- New tokens: `accentTint` (a pale brand wash for resting surfaces — active
+  filter tokens, card eyebrows), and a `heroFill` / `heroFillDeep` /
+  `onHero` / `onHeroSecondary` set for a filled band behind the dashboard
+  hero figure. The hero band is its **own** colorset, deep forest in both
+  appearances — the dark accent is a light mint and white text on it would
+  fail contrast.
+- `Background` shifts `#F5F5F7` → `#F2F5F3`, a barely-green neutral.
+- The category ribbon and everything below the hero figure stay on card
+  white — category tones (`slate`, `indigo`, …) on forest green are muddy
+  and would break "colour comes from the data".
+
+**A per-user accent picker stays parked** (`tasks/backlog.md`), same
+reasoning as the petrol revision.
+
+**Verified**: `make test-core` and `make test-app` unchanged (no logic
+touched); `xcodebuild` clean, zero warnings. Manual pass still owed — every
+screen light and dark, Dynamic Type up, accent-vs-income in the hero, and the
+home-screen icon (regenerated in the same milestone).

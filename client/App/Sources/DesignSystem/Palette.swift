@@ -32,6 +32,22 @@ enum Palette {
     /// one color, not two colorsets kept in sync by hand.
     static let accent = Color("AccentColor", bundle: .main)
     static let accentPressed = Color("AccentPressed", bundle: .main)
+    /// A pale wash of the accent, for a resting surface that should still read
+    /// as "brand" — an active filter token, a card eyebrow, an icon tile.
+    static let accentTint = Color("AccentTint", bundle: .main)
+
+    // MARK: Hero band
+
+    /// The filled band behind Panoramica's hero figure — its own colorset,
+    /// not `accent`: the dark accent is a light mint, so white text on it
+    /// would fail contrast. `heroFill` stays deep forest in both appearances;
+    /// `heroFillDeep` is the darker gradient stop. `onHero` /
+    /// `onHeroSecondary` are the inks that sit on it (white, and white at
+    /// 72%), fixed in both appearances since the band itself does not lighten.
+    static let heroFill = Color("HeroFill", bundle: .main)
+    static let heroFillDeep = Color("HeroFillDeep", bundle: .main)
+    static let onHero = Color("OnHero", bundle: .main)
+    static let onHeroSecondary = Color("OnHeroSecondary", bundle: .main)
 
     // MARK: Semantic
 
@@ -62,11 +78,15 @@ enum Palette {
     /// either way, with no separate dark value to keep in sync.
     static let separator = ink.opacity(0.08)
     static let separatorSubtle = ink.opacity(0.06)
-    /// Stays pure black in both appearances rather than gaining a dark
-    /// variant. A black drop shadow is naturally near-invisible on a dark
-    /// card over a dark background — that is the correct dark-mode look
+    /// Pure, fully-opaque black; the call site applies the opacity
+    /// (`docs/design/tokens.md`: `.04` near, `.22` far). It previously
+    /// carried its own `.opacity(0.16)`, which the `Card` modifiers then
+    /// multiplied again — the far shadow rendered at ~1/14 of its documented
+    /// strength, so cards dissolved into the background. Stays black in both
+    /// appearances: a black drop shadow is naturally near-invisible on a dark
+    /// card over a dark background, which is the correct dark-mode look
     /// (Apple's own dark surfaces drop the shadow the same way); `Card`'s
-    /// `separatorSubtle` border, not this shadow, is what defines a card's
-    /// edge in dark mode.
-    static let cardShadow = Color.black.opacity(0.16)
+    /// `separatorSubtle` border, not this shadow, defines a card's edge in
+    /// dark mode.
+    static let cardShadow = Color.black
 }
