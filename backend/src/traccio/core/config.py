@@ -77,6 +77,14 @@ class Settings(BaseSettings):
         Whitelisted URL the bank returns the user to after SCA. Must match both
         the redirect registered in the Enable Banking Control Panel and the
         backend callback endpoint (``GET /connections/callback``).
+    default_institution_country : str
+        ISO 3166-1 alpha-2 country assumed when a request or a stored
+        connection does not carry one. Traccio is single-user and Italy-only
+        for now (the client sends ``"IT"`` and ``POST /connections`` already
+        defaults its ``country`` query param to it); naming it here keeps that
+        assumption in one place instead of a literal in a handler. Used by the
+        logo backfill to look up institutions for connections that predate the
+        ``country`` column.
     initial_history_days : int
         How far back a connection's *first* sync requests transactions. The
         post-authorization window a bank serves full history for is short and
@@ -218,6 +226,10 @@ class Settings(BaseSettings):
     # Must match the redirect registered in the Control Panel and the callback
     # endpoint. https is mandatory; localhost is accepted (docs/openbanking.md).
     enable_banking_redirect_url: str = "https://localhost:8000/connections/callback"
+    # Country assumed when a request or stored connection carries none. Single
+    # user, Italy-only for now — the client sends "IT" and POST /connections
+    # defaults to it; named here so the logo backfill has one source for it.
+    default_institution_country: str = "IT"
     # Greedy lookback for the initial history fetch (the ~1h post-auth window is
     # the only shot at full history). Dedup makes re-fetching harmless. ~2 years.
     initial_history_days: int = 730

@@ -83,6 +83,27 @@ _SUCCESS_PAGE = """<!doctype html>
 """
 
 
+def _normalize_institution_name(name: str) -> str:
+    """Casefold and strip an institution name for tolerant matching.
+
+    The logo backfill matches a stored ``institution_name`` against the
+    provider's current institution list; small drift ("isybank" vs "Isybank",
+    stray whitespace) must not defeat the match.
+
+    Parameters
+    ----------
+    name : str
+        The raw institution name, from a stored connection or a provider DTO.
+
+    Returns
+    -------
+    str
+        The name lowercased (Unicode casefold) with surrounding whitespace
+        removed.
+    """
+    return name.strip().casefold()
+
+
 @router.get("/connections/institutions", response_model=InstitutionsResponse)
 def list_institutions(
     provider: Annotated[BankProvider, Depends(get_bank_provider)],
@@ -497,13 +518,20 @@ def backfill_connection_logos(
     (``POST /connections``); connections authorized before that column existed
     (migration ``e5f6a7b8c9d0``) carry ``NULL`` and show a lettermark in the
     client. This looks each one up in the provider's institution list for its
-    stored ``country``, matches by ``institution_name``, and writes the logo
-    URL the provider reports.
+    country, matches by ``institution_name`` (case- and whitespace-insensitive),
+    and writes the logo URL the provider reports.
+
+    A connection that predates the ``country`` column (migration
+    ``b8f3d2e7c1a4``) also carries ``NULL`` there — the same rows, since both
+    columns were added within a week of each other. Those fall back to
+    :attr:`Settings.default_institution_country`, and the resolved country is
+    persisted alongside the logo, which additionally unblocks in-place
+    re-authorization for them (``POST /connections/{id}/reauthorize`` ``409``s
+    on a ``NULL`` country).
 
     Idempotent and safe to call repeatedly: a connection that already has a
-    logo, has no stored ``country``, or matches no provider institution is
-    left untouched. One provider lookup per distinct country, not per
-    connection.
+    logo or matches no provider institution is left untouched. One provider
+    lookup per distinct country, not per connection.
 
     Parameters
     ----------
@@ -524,13 +552,13 @@ def backfill_connection_logos(
     HTTPException
         502 if a provider institution lookup fails.
     """
+    default_country = get_settings().default_institution_country
     pending = list_connections_without_logo(session, user_id)
     logos_by_country: dict[str, dict[str, str]] = {}
     updated = 0
+    skipped_no_match = 0
     for connection in pending:
-        country = connection.country
-        if country is None:
-            continue
+        country = connection.country or default_country
         if country not in logos_by_country:
             try:
                 institutions = provider.list_institutions(country=country)
@@ -539,18 +567,32 @@ def backfill_connection_logos(
                     status_code=502, detail="provider institution lookup failed"
                 ) from exc
             logos_by_country[country] = {
-                institution.name: institution.logo
+                _normalize_institution_name(institution.name): institution.logo
                 for institution in institutions
                 if institution.logo is not None
             }
-        logo = logos_by_country[country].get(connection.institution_name)
+        logo = logos_by_country[country].get(
+            _normalize_institution_name(connection.institution_name)
+        )
         if logo is None:
+            skipped_no_match += 1
             continue
         set_connection_logo(
-            session, user_id=user_id, connection_id=connection.id, logo=logo
+            session,
+            user_id=user_id,
+            connection_id=connection.id,
+            logo=logo,
+            # Persist the resolved country only when the row lacked one, so an
+            # existing value is never overwritten.
+            country=None if connection.country else country,
         )
         updated += 1
 
     session.commit()
-    logger.info("connections.backfill_logos", pending=len(pending), updated=updated)
+    logger.info(
+        "connections.backfill_logos",
+        pending=len(pending),
+        updated=updated,
+        skipped_no_match=skipped_no_match,
+    )
     return BackfillLogosResponse(updated=updated)

@@ -660,24 +660,47 @@ def test_backfill_logos_fills_a_connection_missing_one_and_is_idempotent() -> No
     first = client.post("/connections/backfill-logos")
     assert first.status_code == 200
     assert first.json() == {"updated": 1}
-    assert (
-        _connection(engine, connection_id).institution_logo
-        == "https://logos.example.test/it/tb01/"
-    )
+    row = _connection(engine, connection_id)
+    assert row.institution_logo == "https://logos.example.test/it/tb01/"
+    # An already-stored country is left as it is.
+    assert row.country == "IT"
 
     # A second call changes nothing — the connection already has its logo.
     assert client.post("/connections/backfill-logos").json() == {"updated": 0}
 
 
-def test_backfill_logos_skips_a_connection_with_no_stored_country() -> None:
+def test_backfill_logos_falls_back_to_the_default_country_and_persists_it() -> None:
     engine = _sqlite_engine()
+    # A connection from before the `country` column existed (migration
+    # b8f3d2e7c1a4): NULL country and NULL logo, the same rows. The backfill
+    # must still reach it, via Settings.default_institution_country, and write
+    # the resolved country back so reauthorize stops 409-ing.
     connection_id = _seed_connection(
         engine, user_id=get_settings().dev_user_id, institution_name="Test Bank 01", country=None
     )
     client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
 
-    assert client.post("/connections/backfill-logos").json() == {"updated": 0}
-    assert _connection(engine, connection_id).institution_logo is None
+    assert client.post("/connections/backfill-logos").json() == {"updated": 1}
+    row = _connection(engine, connection_id)
+    assert row.institution_logo == "https://logos.example.test/it/tb01/"
+    assert row.country == "IT"
+
+
+def test_backfill_logos_matches_institution_name_case_insensitively() -> None:
+    engine = _sqlite_engine()
+    connection_id = _seed_connection(
+        engine,
+        user_id=get_settings().dev_user_id,
+        institution_name="  test bank 01 ",  # drifted case and whitespace
+        country="IT",
+    )
+    client = _client(engine, TokenCipher(Fernet.generate_key().decode()))
+
+    assert client.post("/connections/backfill-logos").json() == {"updated": 1}
+    assert (
+        _connection(engine, connection_id).institution_logo
+        == "https://logos.example.test/it/tb01/"
+    )
 
 
 def test_backfill_logos_leaves_an_unmatched_institution_alone() -> None:
