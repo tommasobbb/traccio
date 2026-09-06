@@ -25,10 +25,20 @@ struct AmountText: View {
         case notCounted
     }
 
+    /// Where the amount is rendered, which can override its `Kind` colour.
+    enum Tone {
+        /// The `Kind`'s own colour convention (the default everywhere).
+        case standard
+        /// On the dashboard hero's forest-green band: always `Palette.onHero`
+        /// (white), since ink or accent would not read on the band.
+        case onHero
+    }
+
     let amount: Int
     let currencyCode: String
     let kind: Kind
     var font: Font = Typography.statFigure
+    var tone: Tone = .standard
 
     var body: some View {
         Text(
@@ -49,11 +59,12 @@ struct AmountText: View {
     }
 
     private var color: Color {
+        if tone == .onHero { return Palette.onHero }
         switch kind {
-        case .spending: Palette.ink
-        case .income: Palette.income
-        case .net: amount > 0 ? Palette.accent : Palette.ink
-        case .notCounted: Palette.inkQuaternary
+        case .spending: return Palette.ink
+        case .income: return Palette.income
+        case .net: return amount > 0 ? Palette.accent : Palette.ink
+        case .notCounted: return Palette.inkQuaternary
         }
     }
 }

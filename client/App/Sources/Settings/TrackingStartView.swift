@@ -73,7 +73,7 @@ struct TrackingStartView: View {
             EyebrowLabel(text: "I tuoi conti")
             timelinePlot(timeline)
             Divider().overlay(Palette.separator)
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("Conteggio da")
                     .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.inkSecondary)
@@ -202,8 +202,6 @@ struct TrackingStartView: View {
 
     // MARK: Timeline
 
-    private var rowHeight: CGFloat { 50 }
-
     @ViewBuilder
     private func timelinePlot(_ timeline: TrackingTimeline) -> some View {
         if timeline.bars.isEmpty {
@@ -222,33 +220,22 @@ struct TrackingStartView: View {
                     .foregroundStyle(Palette.inkQuaternary)
                 }
 
-                GeometryReader { geo in
-                    ZStack(alignment: .topLeading) {
-                        VStack(spacing: 16) {
-                            ForEach(timeline.bars) { bar in
-                                barRow(bar, width: geo.size.width)
-                            }
-                        }
-                        if let fraction = timeline.thresholdFraction {
-                            Rectangle()
-                                .fill(Palette.accent)
-                                .frame(width: 2)
-                                .overlay(alignment: .top) {
-                                    Circle()
-                                        .fill(Palette.accent)
-                                        .frame(width: 8, height: 8)
-                                        .offset(y: -4)
-                                }
-                                .position(x: geo.size.width * fraction, y: geo.size.height / 2)
-                        }
+                // No GeometryReader / reserved height: each row is
+                // fixed-height and the stack sizes itself, so the plot can
+                // never overflow onto the divider and the "Conteggio da" row
+                // below (which a hardcoded `rowHeight` guess did from ~5
+                // accounts up). The per-bar width is taken locally, inside
+                // each capsule's own overlay.
+                VStack(spacing: 16) {
+                    ForEach(timeline.bars) { bar in
+                        barRow(bar)
                     }
                 }
-                .frame(height: CGFloat(timeline.bars.count) * rowHeight)
             }
         }
     }
 
-    private func barRow(_ bar: TrackingTimelineBar, width: CGFloat) -> some View {
+    private func barRow(_ bar: TrackingTimelineBar) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
@@ -266,10 +253,12 @@ struct TrackingStartView: View {
                 .frame(height: 14)
                 .overlay(alignment: .leading) {
                     if let fraction = bar.startFraction {
-                        Capsule()
-                            .fill(color(for: bar).opacity(0.9))
-                            .frame(width: max(width * (1 - fraction), 6))
-                            .offset(x: width * fraction)
+                        GeometryReader { geo in
+                            Capsule()
+                                .fill(color(for: bar).opacity(0.9))
+                                .frame(width: max(geo.size.width * (1 - fraction), 6))
+                                .offset(x: geo.size.width * fraction)
+                        }
                     }
                 }
                 .overlay {

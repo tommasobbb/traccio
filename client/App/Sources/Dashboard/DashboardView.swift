@@ -64,6 +64,7 @@ struct DashboardView: View {
                 periodPicker
                 summaryContent(summary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .failed:
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 periodPicker
@@ -76,6 +77,7 @@ struct DashboardView: View {
                     action: { Task { await model.load() } }
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -104,7 +106,7 @@ struct DashboardView: View {
                 .disabled(!model.canGoToNext)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Palette.inkTertiary)
+            .foregroundStyle(Palette.accent)
 
             Picker("Unità", selection: unitBinding) {
                 Text("Mese").tag(CalendarPeriod.Unit.month)
@@ -112,7 +114,13 @@ struct DashboardView: View {
                 Text("Anno").tag(CalendarPeriod.Unit.year)
             }
             .pickerStyle(.segmented)
+            .tint(Palette.accent)
         }
+        // A tinted control strip rather than bare text on the background —
+        // the top of the screen no longer reads as empty white.
+        .padding(Spacing.cardPadding)
+        .background(Palette.accentTint)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
     }
 
     private var unitBinding: Binding<CalendarPeriod.Unit> {
@@ -217,18 +225,19 @@ struct DashboardView: View {
     }
 
     private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
-        Card {
-            EyebrowLabel(text: "Speso questo periodo")
+        HeroCard {
+            EyebrowLabel(text: "Speso questo periodo", color: Palette.onHeroSecondary)
             AmountText(
                 amount: summary.spending,
                 currencyCode: summary.currency,
                 kind: .spending,
-                font: Typography.heroFigure
+                font: Typography.heroFigure,
+                tone: .onHero
             )
             Text(summary.currency)
                 .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-
+                .foregroundStyle(Palette.onHeroSecondary)
+        } content: {
             categoryRibbon(summary)
 
             Divider().overlay(Palette.separator)
@@ -285,16 +294,22 @@ struct DashboardView: View {
         if !segments.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { geo in
-                    HStack(spacing: 1) {
+                    // Each segment positioned by its own fraction rather than
+                    // laid out in an `HStack` whose widths (each `max(_, 2)`-
+                    // clamped, plus 1pt spacing) sum past `geo.size.width` and
+                    // silently clip the tail on quarter/year periods, where
+                    // there are many small categories.
+                    ZStack(alignment: .leading) {
                         ForEach(segments, id: \.rank) { segment in
                             Palette.color(segment.color)
                                 .frame(
                                     width: max(
                                         geo.size.width
                                             * (segment.endFraction - segment.startFraction),
-                                        2
+                                        1
                                     )
                                 )
+                                .offset(x: geo.size.width * segment.startFraction)
                         }
                     }
                 }
@@ -312,17 +327,22 @@ struct DashboardView: View {
     private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
         let shown = Array(spent.prefix(3))
         return HStack(spacing: 12) {
-            ForEach(shown, id: \.categoryID) { entry in
+            ForEach(Array(shown.enumerated()), id: \.element.categoryID) { rank, entry in
                 HStack(spacing: 5) {
                     Circle()
                         .fill(Palette.color(entry.color ?? .slate))
                         .frame(width: 7, height: 7)
+                    // No `.fixedSize` here: three full Italian category names
+                    // exceed the card width and would force the hero card —
+                    // and the whole content column — wider than the viewport.
+                    // The label truncates instead; the higher-spend items keep
+                    // their width first via `layoutPriority`.
                     Text(entry.categoryName ?? "Senza categoria")
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkSecondary)
                         .lineLimit(1)
                 }
-                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(Double(shown.count - rank))
             }
             if spent.count > shown.count {
                 Text("+\(spent.count - shown.count)")
@@ -358,7 +378,7 @@ struct DashboardView: View {
         _ others: [CurrencySummaryResponse], combined: Bool
     ) -> some View {
         Card {
-            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute")
+            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.accent)
             HStack(spacing: 10) {
                 ForEach(others, id: \.currency) { summary in
                     VStack(alignment: .leading, spacing: 3) {
@@ -409,7 +429,7 @@ struct DashboardView: View {
 
         if !segments.isEmpty {
             Card {
-                EyebrowLabel(text: "Per categoria")
+                EyebrowLabel(text: "Per categoria", color: Palette.accent)
                 HStack {
                     Spacer(minLength: 0)
                     ZStack {
@@ -486,7 +506,7 @@ struct DashboardView: View {
 
         if !bars.isEmpty {
             Card {
-                EyebrowLabel(text: "Andamento spesa")
+                EyebrowLabel(text: "Andamento spesa", color: Palette.accent)
                 BucketBarsChart(
                     bars: bars,
                     currency: summary.currency,

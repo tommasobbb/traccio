@@ -20,9 +20,22 @@ resolution happens automatically; no view branches on light/dark itself.
 
 | Token           | Hex (light) | Hex (dark) | Swift name              | Use                          |
 | ---------------- | --------- | --------- | ------------------------ | ----------------------------- |
-| Background       | `#F5F5F7` | `#000000` | `Palette.background`     | Screen background              |
+| Background       | `#F2F5F3` | `#000000` | `Palette.background`     | Screen background — a barely-green neutral |
 | Card              | `#FFFFFF` | `#1C1C1E` | `Palette.card`           | Card fill                      |
 | Neutral fill      | `#E5E5EA` | `#2C2C2E` | `Palette.neutralFill`    | Icon tiles, dividers, tracks   |
+
+## Hero band
+
+The filled band behind Panoramica's hero figure (`HeroCard`). Its own
+colorset, **not** `accent`: the dark accent is a light mint, so white text on
+it would fail contrast. The band stays deep forest in both appearances.
+
+| Token           | Hex (light) | Hex (dark) | Swift name              | Use                          |
+| ---------------- | --------- | --------- | ------------------------ | ----------------------------- |
+| Hero fill        | `#1B5E3F` | `#14432D` | `Palette.heroFill`       | Hero band — top gradient stop  |
+| Hero fill deep   | `#124A31` | `#0E3322` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
+| On hero          | `#FFFFFF` | `#FFFFFF` | `Palette.onHero`         | Text/figures on the band       |
+| On hero (2nd)    | white 72% | white 72% | `Palette.onHeroSecondary`| Eyebrow/caption on the band    |
 
 ## Ink (text)
 
@@ -37,13 +50,17 @@ resolution happens automatically; no view branches on light/dark itself.
 
 | Token          | Hex (light) | Hex (dark) | Swift name           | Use                                |
 | -------------- | --------- | --------- | ---------------------- | ------------------------------------ |
-| Accent         | `#0E7C86` | `#33B7BE` | `Palette.accent`       | Petrol green — links, primary buttons, positive net, active tab |
-| Accent pressed | `#0A626B` | `#2A9CA3` | `Palette.accentPressed`| Pressed/hover state                  |
+| Accent         | `#1B5E3F` | `#58BF95` | `Palette.accent`       | Forest green — links, primary buttons, positive net, active tab |
+| Accent pressed | `#124A31` | `#3E9E78` | `Palette.accentPressed`| Pressed/hover state                  |
+| Accent tint    | `#E8F2EC` | `#132A20` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, icon tile |
 
-Dark accent is a luminosity-raised petrol — lighter and a touch less
-saturated than a straight scale of the light hex, so it stays legible on a
-near-black background without going neon-cyan. Not an opacity flip of the
-light value.
+Dark accent is a luminosity-raised forest — lighter and less saturated than a
+straight scale of the light hex, so it stays legible on a near-black
+background without turning to neon mint. Not an opacity flip of the light
+value. It is intentionally close in hue to the `green` data tone / `income`
+(`#248A3D`): the two stay apart by a ~17° hue shift and a lightness gap — the
+one pairing to check by eye is a positive `net` (accent) next to `Entrate`
+(income) in the hero.
 
 The underlying asset is named `AccentColor`, not `Accent`: it doubles as the
 target's global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`
@@ -51,9 +68,9 @@ in `client/Project.yml`, so tint system controls pick it up automatically), so
 `Palette.accent` reads that one asset rather than keeping a second colorset
 in sync by hand.
 
-The accent was Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06
-(see History). That hex still exists as the `indigo` data tone below — accent
-and the indigo tone were the same colour by coincidence, now decoupled.
+The accent was Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06,
+then petrol green `#0E7C86` / `#33B7BE` for one day (see History). The indigo
+hex still exists as the `indigo` data tone below — decoupled from accent.
 
 ## Semantic
 
@@ -150,6 +167,13 @@ the backend has no notion that SF Symbols exist (ADR 0017).
 | Card shadow, near   | `0 1px 2px rgba(0,0,0,.04)`         | Card elevation, layer 1      |
 | Card shadow, far    | `0 14px 28px -18px rgba(0,0,0,.22)` | Card elevation, layer 2      |
 
+In Swift, `Palette.cardShadow` is **opaque** `Color.black` and each `Card`
+`.shadow` modifier carries the opacity above (`.04` near, `.22` far). It used
+to carry its own `.opacity(0.16)`, which the modifiers then multiplied again
+— the far shadow rendered at ~1/14 of the value here and cards dissolved into
+the background. If `.22` reads heavy on device (SwiftUI has no negative
+spread to match the `-18px` above), tune the modifier, not the token.
+
 **Dark mode**: `separator`/`separatorSubtle` stay a low-opacity overlay of
 `Palette.ink` rather than gaining their own asset — `ink` itself is
 near-black in light mode and near-white in dark mode, so the same `.opacity`
@@ -193,7 +217,14 @@ list ragged and is nearly always worse than an ellipsis. Concretely:
 
 - A **fixed-width tag** (`Badge`, `FilterChip`) carries
   `.lineLimit(1).fixedSize(horizontal: true, vertical: false)` so it keeps its
-  intrinsic width and a flexible sibling truncates instead of it.
+  intrinsic width and a flexible sibling truncates instead of it. This only
+  works when there **is** a flexible sibling to give: in a row where every item
+  is `.fixedSize`, nothing yields, so the row reports a minimum width equal to
+  the sum of all intrinsic widths and forces its container wider — off the
+  screen if the labels are long enough (the dashboard category ribbon's legend
+  hit exactly this). A row of unavoidably-fixed items belongs in a horizontal
+  `ScrollView` (next bullet); a row that must fit uses `.layoutPriority` to pick
+  which label truncates first, not `.fixedSize` on all of them.
 - A **flexible label** in a row (a transaction description, a caption) carries
   `.lineLimit(1)` and is the element that gives — it truncates with the
   default tail ellipsis.

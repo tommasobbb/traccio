@@ -766,13 +766,23 @@ def list_connections_without_logo(session: Session, user_id: UUID) -> list[Conne
 
 
 def set_connection_logo(
-    session: Session, *, user_id: UUID, connection_id: UUID, logo: str
+    session: Session,
+    *,
+    user_id: UUID,
+    connection_id: UUID,
+    logo: str,
+    country: str | None = None,
 ) -> None:
-    """Persist an institution logo URL on one connection.
+    """Persist an institution logo URL (and optionally the country) on one connection.
 
     Scoped by ``user_id`` — the ``WHERE`` combines it with ``connection_id``,
     so another user's row is never touched. A no-op if the id is unknown or
     not the caller's. The caller commits.
+
+    ``country`` is written only when given and non-``None``: the logo backfill
+    resolves it as a side effect of the institution lookup for connections that
+    predate the ``country`` column (migration ``b8f3d2e7c1a4``), and persisting
+    it there also unblocks in-place re-authorization for those rows.
 
     Parameters
     ----------
@@ -784,11 +794,17 @@ def set_connection_logo(
         The connection to update.
     logo : str
         The logo URL to store.
+    country : str or None, optional
+        ISO 3166-1 alpha-2 country to persist alongside the logo. Ignored when
+        ``None`` (the default), so an existing value is never overwritten.
     """
+    values: dict[str, str] = {"institution_logo": logo}
+    if country is not None:
+        values["country"] = country
     session.execute(
         update(ConnectionRow)
         .where(ConnectionRow.id == connection_id, ConnectionRow.user_id == user_id)
-        .values(institution_logo=logo)
+        .values(**values)
     )
 
 
