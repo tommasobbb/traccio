@@ -229,6 +229,8 @@ struct DashboardView: View {
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkTertiary)
 
+            categoryRibbon(summary)
+
             Divider().overlay(Palette.separator)
 
             HStack(spacing: 16) {
@@ -265,6 +267,69 @@ struct DashboardView: View {
                     title: "Categorie", value: "\(summary.byCategory.filter { $0.spending > 0 }.count)"
                 )
             }
+        }
+    }
+
+    /// The category-spend ribbon under the hero total (Fase B redesign, the
+    /// "more colour" direction — `docs/design/canvas/MainV2.dc.html`): a
+    /// full-width stacked bar in each root category's own `PaletteColor`,
+    /// proportional to its spending, plus a compact legend of the top few.
+    /// Drawn from `byCategory` — the same data the "Per categoria" donut
+    /// uses, so no backend gap. Renders nothing when there is no spending to
+    /// split, same posture as the donut card.
+    @ViewBuilder
+    private func categoryRibbon(_ summary: CurrencySummaryResponse) -> some View {
+        let segments = TraccioCore.donutSegments(summary.byCategory)
+        let spent = summary.byCategory.filter { $0.spending > 0 }
+
+        if !segments.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                GeometryReader { geo in
+                    HStack(spacing: 1) {
+                        ForEach(segments, id: \.rank) { segment in
+                            Palette.color(segment.color)
+                                .frame(
+                                    width: max(
+                                        geo.size.width
+                                            * (segment.endFraction - segment.startFraction),
+                                        2
+                                    )
+                                )
+                        }
+                    }
+                }
+                .frame(height: 10)
+                .clipShape(Capsule())
+
+                ribbonLegend(spent)
+            }
+        }
+    }
+
+    /// Up to three top spenders as coloured dot + name, then "+N" for the
+    /// rest — a glance key for the ribbon; the full labelled breakdown is
+    /// the "Per categoria" card below.
+    private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
+        let shown = Array(spent.prefix(3))
+        return HStack(spacing: 12) {
+            ForEach(shown, id: \.categoryID) { entry in
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Palette.color(entry.color ?? .slate))
+                        .frame(width: 7, height: 7)
+                    Text(entry.categoryName ?? "Senza categoria")
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.inkSecondary)
+                        .lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            if spent.count > shown.count {
+                Text("+\(spent.count - shown.count)")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+            }
+            Spacer(minLength: 0)
         }
     }
 
