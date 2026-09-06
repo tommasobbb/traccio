@@ -337,28 +337,37 @@ final class TransactionsViewModel {
         return selectedIDs.compactMap { id in current.first { $0.id == id } }
     }
 
-    /// Whether exactly two rows are selected and they form a structurally
-    /// valid transfer pair (`TraccioCore.canLinkAsTransfer`).
-    var canLinkSelection: Bool {
+    /// Whether exactly two rows are selected and form a structurally valid
+    /// two-sided transfer pair (`TraccioCore.canLinkAsTransfer`).
+    var canLinkAsTwoSided: Bool {
         let selected = selectedTransactions
         guard selected.count == 2 else { return false }
         return TraccioCore.canLinkAsTransfer(selected[0], selected[1])
     }
 
-    /// Link the two selected rows as a transfer, then update both rows in
-    /// place and leave selection mode.
+    /// Whether exactly two rows are selected and form a structurally valid
+    /// funded-payment pair (`TraccioCore.canLinkAsFundedPayment`) — two
+    /// outflows, one funding the other (ADR 0022). Which leg funds which is
+    /// not decided here: sign doesn't disambiguate, so the view asks the
+    /// user via a sheet before calling `linkSelectedAsFundedPayment(fundingID:)`.
+    var canLinkAsFundedPaymentSelection: Bool {
+        let selected = selectedTransactions
+        guard selected.count == 2 else { return false }
+        return TraccioCore.canLinkAsFundedPayment(selected[0], selected[1])
+    }
+
+    /// Whether the current selection can be linked as a transfer of either
+    /// kind — gates whether the selection bar shows an action at all.
+    var canLinkSelection: Bool {
+        canLinkAsTwoSided || canLinkAsFundedPaymentSelection
+    }
+
+    /// Link the two selected rows as a two-sided transfer, then update both
+    /// rows in place and leave selection mode.
     ///
-    /// The outgoing leg is the negative one, the incoming the positive.
-    /// After `POST /transfers/confirm` succeeds both legs are re-fetched
-    /// (their `role` is now `.transfer`, `effectiveAmount` zero) and swapped
-    /// in via `replace(_:)`, and the returned transfer is registered in
-    /// `transfersByTransactionID` so the detail screen shows "Annulla
-    /// collegamento" without a full reload — the same two-leg discipline as
-    /// `TransfersViewModel.confirm` / `TransactionDetailViewModel.unlinkTransfer`.
-    ///
-    /// A `409` surfaces as `.alreadyLinked`, a `422` as `.notLinkable`, any
-    /// other failure as `.generic`; the selection is kept so the user can
-    /// adjust.
+    /// The outgoing leg is the negative one, the incoming the positive — sign
+    /// alone orients a two-sided pair, unlike a funded payment (see
+    /// `linkSelectedAsFundedPayment(fundingID:)`).
     ///
     /// Returns
     /// -------
@@ -366,23 +375,64 @@ final class TransactionsViewModel {
     /// `linkFailure`).
     @discardableResult
     func linkSelectedAsTransfer() async -> Bool {
-        guard !isLinking, canLinkSelection else { return false }
+        guard !isLinking, canLinkAsTwoSided else { return false }
         let selected = selectedTransactions
         let outgoing = selected[0].amount < 0 ? selected[0] : selected[1]
         let incoming = selected[0].amount < 0 ? selected[1] : selected[0]
+        return await performLink(outgoing: outgoing, incoming: incoming, kind: .twoSided)
+    }
 
+    /// Link the two selected rows as a funded payment, then update both rows
+    /// in place and leave selection mode.
+    ///
+    /// Unlike a two-sided transfer, sign doesn't say which leg funds which —
+    /// `fundingID` is the id the user picked (in a disambiguation sheet) as
+    /// the leg that pays for the other; it becomes `role=funding` (zeroed),
+    /// the other stays `personal` as the real expense.
+    ///
+    /// Parameters
+    /// ----------
+    /// fundingID:
+    ///     The id of the selected row the user identified as the funding leg.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the transfer was created, `false` otherwise (having recorded
+    /// `linkFailure`).
+    @discardableResult
+    func linkSelectedAsFundedPayment(fundingID: UUID) async -> Bool {
+        guard !isLinking, canLinkAsFundedPaymentSelection else { return false }
+        let selected = selectedTransactions
+        guard let funding = selected.first(where: { $0.id == fundingID }),
+            let funded = selected.first(where: { $0.id != fundingID })
+        else { return false }
+        return await performLink(outgoing: funding, incoming: funded, kind: .fundedPayment)
+    }
+
+    /// Shared write behind `linkSelectedAsTransfer()` and
+    /// `linkSelectedAsFundedPayment(fundingID:)`: confirm the pair, refresh
+    /// both legs (their `role`/`effectiveAmount` changed), and leave
+    /// selection mode.
+    ///
+    /// After `POST /transfers/confirm` succeeds both legs are re-fetched and
+    /// swapped in via `replace(_:)`, and the returned transfer is registered
+    /// in `transfersByTransactionID` so the detail screen shows "Annulla
+    /// collegamento" without a full reload — the same two-leg discipline as
+    /// `TransfersViewModel.confirm` / `TransactionDetailViewModel.unlinkTransfer`.
+    ///
+    /// A `409` surfaces as `.alreadyLinked`, a `422` as `.notLinkable`, any
+    /// other failure as `.generic`; the selection is kept so the user can
+    /// adjust.
+    private func performLink(
+        outgoing: TransactionResponse, incoming: TransactionResponse, kind: TransferKind
+    ) async -> Bool {
         isLinking = true
         defer { isLinking = false }
         linkFailure = nil
 
         do {
-            // The pick-two selection mode only makes an opposite-sign pair
-            // selectable (`canLinkAsTransfer`), so this path is always a
-            // two-sided transfer. A funded payment is confirmed from its
-            // suggestion in Trasferimenti, where the backend has already
-            // oriented the legs.
             let created = try await client.confirmTransfer(
-                outgoingID: outgoing.id, incomingID: incoming.id, kind: .twoSided
+                outgoingID: outgoing.id, incomingID: incoming.id, kind: kind
             )
             async let refreshedOutgoing = client.transaction(id: outgoing.id)
             async let refreshedIncoming = client.transaction(id: incoming.id)

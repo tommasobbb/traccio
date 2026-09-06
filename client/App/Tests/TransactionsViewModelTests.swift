@@ -344,10 +344,10 @@ struct TransactionsViewModelTests {
     }
 
     private static func makeTransfer(
-        outgoingID: UUID, incomingID: UUID
+        outgoingID: UUID, incomingID: UUID, kind: TransferKind = .twoSided
     ) -> TransferResponse {
         TransferResponse(
-            id: UUID(), kind: .twoSided, outgoingTransactionID: outgoingID,
+            id: UUID(), kind: kind, outgoingTransactionID: outgoingID,
             incomingTransactionID: incomingID,
             createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )
@@ -464,8 +464,9 @@ struct TransactionsViewModelTests {
     }
 
     @Test func canLinkSelectionIsFalseForAnInvalidPair() async throws {
-        let a = Self.makeLeg(amount: -5000)
-        let b = Self.makeLeg(amount: -3000)  // same sign
+        let account = UUID()
+        let a = Self.makeLeg(accountID: account, amount: -5000)
+        let b = Self.makeLeg(accountID: account, amount: 5000)  // same account
         let client = FakeAPIClient()
         await client.setTransactions([a, b])
         let model = TransactionsViewModel(client: client, pageSize: 50)
@@ -475,5 +476,85 @@ struct TransactionsViewModelTests {
         model.toggleSelection(b.id)
 
         #expect(!model.canLinkSelection)
+        #expect(!model.canLinkAsTwoSided)
+        #expect(!model.canLinkAsFundedPaymentSelection)
+    }
+
+    @Test func canLinkAsFundedPaymentSelectionIsTrueForATwoOutflowPair() async throws {
+        let a = Self.makeLeg(amount: -2500)
+        let b = Self.makeLeg(amount: -5000)  // same sign, different accounts
+        let client = FakeAPIClient()
+        await client.setTransactions([a, b])
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        model.enterSelection()
+        model.toggleSelection(a.id)
+        model.toggleSelection(b.id)
+
+        #expect(model.canLinkSelection)
+        #expect(model.canLinkAsFundedPaymentSelection)
+        #expect(!model.canLinkAsTwoSided)
+    }
+
+    @Test func linkSelectedAsFundedPaymentConfirmsWithTheChosenFundingLeg() async throws {
+        let funding = Self.makeLeg(amount: -2500)  // e.g. the Revolut top-up
+        let funded = Self.makeLeg(amount: -5000)  // e.g. the PayPal payment
+        let client = FakeAPIClient()
+        await client.setTransactions([funded, funding])  // list order irrelevant
+        await client.setConfirmTransferResult(
+            Self.makeTransfer(outgoingID: funding.id, incomingID: funded.id, kind: .fundedPayment)
+        )
+        await client.setTransaction(
+            Self.makeLeg(id: funding.id, amount: -2500, role: .funding), forID: funding.id
+        )
+        await client.setTransaction(
+            Self.makeLeg(id: funded.id, amount: -5000, role: .personal), forID: funded.id
+        )
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        model.enterSelection()
+        model.toggleSelection(funded.id)
+        model.toggleSelection(funding.id)
+        #expect(model.canLinkAsFundedPaymentSelection)
+
+        let ok = await model.linkSelectedAsFundedPayment(fundingID: funding.id)
+
+        #expect(ok)
+        #expect(!model.isSelecting)
+        #expect(model.successTick == 1)
+        let recorded = await client.confirmedTransferPairs
+        #expect(
+            recorded == [
+                .init(outgoingID: funding.id, incomingID: funded.id, kind: .fundedPayment)
+            ])
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.first { $0.id == funding.id }?.role == .funding)
+        #expect(rows.first { $0.id == funded.id }?.role == .personal)
+        #expect(model.transfersByTransactionID[funding.id] != nil)
+        #expect(model.transfersByTransactionID[funded.id] != nil)
+    }
+
+    @Test func linkSelectedAsFundedPaymentOn422SurfacesNotLinkableAndKeepsSelection() async throws {
+        let funding = Self.makeLeg(amount: -2500)
+        let funded = Self.makeLeg(amount: -5000)
+        let client = FakeAPIClient()
+        await client.setTransactions([funding, funded])
+        await client.setConfirmTransferError(APIError.badStatus(422))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+        model.enterSelection()
+        model.toggleSelection(funding.id)
+        model.toggleSelection(funded.id)
+
+        let ok = await model.linkSelectedAsFundedPayment(fundingID: funding.id)
+
+        #expect(!ok)
+        #expect(model.linkFailure == .notLinkable)
+        #expect(model.isSelecting)
+        #expect(model.selectedIDs.count == 2)
     }
 }

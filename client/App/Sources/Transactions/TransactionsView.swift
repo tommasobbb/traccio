@@ -30,6 +30,10 @@ struct TransactionsView: View {
     /// Presents `CreateManualTransactionSheet` — a hand-entered movement on a
     /// manual account (ADR 0020).
     @State private var isCreatingTransaction = false
+    /// Presents `FundedPaymentOrientationSheet` once a same-sign selection is
+    /// ready to link — sign alone doesn't say which leg funds which, unlike
+    /// a two-sided transfer, so the user picks explicitly (ADR 0022).
+    @State private var isChoosingFundedPaymentOrientation = false
 
     /// Create the screen.
     ///
@@ -96,6 +100,27 @@ struct TransactionsView: View {
                         applyFilters(accountID: accountID, category: category, period: period)
                     }
                 )
+            }
+            .sheet(isPresented: $isChoosingFundedPaymentOrientation) {
+                let selected = model.selectedTransactions
+                if selected.count == 2 {
+                    FundedPaymentOrientationSheet(
+                        a: selected[0],
+                        b: selected[1],
+                        accountsByID: model.accountsByID,
+                        isLinking: model.isLinking,
+                        failureMessage: linkFailureMessage,
+                        onConfirm: { fundingID in
+                            Task {
+                                if await model.linkSelectedAsFundedPayment(fundingID: fundingID) {
+                                    freshness.markStale([.dashboard])
+                                    isChoosingFundedPaymentOrientation = false
+                                }
+                            }
+                        },
+                        onCancel: { isChoosingFundedPaymentOrientation = false }
+                    )
+                }
             }
         }
         .task(id: freshness.token(for: .transactions)) { await model.load() }
@@ -200,7 +225,7 @@ struct TransactionsView: View {
             if let message = linkFailureMessage {
                 Banner(message: message)
             }
-            if model.canLinkSelection {
+            if model.canLinkAsTwoSided {
                 PillButton(
                     title: "Collega come trasferimento",
                     isLoading: model.isLinking,
@@ -211,6 +236,12 @@ struct TransactionsView: View {
                             }
                         }
                     }
+                )
+            } else if model.canLinkAsFundedPaymentSelection {
+                PillButton(
+                    title: "Collega come doppia uscita",
+                    isLoading: model.isLinking,
+                    action: { isChoosingFundedPaymentOrientation = true }
                 )
             } else {
                 Text(selectionGuidance)
@@ -240,9 +271,6 @@ struct TransactionsView: View {
             }
             if a.currency != b.currency { return "I due movimenti hanno valute diverse" }
             if a.accountID == b.accountID { return "I due movimenti sono sullo stesso conto" }
-            if (a.amount < 0) == (b.amount < 0) {
-                return "Servono un'uscita e un'entrata, non due movimenti dello stesso segno"
-            }
             return "Questi due movimenti non possono formare un trasferimento"
         }
     }
@@ -464,7 +492,10 @@ struct TransactionsView: View {
     /// deselected); or fewer than two are selected and it can still form a
     /// valid pair — with no other selection, any `personal`/non-`rejected`/
     /// non-zero row qualifies; with one selected, only a row that
-    /// `TraccioCore.canLinkAsTransfer` accepts alongside it.
+    /// `TraccioCore.canLinkAsTransfer` or `TraccioCore.canLinkAsFundedPayment`
+    /// accepts alongside it (a two-sided transfer or a funded payment — see
+    /// `FundedPaymentOrientationSheet` for how the same-sign case is
+    /// oriented).
     private func rowSelection(for transaction: TransactionResponse) -> TransactionRow.Selection? {
         guard model.isSelecting else { return nil }
         let isSelected = model.selectedIDs.contains(transaction.id)
@@ -475,7 +506,9 @@ struct TransactionsView: View {
         } else if model.selectedIDs.count >= 2 {
             isSelectable = false
         } else if let anchor = others.first {
-            isSelectable = TraccioCore.canLinkAsTransfer(anchor, transaction)
+            isSelectable =
+                TraccioCore.canLinkAsTransfer(anchor, transaction)
+                || TraccioCore.canLinkAsFundedPayment(anchor, transaction)
         } else {
             isSelectable =
                 transaction.role == .personal && transaction.status != .rejected
