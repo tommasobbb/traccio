@@ -64,6 +64,7 @@ struct DashboardView: View {
                 periodPicker
                 summaryContent(summary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .failed:
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 periodPicker
@@ -76,6 +77,7 @@ struct DashboardView: View {
                     action: { Task { await model.load() } }
                 )
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -285,16 +287,22 @@ struct DashboardView: View {
         if !segments.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { geo in
-                    HStack(spacing: 1) {
+                    // Each segment positioned by its own fraction rather than
+                    // laid out in an `HStack` whose widths (each `max(_, 2)`-
+                    // clamped, plus 1pt spacing) sum past `geo.size.width` and
+                    // silently clip the tail on quarter/year periods, where
+                    // there are many small categories.
+                    ZStack(alignment: .leading) {
                         ForEach(segments, id: \.rank) { segment in
                             Palette.color(segment.color)
                                 .frame(
                                     width: max(
                                         geo.size.width
                                             * (segment.endFraction - segment.startFraction),
-                                        2
+                                        1
                                     )
                                 )
+                                .offset(x: geo.size.width * segment.startFraction)
                         }
                     }
                 }
@@ -312,17 +320,22 @@ struct DashboardView: View {
     private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
         let shown = Array(spent.prefix(3))
         return HStack(spacing: 12) {
-            ForEach(shown, id: \.categoryID) { entry in
+            ForEach(Array(shown.enumerated()), id: \.element.categoryID) { rank, entry in
                 HStack(spacing: 5) {
                     Circle()
                         .fill(Palette.color(entry.color ?? .slate))
                         .frame(width: 7, height: 7)
+                    // No `.fixedSize` here: three full Italian category names
+                    // exceed the card width and would force the hero card —
+                    // and the whole content column — wider than the viewport.
+                    // The label truncates instead; the higher-spend items keep
+                    // their width first via `layoutPriority`.
                     Text(entry.categoryName ?? "Senza categoria")
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkSecondary)
                         .lineLimit(1)
                 }
-                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(Double(shown.count - rank))
             }
             if spent.count > shown.count {
                 Text("+\(spent.count - shown.count)")

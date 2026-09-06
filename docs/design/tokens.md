@@ -193,7 +193,14 @@ list ragged and is nearly always worse than an ellipsis. Concretely:
 
 - A **fixed-width tag** (`Badge`, `FilterChip`) carries
   `.lineLimit(1).fixedSize(horizontal: true, vertical: false)` so it keeps its
-  intrinsic width and a flexible sibling truncates instead of it.
+  intrinsic width and a flexible sibling truncates instead of it. This only
+  works when there **is** a flexible sibling to give: in a row where every item
+  is `.fixedSize`, nothing yields, so the row reports a minimum width equal to
+  the sum of all intrinsic widths and forces its container wider — off the
+  screen if the labels are long enough (the dashboard category ribbon's legend
+  hit exactly this). A row of unavoidably-fixed items belongs in a horizontal
+  `ScrollView` (next bullet); a row that must fit uses `.layoutPriority` to pick
+  which label truncates first, not `.fixedSize` on all of them.
 - A **flexible label** in a row (a transaction description, a caption) carries
   `.lineLimit(1)` and is the element that gives — it truncates with the
   default tail ellipsis.
