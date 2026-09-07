@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from traccio.db.base import Base
+from traccio.db.mappers import category_to_row
 from traccio.db.models import RuleRow, TransactionRow
 from traccio.db.repositories import (
-    category_to_row,
     create_category,
     create_rule,
     delete_category,
