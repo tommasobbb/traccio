@@ -14,6 +14,7 @@ transaction's sign.
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -470,3 +471,210 @@ def validate_reimbursement(
             raise ReimbursementError(REASON_NOT_INCOMING)
         if transaction.money.currency != advance_currency:
             raise ReimbursementError(REASON_CURRENCY_MISMATCH)
+
+
+# --- Cross-advance roll-ups (ADR 0026) --------------------------------------
+#
+# "Who owes me, and how much in total" is a question about *all* the user's
+# advances at once, not one advance. Traccio has no ``Person`` entity — a
+# participant row is minted per advance (ADR 0012) — so the only way to add up
+# one person across advances is to match on their name. These functions are the
+# whole of that bridge: pure, name-keyed, and never converting between
+# currencies (one row per currency, see ADR 0026).
+
+
+def person_key(name: str) -> str:
+    """Normalize a participant name for cross-advance grouping.
+
+    Two participant rows on different advances are unrelated entities — there is
+    no ``Person`` table (ADR 0026, ``docs/domain.md``). This is the only bridge:
+    names differing solely in surrounding or repeated whitespace or in letter
+    case collapse to one key, so ``"Marco"``, ``" marco  "`` and ``"MARCO"``
+    roll up together. A genuine typo (``"Mardo"``) stays separate and cannot be
+    merged after the fact — the accepted cost of not modelling people.
+
+    Parameters
+    ----------
+    name : str
+        The participant's plain name as entered.
+
+    Returns
+    -------
+    str
+        The grouping key: internal whitespace collapsed to single spaces,
+        surrounding whitespace removed, case-folded.
+    """
+    return " ".join(name.split()).casefold()
+
+
+class PersonSummary(BaseModel):
+    """One person's receivable rolled up across every advance they appear on.
+
+    A pure roll-up of :class:`ParticipantState` values that share a
+    :func:`person_key` and a currency — nothing stored, mirroring
+    :class:`AdvanceState`'s discipline one level up. Amounts are positive
+    magnitudes in ``currency``.
+
+    Attributes
+    ----------
+    name : str
+        The display spelling: the first one seen for this key, with surrounding
+        and repeated whitespace collapsed but case preserved.
+    currency : str
+        ISO 4217 code of ``expected``, ``reimbursed`` and ``outstanding``.
+    expected : Money
+        The sum of this person's ``expected_amount`` across their advances.
+    reimbursed : Money
+        The sum attributed back to this person across their advances.
+    outstanding : Money
+        What this person still owes in total: each advance's per-participant
+        ``outstanding`` (already clamped at zero) summed, so an
+        over-reimbursement on one advance never masks a debt on another.
+    advance_count : int
+        How many distinct advances this person appears on.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    currency: str
+    expected: Money
+    reimbursed: Money
+    outstanding: Money
+    advance_count: int
+
+
+@dataclass
+class _PersonAccum:
+    """Mutable per-person tally, used only while building :func:`summarize_people`."""
+
+    name: str
+    expected: int
+    reimbursed: int
+    outstanding: int
+    advance_count: int
+
+
+def summarize_people(
+    states_by_advance: Sequence[Sequence[ParticipantState]],
+) -> list[PersonSummary]:
+    """Roll participant states up per person across advances.
+
+    Parameters
+    ----------
+    states_by_advance : Sequence[Sequence[ParticipantState]]
+        One inner sequence per advance — that advance's participant states, as
+        returned by :func:`derive_participant_states`. Grouped by an *advance*
+        boundary rather than flattened because :class:`Participant` carries no
+        ``advance_id`` (``domain/models.py``); ``advance_count`` is the number
+        of inner sequences a person appears in.
+
+    Returns
+    -------
+    list[PersonSummary]
+        One entry per ``(person_key, currency)``, ordered by ``outstanding``
+        descending then display ``name``. A person appearing in two currencies
+        yields two entries — amounts are never converted (ADR 0026).
+    """
+    accums: dict[tuple[str, str], _PersonAccum] = {}
+    for advance_states in states_by_advance:
+        seen_here: set[tuple[str, str]] = set()
+        for state in advance_states:
+            currency = state.outstanding.currency
+            key = (person_key(state.participant.name), currency)
+            accum = accums.get(key)
+            if accum is None:
+                accum = _PersonAccum(
+                    name=" ".join(state.participant.name.split()),
+                    expected=0,
+                    reimbursed=0,
+                    outstanding=0,
+                    advance_count=0,
+                )
+                accums[key] = accum
+            accum.expected += state.participant.expected_amount.amount
+            accum.reimbursed += state.reimbursed.amount
+            accum.outstanding += state.outstanding.amount
+            if key not in seen_here:
+                accum.advance_count += 1
+                seen_here.add(key)
+
+    summaries = [
+        PersonSummary(
+            name=accum.name,
+            currency=currency,
+            expected=Money(amount=accum.expected, currency=currency),
+            reimbursed=Money(amount=accum.reimbursed, currency=currency),
+            outstanding=Money(amount=accum.outstanding, currency=currency),
+            advance_count=accum.advance_count,
+        )
+        for (_, currency), accum in accums.items()
+    ]
+    summaries.sort(key=lambda s: (-s.outstanding.amount, s.name.casefold()))
+    return summaries
+
+
+class ReceivableTotal(BaseModel):
+    """What the user is still owed in one currency, across all advances.
+
+    Attributes
+    ----------
+    currency : str
+        ISO 4217 code these totals are in.
+    outstanding : Money
+        The sum of every *non-written-off* advance's ``outstanding`` in this
+        currency — what the user is still owed overall. May exceed the sum of
+        the per-person :class:`PersonSummary` outstandings: a reimbursement with
+        no ``participant_id`` reduces the advance's outstanding but no person's
+        (the rule :class:`ParticipantState` already follows). A written-off
+        advance keeps its ``outstanding`` populated (the write-off moves that
+        amount into spending, not to zero) but is deliberately excluded here —
+        the user chose to stop expecting that money.
+    open_advances : int
+        How many advances in this currency are still ``open`` with a non-zero
+        outstanding.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    currency: str
+    outstanding: Money
+    open_advances: int
+
+
+def total_receivable(states: Sequence[AdvanceState]) -> list[ReceivableTotal]:
+    """Total what the user is still owed, per currency, across advances.
+
+    Parameters
+    ----------
+    states : Sequence[AdvanceState]
+        One per advance, as returned by :func:`derive_advance`. A ``settled``
+        advance's ``outstanding`` is already zero, so it contributes nothing. A
+        ``written_off`` advance's ``outstanding`` stays populated but is
+        excluded explicitly — the user stopped expecting that money. Either kind
+        still keeps its currency present, as a zero row if nothing else is owed
+        in it.
+
+    Returns
+    -------
+    list[ReceivableTotal]
+        One entry per currency that has at least one advance, ordered by
+        currency code. Amounts are never converted between currencies (ADR 0026).
+    """
+    outstanding: dict[str, int] = {}
+    open_counts: dict[str, int] = {}
+    for state in states:
+        currency = state.outstanding.currency
+        owed = 0 if state.status is AdvanceStatus.WRITTEN_OFF else state.outstanding.amount
+        outstanding[currency] = outstanding.get(currency, 0) + owed
+        open_counts.setdefault(currency, 0)
+        if state.status is AdvanceStatus.OPEN and state.outstanding.amount > 0:
+            open_counts[currency] += 1
+    return [
+        ReceivableTotal(
+            currency=currency,
+            outstanding=Money(amount=outstanding[currency], currency=currency),
+            open_advances=open_counts[currency],
+        )
+        for currency in sorted(outstanding)
+    ]

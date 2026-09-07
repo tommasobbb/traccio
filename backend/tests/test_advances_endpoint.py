@@ -134,7 +134,10 @@ def test_delete_reverts_role_and_full_effective_amount() -> None:
     [tx] = client.get("/transactions").json()["transactions"]
     assert tx["role"] == "personal"
     assert tx["effective_amount"] == -5000
-    assert client.get("/advances").json() == {"advances": []}
+    assert client.get("/advances").json() == {
+        "advances": [],
+        "summary": {"by_person": [], "totals": []},
+    }
     assert client.get(f"/advances/{advance_id}").status_code == 404
 
 
@@ -194,3 +197,114 @@ def test_create_on_another_users_transaction_is_404() -> None:
     )
     # The stranger's transaction is invisible to this user: "not found".
     assert response.status_code == 404
+
+
+def _seed_named_tx(engine: Engine, *, user_id: UUID, amount: int, stable_key: str) -> str:
+    with Session(engine) as session:
+        tx = _tx(user_id=user_id, amount=amount, stable_key=stable_key)
+        session.add(tx)
+        session.commit()
+        return str(tx.id)
+
+
+def test_list_envelope_carries_cross_advance_summary() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_named_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-A")
+    client = _client(engine)
+
+    advance_id = client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    ).json()["id"]
+    participant_id = client.get(f"/advances/{advance_id}").json()["participants"][0]["id"]
+    client.post(
+        f"/advances/{advance_id}/reimbursements",
+        json={"amount": 1500, "participant_id": participant_id},
+    )
+
+    summary = client.get("/advances").json()["summary"]
+    assert summary["totals"] == [{"currency": "EUR", "outstanding": 2500, "open_advances": 1}]
+    [person] = summary["by_person"]
+    assert person == {
+        "name": "TEST FRIEND 01",
+        "currency": "EUR",
+        "expected": 4000,
+        "reimbursed": 1500,
+        "outstanding": 2500,
+        "advance_count": 1,
+    }
+
+
+def test_status_filter_narrows_rows_but_not_summary() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    kept = _seed_named_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-OPEN")
+    other = _seed_named_tx(engine, user_id=dev_user_id, amount=-9000, stable_key="TX-WOFF")
+    client = _client(engine)
+
+    client.post("/advances", json={"transaction_id": kept, "own_share": 1000})
+    woff = client.post("/advances", json={"transaction_id": other, "own_share": 2000})
+    client.post(f"/advances/{woff.json()['id']}/write-off")
+
+    filtered = client.get("/advances", params={"status": "open"}).json()
+    assert [a["transaction_id"] for a in filtered["advances"]] == [kept]
+    # The written-off advance's 7000 receivable is deliberately absent from the
+    # total, but its currency row still reflects only the open advance.
+    assert filtered["summary"]["totals"] == [
+        {"currency": "EUR", "outstanding": 4000, "open_advances": 1}
+    ]
+
+    unfiltered = client.get("/advances").json()
+    assert {a["transaction_id"] for a in unfiltered["advances"]} == {kept, other}
+    assert unfiltered["summary"]["totals"] == filtered["summary"]["totals"]
+
+
+def test_summary_rolls_one_person_across_two_advances() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    first = _seed_named_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-1")
+    second = _seed_named_tx(engine, user_id=dev_user_id, amount=-3000, stable_key="TX-2")
+    client = _client(engine)
+
+    for tx_id, share, expected in ((first, 1000, 4000), (second, 500, 2500)):
+        client.post(
+            "/advances",
+            json={
+                "transaction_id": tx_id,
+                "own_share": share,
+                "participants": [{"name": "  marco  ", "expected_amount": expected}],
+            },
+        )
+
+    [person] = client.get("/advances").json()["summary"]["by_person"]
+    assert person["name"] == "marco"  # whitespace collapsed, first spelling
+    assert person["expected"] == 6500
+    assert person["outstanding"] == 6500
+    assert person["advance_count"] == 2
+
+
+def test_summary_is_scoped_to_the_caller() -> None:
+    dev_user_id = get_settings().dev_user_id
+    stranger_id = uuid4()
+    engine = _sqlite_engine()
+    mine = _seed_named_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-MINE")
+    _seed_named_tx(engine, user_id=stranger_id, amount=-8000, stable_key="TX-THEIRS")
+    client = _client(engine)
+
+    client.post(
+        "/advances",
+        json={
+            "transaction_id": mine,
+            "own_share": 1000,
+            "participants": [{"name": "TEST FRIEND 01", "expected_amount": 4000}],
+        },
+    )
+
+    summary = client.get("/advances").json()["summary"]
+    assert summary["totals"] == [{"currency": "EUR", "outstanding": 4000, "open_advances": 1}]
+    assert [p["name"] for p in summary["by_person"]] == ["TEST FRIEND 01"]

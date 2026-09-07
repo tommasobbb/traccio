@@ -20,13 +20,14 @@ counts — never amounts or descriptions.
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_user_id
 from traccio.api.schemas.advances import (
     AdvanceResponse,
     AdvancesResponse,
+    AdvancesSummaryResponse,
     CreateAdvanceRequest,
 )
 from traccio.api.schemas.reimbursements import (
@@ -53,11 +54,14 @@ from traccio.db.repositories import (
 from traccio.db.session import get_session
 from traccio.domain.advances import (
     AdvanceError,
+    AdvanceState,
     ParticipantState,
     ReimbursementError,
     derive_advance,
     derive_participant_states,
     group_reimbursements_by_participant,
+    summarize_people,
+    total_receivable,
     validate_advance,
     validate_reimbursement,
 )
@@ -189,11 +193,19 @@ def create_advance_endpoint(
 def advances(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
+    status: Annotated[AdvanceStatus | None, Query()] = None,
 ) -> AdvancesResponse:
-    """List the current user's advances, oldest first.
+    """List the current user's advances, oldest first, with cross-advance totals.
 
     Scoped to the current user. Each advance's receivable/outstanding is derived
-    from its transaction.
+    from its transaction; the ``summary`` rolls every advance up by person and
+    by currency (ADR 0026).
+
+    The optional ``status`` query parameter narrows the returned ``advances`` to
+    one lifecycle state. It is applied **after** deriving every advance, because
+    ``open``/``settled`` are derived and only ``written_off`` is stored — and
+    the ``summary`` is always computed over the full set, so the totals do not
+    move when the caller filters the rows.
 
     Parameters
     ----------
@@ -201,32 +213,59 @@ def advances(
         Request-scoped database session.
     user_id : UUID
         The user whose advances to return.
+    status : AdvanceStatus or None
+        When given, only advances whose derived status matches are returned in
+        ``advances`` (the ``summary`` is unaffected).
 
     Returns
     -------
     AdvancesResponse
-        The user's advances, oldest first (empty if none).
+        The user's advances (oldest first, optionally filtered) and the
+        cross-advance summary.
     """
     found = list_advances(session, user_id)
     # Both aggregates are one query for the whole page, never one per advance
     # or one per participant (ADR 0004 / ADR 0012).
     reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
     reimbursed_by_participant = sum_reimbursements_by_participant(session, user_id)
-    responses = [
-        AdvanceResponse.from_domain(
-            advance,
-            _load_transaction(session, user_id=user_id, transaction_id=advance.transaction_id),
-            reimbursed_by_advance.get(advance.id),
-            participant_states=derive_participant_states(
-                advance.participants,
-                reimbursed_by_participant,
-                currency=advance.own_share.currency,
-            ),
+
+    advance_states: list[AdvanceState] = []
+    participant_states_by_advance: list[list[ParticipantState]] = []
+    responses: list[AdvanceResponse] = []
+    for advance in found:
+        transaction = _load_transaction(
+            session, user_id=user_id, transaction_id=advance.transaction_id
         )
-        for advance in found
-    ]
-    logger.info("advances.list", count=len(responses))
-    return AdvancesResponse(advances=responses)
+        currency = advance.own_share.currency
+        reimbursed = reimbursed_by_advance.get(advance.id, Money(amount=0, currency=currency))
+        state = derive_advance(
+            transaction,
+            advance.own_share,
+            reimbursed,
+            written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
+        )
+        participant_states = derive_participant_states(
+            advance.participants, reimbursed_by_participant, currency=currency
+        )
+        advance_states.append(state)
+        participant_states_by_advance.append(participant_states)
+        if status is None or state.status is status:
+            responses.append(
+                AdvanceResponse.from_domain(
+                    advance,
+                    transaction,
+                    reimbursed,
+                    participant_states=participant_states,
+                    state=state,
+                )
+            )
+
+    summary = AdvancesSummaryResponse.from_domain(
+        by_person=summarize_people(participant_states_by_advance),
+        totals=total_receivable(advance_states),
+    )
+    logger.info("advances.list", count=len(responses), total=len(found))
+    return AdvancesResponse(advances=responses, summary=summary)
 
 
 @router.get("/advances/{advance_id}", response_model=AdvanceResponse)

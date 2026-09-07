@@ -28,6 +28,9 @@ from traccio.domain.advances import (
     derive_advance,
     derive_participant_states,
     group_reimbursements_by_participant,
+    person_key,
+    summarize_people,
+    total_receivable,
     validate_reimbursement,
 )
 from traccio.domain.enums import AdvanceStatus
@@ -245,3 +248,86 @@ def test_derive_participant_states_preserves_input_order_for_multiple_participan
     assert [s.participant.id for s in states] == [alice.id, bob.id]
     assert states[0].status is ParticipantStatus.SETTLED
     assert states[1].status is ParticipantStatus.OUTSTANDING
+
+
+# --- summarize_people / total_receivable (ADR 0026) -----------------------------
+
+
+def _named(name: str, *, expected_amount: int) -> Participant:
+    return Participant(name=name, expected_amount=_eur(expected_amount))
+
+
+def _states(*participants_and_reimbursed: tuple[Participant, int], currency: str = "EUR") -> list:
+    """One advance's participant states: a (participant, reimbursed) pair each."""
+    participants = [p for p, _ in participants_and_reimbursed]
+    reimbursed = {p.id: _eur(amount) for p, amount in participants_and_reimbursed}
+    return derive_participant_states(participants, reimbursed, currency=currency)
+
+
+def test_person_key_folds_case_and_whitespace() -> None:
+    assert person_key("Marco") == person_key("  marco ") == person_key("MARCO")
+    assert person_key("Marco  Rossi") == person_key("marco rossi")
+    assert person_key("Marco") != person_key("Mardo")
+
+
+def test_summarize_people_rolls_one_person_across_advances() -> None:
+    marco_a = _named("Marco", expected_amount=3000)
+    marco_b = _named(" marco ", expected_amount=2000)
+    summaries = summarize_people([_states((marco_a, 1000)), _states((marco_b, 0))])
+    assert len(summaries) == 1
+    person = summaries[0]
+    assert person.name == "Marco"  # first spelling seen, whitespace collapsed
+    assert person.expected == _eur(5000)
+    assert person.reimbursed == _eur(1000)
+    assert person.outstanding == _eur(4000)
+    assert person.advance_count == 2
+
+
+def test_summarize_people_keeps_currencies_separate() -> None:
+    marco_eur = _named("Marco", expected_amount=3000)
+    marco_usd = _named("Marco", expected_amount=4000)
+    summaries = summarize_people([_states((marco_eur, 0)), _states((marco_usd, 0), currency="USD")])
+    assert {(s.name, s.currency) for s in summaries} == {("Marco", "EUR"), ("Marco", "USD")}
+    assert all(s.advance_count == 1 for s in summaries)
+
+
+def test_summarize_people_orders_by_outstanding_then_name() -> None:
+    small = _named("Aldo", expected_amount=1000)
+    big = _named("Zoe", expected_amount=9000)
+    summaries = summarize_people([_states((small, 0), (big, 0))])
+    assert [s.name for s in summaries] == ["Zoe", "Aldo"]
+
+
+def test_summarize_people_of_nothing_is_empty() -> None:
+    assert summarize_people([]) == []
+    assert summarize_people([[]]) == []
+
+
+def test_total_receivable_sums_outstanding_per_currency() -> None:
+    a = derive_advance(_tx(amount=-5000), _eur(1000), _eur(0), written_off=False)
+    b = derive_advance(_tx(amount=-3000), _eur(500), _eur(1000), written_off=False)
+    [total] = total_receivable([a, b])
+    assert total.currency == "EUR"
+    assert total.outstanding == _eur(4000 + 1500)
+    assert total.open_advances == 2
+
+
+def test_total_receivable_excludes_written_off_and_counts_only_open() -> None:
+    open_advance = derive_advance(_tx(amount=-5000), _eur(1000), _eur(0), written_off=False)
+    settled = derive_advance(_tx(amount=-2000), _eur(500), _eur(1500), written_off=False)
+    written_off = derive_advance(_tx(amount=-9000), _eur(1000), _eur(0), written_off=True)
+    [total] = total_receivable([open_advance, settled, written_off])
+    assert total.outstanding == _eur(4000)  # only the open advance contributes
+    assert total.open_advances == 1
+
+
+def test_total_and_per_person_diverge_on_an_unattributed_reimbursement() -> None:
+    """A reimbursement with no participant_id lowers the advance's outstanding but
+    no person's — the totals card must be free to show more than the people card."""
+    friend = _named("Giulia", expected_amount=4000)
+    # Advance receivable 4000; 1000 reimbursed but attributed to nobody.
+    advance_state = derive_advance(_tx(amount=-5000), _eur(1000), _eur(1000), written_off=False)
+    people = summarize_people([_states((friend, 0))])
+    totals = total_receivable([advance_state])
+    assert people[0].outstanding == _eur(4000)
+    assert totals[0].outstanding == _eur(3000)

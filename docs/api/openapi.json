@@ -343,7 +343,7 @@
         "type": "string"
       },
       "AdvancesResponse": {
-        "description": "Envelope for the advances list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nadvances : list[AdvanceResponse]\n    The user's advances, oldest first.",
+        "description": "Envelope for the advances list.\n\nA wrapper object rather than a bare array carries the cross-advance\n``summary`` alongside the rows without a second round trip.\n\nAttributes\n----------\nadvances : list[AdvanceResponse]\n    The user's advances, oldest first \u2014 narrowed by the ``status`` query\n    parameter when one is given.\nsummary : AdvancesSummaryResponse\n    Roll-ups over every advance, unaffected by the ``status`` filter.",
         "properties": {
           "advances": {
             "items": {
@@ -351,12 +351,41 @@
             },
             "title": "Advances",
             "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AdvancesSummaryResponse"
           }
         },
         "required": [
-          "advances"
+          "advances",
+          "summary"
         ],
         "title": "AdvancesResponse",
+        "type": "object"
+      },
+      "AdvancesSummaryResponse": {
+        "description": "Cross-advance roll-ups: who owes the user, and how much in total.\n\nDerived over *every* advance regardless of any ``status`` filter applied to\nthe list \u2014 the totals answer \"how much am I owed\" and must not shift when\nthe client narrows the visible rows.\n\nAttributes\n----------\nby_person : list[PersonSummaryResponse]\n    One entry per person, most owed first.\ntotals : list[ReceivableTotalResponse]\n    One entry per currency, ordered by currency code.",
+        "properties": {
+          "by_person": {
+            "items": {
+              "$ref": "#/components/schemas/PersonSummaryResponse"
+            },
+            "title": "By Person",
+            "type": "array"
+          },
+          "totals": {
+            "items": {
+              "$ref": "#/components/schemas/ReceivableTotalResponse"
+            },
+            "title": "Totals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "by_person",
+          "totals"
+        ],
+        "title": "AdvancesSummaryResponse",
         "type": "object"
       },
       "ApplyRulesResponse": {
@@ -1972,6 +2001,45 @@
         "title": "ParticipantStatus",
         "type": "string"
       },
+      "PersonSummaryResponse": {
+        "description": "One person's receivable rolled up across every advance they appear on.\n\nNames are matched loosely (case- and whitespace-insensitive); there is no\nperson entity, so ``\"Marco\"`` and ``\" marco \"`` are the same person but a\nreal typo is not (ADR 0026). All amounts are positive magnitudes in\n``currency``.\n\nAttributes\n----------\nname : str\n    Display spelling \u2014 the first one seen for this person.\ncurrency : str\n    ISO 4217 code of every amount here.\nexpected : int\n    Sum of this person's expected repayments (cents).\nreimbursed : int\n    Sum attributed back to this person (cents).\noutstanding : int\n    What this person still owes in total (cents), each advance clamped at\n    zero before summing.\nadvance_count : int\n    How many advances this person appears on.",
+        "properties": {
+          "advance_count": {
+            "title": "Advance Count",
+            "type": "integer"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outstanding": {
+            "title": "Outstanding",
+            "type": "integer"
+          },
+          "reimbursed": {
+            "title": "Reimbursed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "currency",
+          "expected",
+          "reimbursed",
+          "outstanding",
+          "advance_count"
+        ],
+        "title": "PersonSummaryResponse",
+        "type": "object"
+      },
       "PrunePendingResponse": {
         "description": "The outcome of pruning abandoned pending transactions.\n\nOnly a count is returned, never row contents\n(``.claude/rules/data-safety.md``) \u2014 mirrors ``SyncResponse``'s\ncounts-only shape (``api/schemas/connections.py``).\n\nAttributes\n----------\npruned : int\n    How many pending transactions were deleted (see\n    ``db/repositories.py::prune_stale_pending_transactions`` for the\n    eligibility rule).",
         "properties": {
@@ -1984,6 +2052,30 @@
           "pruned"
         ],
         "title": "PrunePendingResponse",
+        "type": "object"
+      },
+      "ReceivableTotalResponse": {
+        "description": "What the user is still owed in one currency, across all advances.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code.\noutstanding : int\n    Total still owed (cents). Can exceed the sum of the per-person\n    outstandings when some reimbursements are not attributed to a\n    participant.\nopen_advances : int\n    Count of still-open advances in this currency.",
+        "properties": {
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "open_advances": {
+            "title": "Open Advances",
+            "type": "integer"
+          },
+          "outstanding": {
+            "title": "Outstanding",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "outstanding",
+          "open_advances"
+        ],
+        "title": "ReceivableTotalResponse",
         "type": "object"
       },
       "ReimbursementResponse": {
@@ -3059,9 +3151,25 @@
     },
     "/advances": {
       "get": {
-        "description": "List the current user's advances, oldest first.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\n\nReturns\n-------\nAdvancesResponse\n    The user's advances, oldest first (empty if none).",
+        "description": "List the current user's advances, oldest first, with cross-advance totals.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction; the ``summary`` rolls every advance up by person and\nby currency (ADR 0026).\n\nThe optional ``status`` query parameter narrows the returned ``advances`` to\none lifecycle state. It is applied **after** deriving every advance, because\n``open``/``settled`` are derived and only ``written_off`` is stored \u2014 and\nthe ``summary`` is always computed over the full set, so the totals do not\nmove when the caller filters the rows.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\nstatus : AdvanceStatus or None\n    When given, only advances whose derived status matches are returned in\n    ``advances`` (the ``summary`` is unaffected).\n\nReturns\n-------\nAdvancesResponse\n    The user's advances (oldest first, optionally filtered) and the\n    cross-advance summary.",
         "operationId": "advances_advances_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AdvanceStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

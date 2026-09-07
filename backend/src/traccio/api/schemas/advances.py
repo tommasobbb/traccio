@@ -12,7 +12,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from traccio.domain.advances import ParticipantState, derive_advance
+from traccio.domain.advances import (
+    AdvanceState,
+    ParticipantState,
+    PersonSummary,
+    ReceivableTotal,
+    derive_advance,
+)
 from traccio.domain.enums import AdvanceStatus, ParticipantStatus
 from traccio.domain.models import Advance, Transaction
 from traccio.domain.money import Money
@@ -170,6 +176,7 @@ class AdvanceResponse(BaseModel):
         reimbursed: Money | None = None,
         *,
         participant_states: list[ParticipantState],
+        state: AdvanceState | None = None,
     ) -> "AdvanceResponse":
         """Project an :class:`~traccio.domain.models.Advance` with derived amounts.
 
@@ -184,10 +191,18 @@ class AdvanceResponse(BaseModel):
         advance : Advance
             The domain advance to project.
         transaction : Transaction
-            Its outgoing transaction, needed to derive the receivable.
+            Its outgoing transaction, needed to derive the receivable. Ignored
+            when ``state`` is supplied.
         reimbursed : Money or None, optional
             The sum reimbursed against this advance; defaults to zero in the
-            advance's currency (no reimbursements).
+            advance's currency (no reimbursements). Ignored when ``state`` is
+            supplied.
+        state : AdvanceState or None, optional
+            A pre-computed :func:`~traccio.domain.advances.derive_advance`
+            result. The list endpoint derives it once per advance to also feed
+            the cross-advance roll-up (:class:`AdvancesSummaryResponse`), then
+            hands it here so the derivation is not repeated. When ``None`` this
+            method derives it from ``transaction`` and ``reimbursed``.
         participant_states : list[ParticipantState]
             Each participant's derived reimbursement state (ADR 0012), in the
             same order as ``advance.participants`` — the contract
@@ -208,13 +223,16 @@ class AdvanceResponse(BaseModel):
             The client-facing view of ``advance``.
         """
         currency = advance.own_share.currency
-        reimbursed = reimbursed if reimbursed is not None else Money(amount=0, currency=currency)
-        state = derive_advance(
-            transaction,
-            advance.own_share,
-            reimbursed,
-            written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
-        )
+        if state is None:
+            reimbursed = (
+                reimbursed if reimbursed is not None else Money(amount=0, currency=currency)
+            )
+            state = derive_advance(
+                transaction,
+                advance.own_share,
+                reimbursed,
+                written_off=advance.status is AdvanceStatus.WRITTEN_OFF,
+            )
         return cls(
             id=advance.id,
             transaction_id=advance.transaction_id,
@@ -230,16 +248,126 @@ class AdvanceResponse(BaseModel):
         )
 
 
+class PersonSummaryResponse(BaseModel):
+    """One person's receivable rolled up across every advance they appear on.
+
+    Names are matched loosely (case- and whitespace-insensitive); there is no
+    person entity, so ``"Marco"`` and ``" marco "`` are the same person but a
+    real typo is not (ADR 0026). All amounts are positive magnitudes in
+    ``currency``.
+
+    Attributes
+    ----------
+    name : str
+        Display spelling — the first one seen for this person.
+    currency : str
+        ISO 4217 code of every amount here.
+    expected : int
+        Sum of this person's expected repayments (cents).
+    reimbursed : int
+        Sum attributed back to this person (cents).
+    outstanding : int
+        What this person still owes in total (cents), each advance clamped at
+        zero before summing.
+    advance_count : int
+        How many advances this person appears on.
+    """
+
+    name: str
+    currency: str
+    expected: int
+    reimbursed: int
+    outstanding: int
+    advance_count: int
+
+    @classmethod
+    def from_domain(cls, summary: PersonSummary) -> "PersonSummaryResponse":
+        """Project a :class:`~traccio.domain.advances.PersonSummary`."""
+        return cls(
+            name=summary.name,
+            currency=summary.currency,
+            expected=summary.expected.amount,
+            reimbursed=summary.reimbursed.amount,
+            outstanding=summary.outstanding.amount,
+            advance_count=summary.advance_count,
+        )
+
+
+class ReceivableTotalResponse(BaseModel):
+    """What the user is still owed in one currency, across all advances.
+
+    Attributes
+    ----------
+    currency : str
+        ISO 4217 code.
+    outstanding : int
+        Total still owed (cents). Can exceed the sum of the per-person
+        outstandings when some reimbursements are not attributed to a
+        participant.
+    open_advances : int
+        Count of still-open advances in this currency.
+    """
+
+    currency: str
+    outstanding: int
+    open_advances: int
+
+    @classmethod
+    def from_domain(cls, total: ReceivableTotal) -> "ReceivableTotalResponse":
+        """Project a :class:`~traccio.domain.advances.ReceivableTotal`."""
+        return cls(
+            currency=total.currency,
+            outstanding=total.outstanding.amount,
+            open_advances=total.open_advances,
+        )
+
+
+class AdvancesSummaryResponse(BaseModel):
+    """Cross-advance roll-ups: who owes the user, and how much in total.
+
+    Derived over *every* advance regardless of any ``status`` filter applied to
+    the list — the totals answer "how much am I owed" and must not shift when
+    the client narrows the visible rows.
+
+    Attributes
+    ----------
+    by_person : list[PersonSummaryResponse]
+        One entry per person, most owed first.
+    totals : list[ReceivableTotalResponse]
+        One entry per currency, ordered by currency code.
+    """
+
+    by_person: list[PersonSummaryResponse]
+    totals: list[ReceivableTotalResponse]
+
+    @classmethod
+    def from_domain(
+        cls,
+        *,
+        by_person: list[PersonSummary],
+        totals: list[ReceivableTotal],
+    ) -> "AdvancesSummaryResponse":
+        """Project the domain roll-ups."""
+        return cls(
+            by_person=[PersonSummaryResponse.from_domain(p) for p in by_person],
+            totals=[ReceivableTotalResponse.from_domain(t) for t in totals],
+        )
+
+
 class AdvancesResponse(BaseModel):
     """Envelope for the advances list.
 
-    A wrapper object rather than a bare array leaves room for metadata later
-    without breaking the generated Swift client.
+    A wrapper object rather than a bare array carries the cross-advance
+    ``summary`` alongside the rows without a second round trip.
 
     Attributes
     ----------
     advances : list[AdvanceResponse]
-        The user's advances, oldest first.
+        The user's advances, oldest first — narrowed by the ``status`` query
+        parameter when one is given.
+    summary : AdvancesSummaryResponse
+        Roll-ups over every advance, unaffected by the ``status`` filter.
     """
 
     advances: list[AdvanceResponse]
+    summary: AdvancesSummaryResponse
