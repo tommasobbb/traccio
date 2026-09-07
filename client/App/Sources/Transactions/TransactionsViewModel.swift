@@ -200,7 +200,7 @@ final class TransactionsViewModel {
     /// than failing the screen, since the list is the primary content).
     func loadContext() async {
         async let categoriesResult = client.categories()
-        async let advancesResult = client.advances()
+        async let advancesResult = client.advances(status: nil)
         async let accountsResult = client.accounts()
         async let transferSuggestionsResult = client.transferSuggestions()
         async let transfersResult = client.transfers()
@@ -213,7 +213,7 @@ final class TransactionsViewModel {
         }
         if let advances = try? await advancesResult {
             advancesByTransactionID = Dictionary(
-                uniqueKeysWithValues: advances.map { ($0.transactionID, $0) }
+                uniqueKeysWithValues: advances.advances.map { ($0.transactionID, $0) }
             )
         }
         if let accounts = try? await accountsResult {

@@ -85,6 +85,10 @@ actor FakeAPIClient: APIClientProtocol {
     var applyRulesToReturn = ApplyRulesResponse(rulesApplied: 0, matched: 0, cleared: 0)
     var applyRulesError: Error?
     var advancesToReturn: [AdvanceResponse] = []
+    var advancesSummaryToReturn = AdvancesSummaryResponse(byPerson: [], totals: [])
+    var advancesError: Error?
+    /// The `status` argument of the most recent `advances(status:)` call.
+    var lastAdvancesStatus: AdvanceStatus??
     var advanceToReturn: AdvanceResponse?
     var advanceError: Error?
     var createAdvanceToReturn: AdvanceResponse?
@@ -542,6 +546,18 @@ actor FakeAPIClient: APIClientProtocol {
         advanceError = error
     }
 
+    func setAdvances(_ advances: [AdvanceResponse]) {
+        advancesToReturn = advances
+    }
+
+    func setAdvancesSummary(_ summary: AdvancesSummaryResponse) {
+        advancesSummaryToReturn = summary
+    }
+
+    func setAdvancesError(_ error: Error) {
+        advancesError = error
+    }
+
     func setCreateAdvanceResult(_ advance: AdvanceResponse) {
         createAdvanceToReturn = advance
     }
@@ -894,8 +910,12 @@ actor FakeAPIClient: APIClientProtocol {
         return applyRulesToReturn
     }
 
-    func advances() async throws -> [AdvanceResponse] {
-        advancesToReturn
+    func advances(status: AdvanceStatus?) async throws -> AdvancesResponse {
+        lastAdvancesStatus = .some(status)
+        if let advancesError { throw advancesError }
+        let rows = status.map { wanted in advancesToReturn.filter { $0.status == wanted } }
+            ?? advancesToReturn
+        return AdvancesResponse(advances: rows, summary: advancesSummaryToReturn)
     }
 
     func advance(id: UUID) async throws -> AdvanceResponse {

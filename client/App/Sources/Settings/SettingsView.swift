@@ -2,9 +2,10 @@ import SwiftUI
 import TraccioCore
 
 /// The Impostazioni tab — the container for every settings-shaped screen
-/// this app has or will have (ADR 0009). "Categorie e regole", "Eventi", and
-/// (iOS only) "Blocco con Face ID" are the entries today; backup/export is
-/// tracked in `tasks/backlog.md` as a later entry here.
+/// this app has or will have (ADR 0009). "Categorie e regole", "Eventi",
+/// "Anticipi", "Inizio tracciamento", and (iOS only) "Blocco con Face ID"
+/// are the entries today; backup/export is tracked in `tasks/backlog.md` as
+/// a later entry here.
 ///
 /// No mockup covers this screen (`docs/design/canvas/` mocks only
 /// Panoramica/Movimenti/Conti/Dettaglio) — a fourth tab is a deliberate
@@ -35,6 +36,13 @@ struct SettingsView: View {
                             EventsView()
                         } label: {
                             settingsRow(title: "Eventi", systemImage: "calendar")
+                        }
+                        .buttonStyle(.plain)
+                        Divider().overlay(Palette.separator)
+                        NavigationLink {
+                            AdvancesView()
+                        } label: {
+                            settingsRow(title: "Anticipi", systemImage: "person.2")
                         }
                         .buttonStyle(.plain)
                         Divider().overlay(Palette.separator)
