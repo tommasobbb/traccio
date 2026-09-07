@@ -958,7 +958,16 @@ struct APIClientTests {
 
     /// A representative `GET /advances` envelope: one advance, no participants.
     private static let advancesEnvelope = """
-        { "advances": [
+        { "summary": {
+            "by_person": [
+              { "name": "Marco", "currency": "EUR", "expected": 3600,
+                "reimbursed": 0, "outstanding": 3600, "advance_count": 1 }
+            ],
+            "totals": [
+              { "currency": "EUR", "outstanding": 3600, "open_advances": 1 }
+            ]
+          },
+          "advances": [
           {
             "id": "11111111-1111-1111-1111-111111111111",
             "transaction_id": "22222222-2222-2222-2222-222222222222",
@@ -984,10 +993,25 @@ struct APIClientTests {
             return (response, Data(Self.advancesEnvelope.utf8))
         }
 
-        let advances = try await client.advances()
-        #expect(advances.count == 1)
-        #expect(advances[0].ownShare == 1800)
-        #expect(advances[0].status == .open)
+        let envelope = try await client.advances(status: nil)
+        #expect(envelope.advances.count == 1)
+        #expect(envelope.advances[0].ownShare == 1800)
+        #expect(envelope.advances[0].status == .open)
+        #expect(envelope.summary.byPerson.map(\.name) == ["Marco"])
+        #expect(envelope.summary.totals.first?.outstanding == 3600)
+    }
+
+    @Test func advancesPassesStatusFilterAsQuery() async throws {
+        let client = Self.makeClient { request in
+            #expect(request.url?.path == "/advances")
+            #expect(request.url?.query == "status=written_off")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(Self.advancesEnvelope.utf8))
+        }
+
+        _ = try await client.advances(status: .writtenOff)
     }
 
     @Test func advanceFetchesOneRowByID() async throws {

@@ -688,16 +688,24 @@ public struct APIClient: Sendable {
         try await post("rules/apply")
     }
 
-    /// Fetch the caller's advances.
+    /// Fetch the caller's advances and the cross-advance summary.
+    ///
+    /// Parameters
+    /// ----------
+    /// status:
+    ///     When non-`nil`, only advances in that lifecycle state come back in
+    ///     `advances`. The `summary` is always computed over every advance
+    ///     server-side, so it does not move when this narrows the rows
+    ///     (ADR 0026).
     ///
     /// Returns
     /// -------
-    /// The decoded advances from `GET /advances`, oldest first. Each carries
-    /// the server-derived `receivable`/`reimbursed`/`outstanding`/`excess` —
+    /// The decoded `GET /advances` envelope: the rows (oldest first) plus
+    /// `summary.byPerson` / `summary.totals`. Every amount is server-derived —
     /// the client never recomputes these.
-    public func advances() async throws -> [AdvanceResponse] {
-        let envelope: AdvancesResponse = try await get("advances")
-        return envelope.advances
+    public func advances(status: AdvanceStatus? = nil) async throws -> AdvancesResponse {
+        let query = status.map { [URLQueryItem(name: "status", value: $0.rawValue)] } ?? []
+        return try await get("advances", query: query)
     }
 
     /// Fetch one advance by id.
