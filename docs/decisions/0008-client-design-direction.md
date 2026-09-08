@@ -477,3 +477,46 @@ it the cleanest, and it is the model the others follow.
 on-device visual pass — light + dark + Dynamic Type, every screen the palette
 and surfaces touch — is owed, same as every prior visual revision here; no
 unit test covers layout or colour.
+
+## 2026-09-08 revision (second pass): deep-plum accent, Panoramica recomposed
+
+The tone revision above shipped to the phone. On device two things stood out:
+the forest-green accent still did not sit right — a green brand next to green
+`income` (both green) reads as a semantic muddle, and it competed with the ten
+data tones — and Panoramica had been left untouched (its hierarchy work was
+deferred). Both addressed here; still client-only, no backend.
+
+**Accent: forest green → deep plum.** `AccentColor` `#1B5E3F` / `#58BF95` →
+**`#582832` / `#D48F96`**, `AccentPressed` → `#461823` / `#B6737B`,
+`AccentTint` → `#FEECEE` / `#2F1D20`. `HeroFill` / `HeroFillDeep` move to a
+deep plum to match the band (`#532730` / `#370D18` light). The owner chose a
+warm-dark plum ("prugna / testa di moro") from a short set of non-green
+directions. `#582832` is AAA on white (11.9:1); the dark accent is a
+luminosity-raised warm rose. It is the fourth accent (indigo → petrol →
+forest → plum) and the first that is deliberately not a green — the point is
+to stop the brand colour from overlapping the `income` semantic and the data
+palette. The one caveat: the dark accent is near the dark `pink` data tone in
+luminance; they differ in hue and never share a surface (chrome vs. a
+category glyph). `scripts/gen-app-icon.swift`'s palette constants are updated
+and `make icon` re-run, so the home-screen icon follows this time.
+
+**Panoramica recomposed for hierarchy.** The hero body was three stacked
+sections (ribbon + legend, Entrate/Netto, and a three-column stat row) plus a
+separate full `ComparisonCard` below — four things competing under one figure.
+Now: the hero body is the ribbon + Entrate/Netto only; the three secondary
+stats (media/giorno, movimenti, categorie) and the comparison collapse into
+`heroFootnote`, a single `inkTertiary` caption line on the background under the
+hero ("↓ 12% in meno di agosto · €175/g · 84 mov. · 12 cat."). The comparison
+keeps `ComparisonCard`'s old two-colour rule (a rise in spend is `warning`, a
+fall is `accent`) but reads as prose. `ComparisonCard.swift` is deleted. The
+period strip drops the `accentTint` block for a quiet flush card — it is
+navigation, not a headline. The donut, trend and per-account cards are
+unchanged (they already carry the `.resting` elevation and their own
+eyebrows).
+
+**Still deferred**: the `Spacing`/`Radius` literal sweep of `DashboardView`
+(tracked since ADR 0017), and the on-device pass of this whole revision —
+light + dark + Dynamic Type — which is owed the same as every visual change
+here.
+
+**Verified**: `make test-app` 213 at each slice; `xcodebuild` clean.

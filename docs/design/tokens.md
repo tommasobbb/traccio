@@ -27,13 +27,13 @@ resolution happens automatically; no view branches on light/dark itself.
 ## Hero band
 
 The filled band behind Panoramica's hero figure (`HeroCard`). Its own
-colorset, **not** `accent`: the dark accent is a light mint, so white text on
-it would fail contrast. The band stays deep forest in both appearances.
+colorset, **not** `accent`: the dark accent is a light rose, so white text on
+it would fail contrast. The band stays a deep plum in both appearances.
 
 | Token           | Hex (light) | Hex (dark) | Swift name              | Use                          |
 | ---------------- | --------- | --------- | ------------------------ | ----------------------------- |
-| Hero fill        | `#1B5E3F` | `#14432D` | `Palette.heroFill`       | Hero band — top gradient stop  |
-| Hero fill deep   | `#124A31` | `#0E3322` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
+| Hero fill        | `#532730` | `#451A24` | `Palette.heroFill`       | Hero band — top gradient stop  |
+| Hero fill deep   | `#370D18` | `#2E0611` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
 | On hero          | `#FFFFFF` | `#FFFFFF` | `Palette.onHero`         | Text/figures on the band       |
 | On hero (2nd)    | white 72% | white 72% | `Palette.onHeroSecondary`| Eyebrow/caption on the band    |
 
@@ -50,17 +50,19 @@ it would fail contrast. The band stays deep forest in both appearances.
 
 | Token          | Hex (light) | Hex (dark) | Swift name           | Use                                |
 | -------------- | --------- | --------- | ---------------------- | ------------------------------------ |
-| Accent         | `#1B5E3F` | `#58BF95` | `Palette.accent`       | Forest green — links, primary buttons, positive net, active tab |
-| Accent pressed | `#124A31` | `#3E9E78` | `Palette.accentPressed`| Pressed/hover state                  |
-| Accent tint    | `#E8F2EC` | `#132A20` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, icon tile |
+| Accent         | `#582832` | `#D48F96` | `Palette.accent`       | Deep plum — links, primary buttons, positive net, active tab |
+| Accent pressed | `#461823` | `#B6737B` | `Palette.accentPressed`| Pressed/hover state                  |
+| Accent tint    | `#FEECEE` | `#2F1D20` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, period strip |
 
-Dark accent is a luminosity-raised forest — lighter and less saturated than a
-straight scale of the light hex, so it stays legible on a near-black
-background without turning to neon mint. Not an opacity flip of the light
-value. It is intentionally close in hue to the `green` data tone / `income`
-(`#248A3D`): the two stay apart by a ~17° hue shift and a lightness gap — the
-one pairing to check by eye is a positive `net` (accent) next to `Entrate`
-(income) in the hero.
+`#582832` is a warm-dark plum ("prugna / testa di moro") — AAA on white
+(11.9:1). The dark accent is a luminosity-raised warm rose, not an opacity
+flip. The brand is deliberately **not** a green any more: a green accent
+collided with `income` / the `green` data tone (`#248A3D`), both green, and
+sat awkwardly among the ten data tones. The one pairing to keep an eye on now
+is the **dark** accent (`#D48F96`) versus the dark `pink` data tone
+(`#E698B5`) — close in luminance, apart in hue, and they never share a
+surface (accent is chrome, `pink` is a category glyph), the same kind of
+caveat forest carried against `income`.
 
 The underlying asset is named `AccentColor`, not `Accent`: it doubles as the
 target's global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`
@@ -68,9 +70,11 @@ in `client/Project.yml`, so tint system controls pick it up automatically), so
 `Palette.accent` reads that one asset rather than keeping a second colorset
 in sync by hand.
 
-The accent was Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06,
-then petrol green `#0E7C86` / `#33B7BE` for one day (see History). The indigo
-hex still exists as the `indigo` data tone below — decoupled from accent.
+Accent history: Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06 →
+petrol green `#0E7C86` / `#33B7BE` for one day → forest green `#1B5E3F` /
+`#58BF95` (2026-09-07) → deep plum `#582832` / `#D48F96` (2026-09-08). The
+indigo hex still exists as the `indigo` data tone below — decoupled from
+accent.
 
 ## Semantic
 
@@ -352,7 +356,16 @@ changes, client-only, no backend:
 - **`AmountText` figure treatment** — receded cents, optional smaller
   fraction font and negative tracking on the hero. See "Typography".
 
+**Accent → deep plum, Panoramica recomposed, 2026-09-08** (same tone
+revision, second pass, after seeing the first on device):
+- Accent forest green → **deep plum `#582832` / `#D48F96`**, `HeroFill*` to
+  match, `scripts/gen-app-icon.swift` + `make icon` re-run. A green brand
+  clashed with green income. See "Accent" and "Hero band".
+- **Panoramica recompose**: the hero body drops its stat-columns section; the
+  three secondary stats and the whole `ComparisonCard` collapse into one
+  quiet `heroFootnote` caption line; the period strip loses the accent-tint
+  block for a flush card. `ComparisonCard.swift` deleted.
+
 Still owed (`tasks/backlog.md`): the on-device visual pass — light + dark +
-Dynamic Type, every screen — and the deeper Panoramica hierarchy work
-(period-picker weight, comparison demoted to a caption, a `Spacing`/`Radius`
-sweep).
+Dynamic Type, every screen — and a `Spacing`/`Radius` sweep of
+`DashboardView`.
