@@ -97,11 +97,14 @@ struct AdvanceSections: View {
         advance.participants.count + 1
     }
 
+    /// The first segment is your own quota; the rest are the other
+    /// participants. Ink, not accent — this is a data figure, not a control
+    /// (`docs/design/tokens.md`'s "Accent dosage").
     private var splitBar: some View {
         HStack(spacing: 3) {
             ForEach(0..<splitCount, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(index == 0 ? Palette.accent : Palette.neutralFill)
+                    .fill(index == 0 ? Palette.ink : Palette.neutralFill)
                     .frame(height: 10)
             }
         }
@@ -175,12 +178,14 @@ struct AdvanceSections: View {
         }
     }
 
+    /// A participant's initials disc. Neutral ink-on-fill — an avatar is
+    /// identity, not a control (`docs/design/tokens.md`'s "Accent dosage").
     private func avatar(for name: String) -> some View {
         Text(initials(for: name))
             .font(Typography.caption.weight(.bold))
-            .foregroundStyle(Palette.accent)
+            .foregroundStyle(Palette.inkSecondary)
             .frame(width: 36, height: 36)
-            .background(Palette.accent.opacity(0.12))
+            .background(Palette.neutralFill)
             .clipShape(Circle())
     }
 

@@ -11,8 +11,12 @@ enum Typography {
     /// A card's section title.
     static let cardTitle = Font.system(.subheadline, design: .default, weight: .semibold)
 
-    /// The large protagonist figure (e.g. the dashboard hero amount).
-    static let heroFigure = Font.system(.largeTitle, design: .default, weight: .bold)
+    /// The large protagonist figure (the dashboard hero amount). Bigger than
+    /// `.largeTitle` since the 2026-09-08 "dose, non tinta" revision removed
+    /// the colour band behind it — the figure now carries the top of the
+    /// screen on its own. `Font.system(size:)` still scales with Dynamic Type
+    /// in SwiftUI (unlike UIKit), so this stays a day-one accessible size.
+    static let heroFigure = Font.system(size: 44, weight: .bold, design: .default)
 
     /// A secondary stat figure (entrate/netto row).
     static let statFigure = Font.system(.title3, design: .default, weight: .bold)

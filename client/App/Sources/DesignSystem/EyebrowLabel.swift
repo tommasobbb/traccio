@@ -4,9 +4,10 @@ import SwiftUI
 /// PERIODO", "ALTRE VALUTE", …).
 struct EyebrowLabel: View {
     let text: String
-    /// Overridable so a section header can carry the brand accent (the
-    /// dashboard's cards) or sit on a coloured band (`Palette.onHeroSecondary`
-    /// in `HeroCard`). Defaults to the muted metadata tone.
+    /// Overridable so a section header can be `Palette.ink` (the dashboard's
+    /// card titles). Not the accent — an eyebrow is a heading, and the accent
+    /// marks what you touch (`docs/design/tokens.md`'s "Accent dosage").
+    /// Defaults to the muted metadata tone.
     var color: Color = Palette.inkTertiary
 
     var body: some View {

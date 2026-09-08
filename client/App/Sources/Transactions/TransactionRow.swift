@@ -97,7 +97,7 @@ struct TransactionRow: View {
             } label: {
                 rowContent
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressableRow)
         }
     }
 
@@ -217,32 +217,31 @@ struct TransactionRow: View {
         }
     }
 
-    /// A 16pt tile standing in for the role word: neutral for a transfer,
-    /// funding, or reimbursement leg; the accent (petrol) for an advance, the
-    /// one role that already carried the accent as a `Badge`.
+    /// A 16pt tile standing in for the role word. Always the neutral
+    /// ink-on-fill treatment: a role is metadata, not something you tap, so it
+    /// does not take the accent (`docs/design/tokens.md`'s "Accent dosage").
+    /// The icon alone distinguishes the roles.
     private var roleGlyph: some View {
-        let spec = roleGlyphSpec
-        return Image(systemName: spec.icon)
+        Image(systemName: roleGlyphIcon)
             .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(spec.isAccent ? Palette.accent : Palette.inkSecondary)
+            .foregroundStyle(Palette.inkSecondary)
             .frame(width: 16, height: 16)
             .background(
-                spec.isAccent ? Palette.accent.opacity(0.15) : Palette.neutralFill,
+                Palette.neutralFill,
                 in: RoundedRectangle(cornerRadius: 5, style: .continuous)
             )
             .accessibilityLabel(roleLabel)
     }
 
-    /// SF Symbol and whether it takes the accent, per role. `.personal` is
-    /// unreachable — `subtitle` only renders the glyph when the role is not
-    /// personal.
-    private var roleGlyphSpec: (icon: String, isAccent: Bool) {
+    /// SF Symbol per role. `.personal` is unreachable — `subtitle` only
+    /// renders the glyph when the role is not personal.
+    private var roleGlyphIcon: String {
         switch transaction.role {
-        case .personal: ("circle", false)
-        case .transfer: ("arrow.left.arrow.right", false)
-        case .funding: ("arrow.down", false)
-        case .advance: ("square.stack.3d.up.fill", true)
-        case .reimbursement: ("arrow.uturn.backward", false)
+        case .personal: "circle"
+        case .transfer: "arrow.left.arrow.right"
+        case .funding: "arrow.down"
+        case .advance: "square.stack.3d.up.fill"
+        case .reimbursement: "arrow.uturn.backward"
         }
     }
 

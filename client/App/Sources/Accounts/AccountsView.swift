@@ -145,8 +145,10 @@ struct AccountsView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                ListSkeleton(count: 4)
+                    .padding(Spacing.gutter)
+            }
         case .loaded(let connections) where connections.isEmpty && model.accounts.isEmpty:
             EmptyState(
                 systemImage: "creditcard",
@@ -220,7 +222,7 @@ struct AccountsView: View {
                     .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     /// The dashed "Crea un conto manuale" entry point (ADR 0020) — a cash
@@ -245,7 +247,7 @@ struct AccountsView: View {
                     .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     /// "Importa movimenti da file" (ADR 0023) — bring a Satispay export or a
@@ -269,7 +271,7 @@ struct AccountsView: View {
                     .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     /// Copy for a failed manual sync or re-authorization
@@ -439,7 +441,7 @@ struct AccountsView: View {
             }
             .padding(.vertical, Spacing.rowPadding)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressableRow)
     }
 }
 

@@ -4,8 +4,9 @@ import SwiftUI
 /// can sit at — ADR 0008's 2026-09-08 tone revision. `.flush` is a bordered
 /// surface with no shadow (a group nested inside another card); `.resting` is
 /// the everyday card with one soft shadow; `.raised` keeps the deeper
-/// two-layer shadow for something that genuinely floats (`HeroCard`, an
-/// active sheet).
+/// two-layer shadow for something that genuinely floats — Panoramica's hero
+/// card (the only `.raised` on that screen, so it reads as the protagonist
+/// without a colour band), or an active sheet.
 enum CardElevation {
     case flush
     case resting

@@ -19,23 +19,16 @@ struct AmountText: View {
         case spending
         /// An income figure: green, with an explicit "+".
         case income
-        /// The one genuinely signed figure (`income - spending`). Carries the
-        /// accent color when positive; ink otherwise.
+        /// The one genuinely signed figure (`income - spending`). Green when
+        /// positive (a positive net *is* income territory), ink otherwise —
+        /// the accent no longer doubles as a semantic colour here
+        /// (`docs/design/tokens.md`'s "Accent dosage").
         case net
         /// A transaction whose `effective_amount` is zero (a transfer leg, a
         /// reimbursement) — the bank's raw amount is still shown, but muted,
         /// per `docs/design/tokens.md`'s "non-counted amounts" ink tone. Never
         /// used for a spending or income figure.
         case notCounted
-    }
-
-    /// Where the amount is rendered, which can override its `Kind` colour.
-    enum Tone {
-        /// The `Kind`'s own colour convention (the default everywhere).
-        case standard
-        /// On the dashboard hero's forest-green band: always `Palette.onHero`
-        /// (white), since ink or accent would not read on the band.
-        case onHero
     }
 
     let amount: Int
@@ -48,7 +41,6 @@ struct AmountText: View {
     /// Letter spacing applied to the whole figure. Large protagonist figures
     /// want a slight negative value; the default 0 leaves list figures alone.
     var tracking: CGFloat = 0
-    var tone: Tone = .standard
 
     var body: some View {
         let formatted = TraccioCore.formatMoney(
@@ -56,6 +48,7 @@ struct AmountText: View {
         )
         return figure(formatted)
             .tracking(tracking)
+            .contentTransition(.numericText(value: Double(amount)))
             .accessibilityLabel(formatted)
     }
 
@@ -94,11 +87,10 @@ struct AmountText: View {
     }
 
     private var color: Color {
-        if tone == .onHero { return Palette.onHero }
         switch kind {
         case .spending: return Palette.ink
         case .income: return Palette.income
-        case .net: return amount > 0 ? Palette.accent : Palette.ink
+        case .net: return amount > 0 ? Palette.income : Palette.ink
         case .notCounted: return Palette.inkQuaternary
         }
     }
@@ -107,12 +99,11 @@ struct AmountText: View {
     /// read first); stays the figure colour for income / positive net, where
     /// a grey tail on a green number would look broken.
     private var fractionColor: Color {
-        if tone == .onHero { return Palette.onHeroSecondary }
         switch kind {
         case .spending: return Palette.inkTertiary
         case .notCounted: return Palette.inkQuaternary
         case .income: return Palette.income
-        case .net: return amount > 0 ? Palette.accent : Palette.inkTertiary
+        case .net: return amount > 0 ? Palette.income : Palette.inkTertiary
         }
     }
 }

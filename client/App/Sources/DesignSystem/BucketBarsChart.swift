@@ -71,10 +71,13 @@ struct BucketBarsChart: View {
                 .fill(Palette.neutralFill)
                 .frame(height: height)
             // A bucket with no spending still gets a sliver, so the track
-            // underneath never reads as a missing bar.
+            // underneath never reads as a missing bar. The bars are a muted
+            // ink fill at rest — the accent marks only the bar currently
+            // scrubbed, per `docs/design/tokens.md`'s "Accent dosage" (a
+            // chart-wide blue block was exactly the over-use that revision
+            // pulled back).
             RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(Palette.accent)
-                .opacity(selectedIndex == nil || isSelected ? 1 : 0.35)
+                .fill(isSelected ? Palette.accent : Palette.ink.opacity(0.16))
                 .frame(height: isDrawn ? max(3, height * bar.fraction) : 0)
         }
         .frame(maxWidth: .infinity)

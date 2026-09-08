@@ -38,6 +38,13 @@ struct DashboardView: View {
             }
             .background(Palette.background)
             .navigationTitle("Panoramica")
+            // With the hero band gone, a `.large` title would be the first
+            // heavy thing on the screen and would compete with the spend
+            // figure for "protagonist". Inline keeps the figure the anchor
+            // (2026-09-08 "dose, non tinta" revision).
+            #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
             .animation(.easeInOut(duration: 0.2), value: stateTag)
         }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
@@ -45,11 +52,18 @@ struct DashboardView: View {
 
     /// A cheap discriminator for `.animation(_:value:)` — see
     /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
+    /// Folds in the headline spend total so a loaded→loaded change (a new
+    /// period, an FX toggle) lands inside an animation transaction and the
+    /// hero figure's `.contentTransition(.numericText())` rolls the digits
+    /// instead of snapping.
     private var stateTag: String {
         switch model.state {
-        case .idle, .loading: "loading"
-        case .loaded: "loaded"
-        case .failed: "failed"
+        case .idle, .loading: return "loading"
+        case .loaded(let summary):
+            let spend = summary.converted?.summary.spending
+                ?? summary.currencies.primary()?.spending
+            return "loaded-\(spend ?? 0)"
+        case .failed: return "failed"
         }
     }
 
@@ -57,8 +71,7 @@ struct DashboardView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 300)
+            DashboardSkeleton()
         case .loaded(let summary):
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 periodPicker
@@ -231,22 +244,28 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Panoramica's protagonist. Since the 2026-09-08 "dose, non tinta"
+    /// revision this is a plain `Card` at `.raised` — the only raised card on
+    /// the screen, so the hierarchy is carried by elevation and the figure's
+    /// own scale, not by a filled colour band (`docs/design/tokens.md`'s
+    /// "Accent dosage"). The spend total is `ink`, big, with tight tracking.
     private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
-        HeroCard {
-            EyebrowLabel(text: "Speso questo periodo", color: Palette.onHeroSecondary)
-            AmountText(
-                amount: summary.spending,
-                currencyCode: summary.currency,
-                kind: .spending,
-                font: Typography.heroFigure,
-                fractionFont: Typography.statFigure,
-                tracking: -0.6,
-                tone: .onHero
-            )
-            Text(summary.currency)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.onHeroSecondary)
-        } content: {
+        Card(elevation: .raised) {
+            VStack(alignment: .leading, spacing: 6) {
+                EyebrowLabel(text: "Speso questo periodo")
+                AmountText(
+                    amount: summary.spending,
+                    currencyCode: summary.currency,
+                    kind: .spending,
+                    font: Typography.heroFigure,
+                    fractionFont: Typography.statFigure,
+                    tracking: -1.0
+                )
+                Text(summary.currency)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+            }
+
             categoryRibbon(summary)
 
             Divider().overlay(Palette.separator)

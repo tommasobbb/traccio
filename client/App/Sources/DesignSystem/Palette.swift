@@ -33,21 +33,10 @@ enum Palette {
     static let accent = Color("AccentColor", bundle: .main)
     static let accentPressed = Color("AccentPressed", bundle: .main)
     /// A pale wash of the accent, for a resting surface that should still read
-    /// as "brand" — an active filter token, a card eyebrow, an icon tile.
+    /// as "brand" — an active filter token. Not a section title or an eyebrow:
+    /// see `docs/design/tokens.md`'s "Accent dosage" — the accent marks what
+    /// you touch, never a filled surface or a heading.
     static let accentTint = Color("AccentTint", bundle: .main)
-
-    // MARK: Hero band
-
-    /// The filled band behind Panoramica's hero figure — its own colorset,
-    /// not `accent`: the dark accent is a light mint, so white text on it
-    /// would fail contrast. `heroFill` stays deep forest in both appearances;
-    /// `heroFillDeep` is the darker gradient stop. `onHero` /
-    /// `onHeroSecondary` are the inks that sit on it (white, and white at
-    /// 72%), fixed in both appearances since the band itself does not lighten.
-    static let heroFill = Color("HeroFill", bundle: .main)
-    static let heroFillDeep = Color("HeroFillDeep", bundle: .main)
-    static let onHero = Color("OnHero", bundle: .main)
-    static let onHeroSecondary = Color("OnHeroSecondary", bundle: .main)
 
     // MARK: Semantic
 

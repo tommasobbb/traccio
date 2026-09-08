@@ -546,3 +546,62 @@ Lightened again to a bright azure `#087ED7` / `#6FB4F3` (Apple `systemBlue`
 territory, 4.2:1 on white) — the owner asked for it lighter twice. It is now
 close to the `blue` data tone in lightness; the two stay apart by chroma
 (the accent is much more saturated) and by never sharing a surface.
+
+### Dose, not tint: the hero band goes, the accent gets a dosage rule (2026-09-08)
+
+The azure above was the fifth accent in three days, and the owner still
+disliked the "main colour" — "troppo imperante in alcune parti dell'app", the
+dashboard's navy hero band called "un pugno in un occhio", the app icon "TROPPO
+SCURA" next to every other app on the home screen. The pattern across all five
+swaps: each hue was fine in isolation and grating in use within a day. The
+conclusion recorded here is that the variable that kept failing was **surface
+area, not hue** — the accent was the hero-band fill, the icon background, a
+section title, every trend bar, a role pill, an avatar. Any colour spread that
+wide becomes the colour you stare at all day.
+
+**Decision.** Keep the azure. Cut the dose.
+
+- **Panoramica's hero band is removed.** `HeroCard.swift`, the `HeroFill` /
+  `HeroFillDeep` / `OnHero` / `OnHeroSecondary` colorsets, and `AmountText.Tone`
+  are deleted. The hero is now a plain `Card` at `.raised` — the only raised
+  card on the screen, so it stays the protagonist through elevation and the
+  figure's scale (`Typography.heroFigure` → 44pt, tracking `-1.0`), not a block
+  of colour. The iOS navigation title goes `.inline` so it does not compete
+  with the figure. This matches `Conti`, which has always had no band and no
+  accent surface and is the screen the owner calls the cleanest.
+- **An "Accent dosage" rule** is added to `docs/design/tokens.md`: the accent
+  marks what you touch or what is currently selected — a button, a link, an
+  active filter chip, the active tab, a pressed state — and nothing else. Never
+  a filled surface, a heading/eyebrow, or navigation chrome; at most one filled
+  CTA per screen. Meaning comes from the data's own `PaletteColor` or from
+  `Palette.income`, not from the accent.
+- **Call sites bonified**: `AmountText.Kind.net` positive → `Palette.income`
+  (was `accent`); `BucketBarsChart` bars → `Palette.ink.opacity(0.16)` at rest,
+  `accent` only on the scrubbed bar; the "Per conto" eyebrow → `ink`; the
+  transfer-suggestion card → a plain card, not an accent slab; `TransactionRow`
+  role glyph, the advance split bar and participant avatars, the import "Nuovi"
+  stat → neutral ink. `LockScreenView` / `PrivacyCoverView` keep a single
+  accent glyph — a brand moment on an otherwise empty screen, not a surface.
+
+**Rifinitura in the same pass** (each small, none load-bearing on its own):
+skeleton placeholders (`Skeleton.swift`) replace the three bare
+`ProgressView()`s on Panoramica / Movimenti / Conti; `PressableButtonStyle`
+gives tappable rows and cards a scale + veil press state to go with the
+haptics that were already there; `AmountText` carries
+`.contentTransition(.numericText)` so figures roll rather than snap; the tab
+bar switches to symbols with filled variants (`chart.bar`,
+`list.bullet.rectangle.portrait`) so every tab lights when active; the dark
+`Background` moves off pure black to `#0B0B0C`.
+
+**App icon.** `scripts/gen-app-icon.swift` gains its own `iconTop` /
+`iconBottom` / `launchBar` constants instead of aliasing the (now deleted)
+`heroFill`. The navy `#024981 → #002C52` gradient was the darkest icon on the
+home screen; the owner picked variant "C" from four rendered candidates — a
+bright vertical wash `#22C7E8 → #0A84FF` (cyan to azure) with the same three
+white bars. The launch mark keeps `launchBar` = `Palette.accent` `#087ED7`
+(white bars would vanish on the app's own background).
+
+**Verified**: `make test-app` 218, `make test-core` unaffected, `xcodebuild`
+clean for macOS and iOS. The on-device pass — light + dark + Dynamic Type,
+now including the band-less Panoramica and the raised dark background — is
+owed the same as every visual change in this ADR.

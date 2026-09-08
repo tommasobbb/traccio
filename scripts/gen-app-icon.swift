@@ -7,6 +7,12 @@
 // petrol to forest green left the home-screen icon on the old colour. This
 // script is committed so the next colour change is `make icon`.
 //
+// The icon has its own three colour constants (`iconTop` / `iconBottom` /
+// `launchBar`) rather than tracking a `Palette` token: since the 2026-09-08
+// "dose, non tinta" revision there is no hero-band colorset to alias, and the
+// icon is a deliberate design choice (a bright azure→cyan wash, chosen from
+// rendered candidates), not a mechanical mirror of the accent.
+//
 // Output (overwrites in place):
 //   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-ios-1024.png
 //   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-macos-{16,32,64,128,256,512,1024}.png
@@ -17,22 +23,25 @@
 // applies its own mask; alpha would also block App Store submission). macOS
 // gets the shape baked in — an inset squircle with a transparent surround,
 // since macOS does not mask third-party icons — at every size in the classic
-// ten-slot set. The launch mark is the bars alone in the accent colour on a
-// transparent ground.
+// ten-slot set. The launch mark is the bars alone in `launchBar` (the accent)
+// on a transparent ground — white bars would vanish on the app's background.
 
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// MARK: Palette (kept in sync with docs/design/tokens.md by hand)
+// MARK: Palette
 
-/// Hero-band gradient stops (`Palette.heroFill` / `Palette.heroFillDeep`,
-/// light values) — the icon background.
-let heroFill = (r: 0x02 / 255.0, g: 0x49 / 255.0, b: 0x81 / 255.0)
-let heroFillDeep = (r: 0x00 / 255.0, g: 0x2C / 255.0, b: 0x52 / 255.0)
-/// `Palette.accent` (light) — the launch mark's bar colour.
-let accent = (r: 0x08 / 255.0, g: 0x7E / 255.0, b: 0xD7 / 255.0)
+/// The icon background: a vertical wash from a bright cyan at the top to an
+/// azure at the bottom (`#22C7E8` → `#0A84FF`). Variant "C" from the
+/// 2026-09-08 icon candidates — lighter and more alive than the old navy,
+/// which was the darkest icon on the home screen.
+let iconTop = (r: 0x22 / 255.0, g: 0xC7 / 255.0, b: 0xE8 / 255.0)
+let iconBottom = (r: 0x0A / 255.0, g: 0x84 / 255.0, b: 0xFF / 255.0)
+/// `Palette.accent` (light) — the launch mark's bar colour, shown alone on
+/// the app's own background where white bars would not read.
+let launchBar = (r: 0x08 / 255.0, g: 0x7E / 255.0, b: 0xD7 / 255.0)
 
 let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
@@ -58,11 +67,12 @@ func drawBars(in ctx: CGContext, rect: CGRect, color: CGColor) {
     ctx.fillPath()
 }
 
-/// Vertical gradient from `heroFill` (top) to `heroFillDeep` (bottom).
-func heroGradient() -> CGGradient {
+/// Vertical gradient from `iconTop` to `iconBottom`. The call sites pass
+/// `start` at the visual top and `end` at the visual bottom.
+func iconGradient() -> CGGradient {
     let colors = [
-        CGColor(colorSpace: sRGB, components: [heroFill.r, heroFill.g, heroFill.b, 1])!,
-        CGColor(colorSpace: sRGB, components: [heroFillDeep.r, heroFillDeep.g, heroFillDeep.b, 1])!,
+        CGColor(colorSpace: sRGB, components: [iconTop.r, iconTop.g, iconTop.b, 1])!,
+        CGColor(colorSpace: sRGB, components: [iconBottom.r, iconBottom.g, iconBottom.b, 1])!,
     ]
     return CGGradient(colorsSpace: sRGB, colors: colors as CFArray, locations: [0, 1])!
 }
@@ -77,7 +87,7 @@ func renderIOSIcon(size px: Int) -> CGImage {
     )!
     let full = CGRect(x: 0, y: 0, width: px, height: px)
     ctx.drawLinearGradient(
-        heroGradient(),
+        iconGradient(),
         start: CGPoint(x: 0, y: full.maxY), end: CGPoint(x: 0, y: 0), options: []
     )
     drawBars(
@@ -107,7 +117,7 @@ func renderMacIcon(size px: Int) -> CGImage {
     ctx.addPath(path)
     ctx.clip()
     ctx.drawLinearGradient(
-        heroGradient(),
+        iconGradient(),
         start: CGPoint(x: 0, y: shape.maxY), end: CGPoint(x: 0, y: shape.minY), options: []
     )
     ctx.resetClip()
@@ -118,7 +128,7 @@ func renderMacIcon(size px: Int) -> CGImage {
     return ctx.makeImage()!
 }
 
-/// The launch mark: accent bars on a transparent ground.
+/// The launch mark: `launchBar` (accent) bars on a transparent ground.
 func renderLaunchMark(size px: Int) -> CGImage {
     let ctx = CGContext(
         data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
@@ -127,7 +137,7 @@ func renderLaunchMark(size px: Int) -> CGImage {
     let full = CGRect(x: 0, y: 0, width: px, height: px)
     drawBars(
         in: ctx, rect: full,
-        color: CGColor(colorSpace: sRGB, components: [accent.r, accent.g, accent.b, 1])!
+        color: CGColor(colorSpace: sRGB, components: [launchBar.r, launchBar.g, launchBar.b, 1])!
     )
     return ctx.makeImage()!
 }

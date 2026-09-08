@@ -209,19 +209,23 @@ struct TransactionsView: View {
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.accent)
+                    .foregroundStyle(Palette.inkTertiary)
             }
             .padding(14)
+            // A plain card, not an accent-tinted slab: the accent is carried
+            // by the one leading tile, the chevron is chrome, and the surface
+            // is card-white like every other row (`docs/design/tokens.md`'s
+            // "Accent dosage").
             .background(
-                Palette.accent.opacity(0.08),
+                Palette.card,
                 in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                    .strokeBorder(Palette.accent.opacity(0.18), lineWidth: 1)
+                    .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
     }
 
     private var transferSuggestionCardTitle: String {
@@ -454,8 +458,10 @@ struct TransactionsView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                ListSkeleton()
+                    .padding(Spacing.gutter)
+            }
         case .loaded(let transactions) where transactions.isEmpty:
             emptyState
         case .loaded(let transactions):

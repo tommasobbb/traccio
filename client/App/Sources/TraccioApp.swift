@@ -47,13 +47,19 @@ struct TraccioApp: App {
                 TabView(selection: $selectedTab) {
                     DashboardView()
                         .tabItem {
-                            Label("Panoramica", systemImage: "square.grid.2x2")
+                            // `chart.bar` rhymes with the app icon's three
+                            // ascending bars and has a `.fill` variant, so the
+                            // active tab actually lights up.
+                            Label("Panoramica", systemImage: "chart.bar")
                         }
                         .tag(Tab.dashboard)
                     TransactionsView(initialFilter: drillThrough.filter)
                         .id(drillThrough.generation)
                         .tabItem {
-                            Label("Movimenti", systemImage: "list.bullet")
+                            // `list.bullet` has no filled counterpart, so it
+                            // was the one tab that never lit when selected;
+                            // `list.bullet.rectangle.portrait` does.
+                            Label("Movimenti", systemImage: "list.bullet.rectangle.portrait")
                         }
                         .tag(Tab.transactions)
                     AccountsView()

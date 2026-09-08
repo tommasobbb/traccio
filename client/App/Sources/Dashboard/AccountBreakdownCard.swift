@@ -20,7 +20,7 @@ struct AccountBreakdownCard: View {
     var body: some View {
         if !accounts.isEmpty {
             Card {
-                EyebrowLabel(text: "Per conto", color: Palette.accent)
+                EyebrowLabel(text: "Per conto", color: Palette.ink)
                 VStack(spacing: 0) {
                     ForEach(accounts, id: \.accountID) { account in
                         accountRow(account)

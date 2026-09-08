@@ -169,7 +169,7 @@ struct ImportTransactionsSheet: View {
         Card {
             EyebrowLabel(text: "Anteprima")
             HStack(spacing: 16) {
-                stat("Nuovi", response.summary.new, Palette.accent)
+                stat("Nuovi", response.summary.new, Palette.ink)
                 stat("Già importati", response.summary.alreadyImported, Palette.inkSecondary)
                 stat("In errore", response.summary.invalid, Palette.inkSecondary)
             }

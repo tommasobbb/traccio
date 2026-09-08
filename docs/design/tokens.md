@@ -24,18 +24,15 @@ resolution happens automatically; no view branches on light/dark itself.
 | Card              | `#FFFFFF` | `#1C1C1E` | `Palette.card`           | Card fill                      |
 | Neutral fill      | `#E5E5EA` | `#2C2C2E` | `Palette.neutralFill`    | Icon tiles, dividers, tracks   |
 
-## Hero band
+## Panoramica hero
 
-The filled band behind Panoramica's hero figure (`HeroCard`). Its own
-colorset, **not** `accent`: the dark accent is a light rose, so white text on
-it would fail contrast. The band stays a deep blue in both appearances.
-
-| Token           | Hex (light) | Hex (dark) | Swift name              | Use                          |
-| ---------------- | --------- | --------- | ------------------------ | ----------------------------- |
-| Hero fill        | `#024981` | `#003967` | `Palette.heroFill`       | Hero band — top gradient stop  |
-| Hero fill deep   | `#002C52` | `#002241` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
-| On hero          | `#FFFFFF` | `#FFFFFF` | `Palette.onHero`         | Text/figures on the band       |
-| On hero (2nd)    | white 72% | white 72% | `Palette.onHeroSecondary`| Eyebrow/caption on the band    |
+**No colour band.** Panoramica's hero (the spend total, the category ribbon,
+Entrate/Netto) is a plain `Card` at `.raised` — the only raised card on the
+screen, so it reads as the protagonist through elevation and the figure's own
+size (`Typography.heroFigure`, 44pt, tracking `-1.0`), not a filled surface.
+The `heroFill` / `heroFillDeep` / `onHero` / `onHeroSecondary` colorsets and
+`AmountText.Tone` were removed in the 2026-09-08 "dose, non tinta" revision —
+see "Accent dosage" below and the History entry.
 
 ## Ink (text)
 
@@ -52,16 +49,45 @@ it would fail contrast. The band stays a deep blue in both appearances.
 | -------------- | --------- | --------- | ---------------------- | ------------------------------------ |
 | Accent         | `#087ED7` | `#6FB4F3` | `Palette.accent`       | Bright azure blue — links, primary buttons, positive net, active tab |
 | Accent pressed | `#0368B4` | `#5398D5` | `Palette.accentPressed`| Pressed/hover state                  |
-| Accent tint    | `#EAF4FF` | `#132435` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, period strip |
+| Accent tint    | `#EAF4FF` | `#132435` | `Palette.accentTint`   | Pale brand wash — active filter token only |
 
 `#087ED7` is a bright azure — 4.2:1 on white, in Apple `systemBlue` territory (the owner asked for it lighter twice). It sits close to the `blue` data tone (`#4687DB`) in lightness now; they stay apart by chroma (the accent is markedly more saturated) and never share a surface. The dark accent is a
 luminosity-raised sky blue. Deliberately distinct from the `blue` data tone
 (`#4687DB`, a lighter mid-azure): the accent is deeper and more saturated, a
 ~2:1 luminance step between them. Not periwinkle/indigo — that hue was the
 original "generic AI product" rejection and is still the `indigo` data tone.
-The one pairing to keep an eye on is the **dark** accent (`#6DABEC`) versus
+The one pairing to keep an eye on is the **dark** accent (`#6FB4F3`) versus
 the dark `blue` data tone (`#88B5F2`) — close in luminance, and they never
 share a surface (accent is chrome, `blue` is a category glyph).
+
+### Accent dosage
+
+Five different accent hues were rejected inside three days (indigo → petrol →
+forest → plum → cobalt → azure). The variable that kept failing was never the
+hue — it was how much surface the accent covered. The rule, since the
+2026-09-08 "dose, non tinta" revision:
+
+- **The accent marks what you touch, or what is currently selected** — a
+  button, a link, an active filter chip, the active tab, the segmented
+  picker's selection, a pressed state. Nothing else.
+- **Never a large filled surface** — no bands, headers, hero gradients, or
+  tinted slabs behind a card. `accentTint` is for an active filter token, not
+  a heading background.
+- **Never a heading** — a card eyebrow / section title is `Palette.ink`, not
+  the accent.
+- **Never navigation chrome** — period chevrons, back arrows, disclosure
+  chevrons are `inkSecondary` / `inkTertiary`.
+- **At most one primary CTA per screen** carries the filled accent.
+- **Meaning comes from the data, not from chrome.** A category or account
+  figure takes its own `PaletteColor`; a semantic figure (income, a positive
+  net) takes `Palette.income`. The accent is not a semantic colour.
+- If a screen looks flat without a block of colour, the fix is hierarchy —
+  elevation, type scale, whitespace — not a coloured rectangle. `Conti` is
+  the reference: it has no band and no accent surface, and it is the screen
+  the owner calls the cleanest.
+
+`net` in the dashboard hero no longer carries the accent when positive — it
+is `Palette.income`, like every other positive figure (`AmountText.Kind.net`).
 
 The underlying asset is named `AccentColor`, not `Accent`: it doubles as the
 target's global accent color (`ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME`
@@ -71,9 +97,12 @@ in sync by hand.
 
 Accent history: Apple system indigo `#5856D6` / `#7D7AFF` until 2026-09-06 →
 petrol green `#0E7C86` for one day → forest green `#1B5E3F` / `#58BF95`
-(2026-09-07) → deep plum `#582832` (2026-09-08, ~half a day) →
-cobalt blue `#025BAD`, brightened to `#056DB8` / `#66B2F2` (2026-09-08). The indigo hex still exists as
-the `indigo` data tone below — decoupled from accent.
+(2026-09-07) → deep plum `#582832` (2026-09-08, ~half a day) → cobalt blue
+`#025BAD`, brightened to `#056DB8` → **bright azure `#087ED7` / `#6FB4F3`**
+(2026-09-08, current). The indigo hex still exists as the `indigo` data tone
+below — decoupled from accent. After the fifth swap the conclusion was that
+the hue was not the problem (see "Accent dosage" above); the azure stays and
+gets re-judged on device *after* the dose came down, not before.
 
 ## Semantic
 
@@ -94,9 +123,10 @@ an amount.
 | Category red  | `#D70015` | `#FF453A` | `Palette.categoryRed`    | Category icon only — never an amount     |
 | Category red tint | `#FFEDEC` | `#3A1210` | `Palette.categoryRedTint`| Category icon tile background        |
 
-`net` in the dashboard hero carries `Palette.accent` when positive (the only
-place accent doubles as a semantic color, because `net` is the one genuinely
-signed figure — see ADR 0007).
+`net` in the dashboard hero is `Palette.income` when positive and
+`Palette.ink` otherwise (`AmountText.Kind.net`). It used to take `Palette.accent`
+when positive; the 2026-09-08 "dose, non tinta" revision dropped that — the
+accent is not a semantic colour (see "Accent dosage").
 
 ## Category donut and breakdown list
 
@@ -121,11 +151,12 @@ The dashboard's trend chart (`docs/design/canvas/Main.dc.html`'s "Spesa
 giornaliera", badge removed once `by_day` shipped —
 `docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25 revision; renamed
 `by_bucket` in the third revision; scrubbable across day/week/month buckets,
-`BucketBarsChart`, in ADR 0008's 2026-08-26 revision). No new tokens: the
-fill reuses `Palette.accent` (dimmed to ~0.35 on every bar but the one
-currently scrubbed/selected, same convention `DonutChart` uses for its own
-selection) and the track reuses `Palette.neutralFill`, same as the donut's
-own track.
+`BucketBarsChart`, in ADR 0008's 2026-08-26 revision). No new tokens. Since
+the 2026-09-08 "dose, non tinta" revision the bars are a muted `Palette.ink`
+at `.opacity(0.16)` at rest — only the bar currently scrubbed/selected turns
+`Palette.accent` (a chart-wide blue fill was exactly the accent over-use that
+revision pulled back). The track reuses `Palette.neutralFill`, same as the
+donut's own track.
 
 ## Appearance tokens
 
@@ -183,7 +214,7 @@ everywhere was part of what read as unfinished:
 | ---------- | -------------------------------------------------------------- | ------ | ------------------------------------------- |
 | `.flush`   | none — leans on the border                                            | `Radius.row` (16)  | A group nested inside another card |
 | `.resting` | one soft layer: `radius 10, y 4, black .05`                           | `Radius.card` (20) | The everyday card — the new default |
-| `.raised`  | two layers: `radius 1, y 1, black .04` + `radius 14, y 8, black .22`  | `Radius.card` (20) | Something that genuinely floats — `HeroCard`, an active sheet |
+| `.raised`  | two layers: `radius 1, y 1, black .04` + `radius 14, y 8, black .22`  | `Radius.card` (20) | Something that genuinely floats — Panoramica's hero card, an active sheet |
 
 `Palette.cardShadow` is **opaque** `Color.black`; each level's modifier carries
 the opacity. `.raised` keeps the deep two-layer recipe that used to be on every
@@ -200,7 +231,30 @@ other, no separate dark value to keep in sync. `cardShadow` stays pure
 `Color.black` in both appearances; a black drop shadow is naturally
 near-invisible on a dark card over a dark background, which is the correct
 dark-mode look — `Card`'s `separatorSubtle` border (not its shadow) is what
-defines a card's edge once the shadow stops reading.
+defines a card's edge once the shadow stops reading. The dark `Background`
+was raised from pure `#000000` to `#0B0B0C` in the 2026-09-08 "dose, non
+tinta" revision — a hair off black so a `#1C1C1E` card still has an edge
+against it. Revert to `#000000` if cards read flat on device.
+
+## Loading and press feedback
+
+- **Skeletons, not spinners.** A screen that is still loading draws a rough
+  silhouette of what is coming — `SkeletonBlock` (a `Palette.neutralFill`
+  rounded rect with a slow shimmer, a no-op under Reduce Motion) assembled
+  into `DashboardSkeleton` / `ListSkeleton` (`App/Sources/DesignSystem/
+  Skeleton.swift`). Added in the 2026-09-08 "dose, non tinta" revision; the
+  three bare `ProgressView()`s on Panoramica / Movimenti / Conti are gone.
+- **Press feedback on tappable rows and cards.** `PressableButtonStyle`
+  (`.pressable` for a standalone card, `.pressableRow` for a full-bleed list
+  row) — a small scale-down plus a faint `ink` veil while pressed, springing
+  back. Replaces a bare `.buttonStyle(.plain)`; pairs with the
+  `.sensoryFeedback` haptics that were already there. Not the accent — a
+  press is still chrome.
+- **Figures animate.** `AmountText` carries
+  `.contentTransition(.numericText(value:))`, so a figure that changes while
+  its view stays alive rolls its digits instead of snapping. On Panoramica
+  the `stateTag` folds in the headline spend total, so a period change lands
+  inside an animation transaction.
 
 ## Radii
 
@@ -368,6 +422,33 @@ second pass, after seeing the first on device):
   quiet `heroFootnote` caption line; the period strip loses the accent-tint
   block for a flush card. `ComparisonCard.swift` deleted.
 
+**"Dose, non tinta" — hero band removed, accent dosage ruled, 2026-09-08**
+(ADR 0008 revision). After a fifth accent swap (cobalt → **azure `#087ED7` /
+`#6FB4F3`**) the owner still disliked the "main colour" — diagnosis: the
+accent was on too much surface, not the wrong hue. Client-only:
+- **Panoramica's hero band is gone.** `HeroCard.swift`, the `heroFill` /
+  `heroFillDeep` / `onHero` / `onHeroSecondary` colorsets, and
+  `AmountText.Tone` are deleted. The hero is a plain `Card` at `.raised`
+  (the only one on the screen); `Typography.heroFigure` → 44pt, tracking
+  `-1.0`; iOS navigation title → `.inline`.
+- **"Accent dosage" rule** written into this file (see the section under
+  "Accent"): the accent marks what you touch or what is selected, never a
+  filled surface, a heading, or navigation chrome. Call sites bonified —
+  `net` positive → `income`; `BucketBarsChart` bars → muted `ink`, accent
+  only on the scrubbed bar; "Per conto" eyebrow, the transfer-suggestion
+  card, `TransactionRow`'s role glyph, the advance split bar / avatars, the
+  import "Nuovi" stat all off the accent.
+- **Rifinitura**: skeletons replace the three bare spinners
+  (`Skeleton.swift`); `PressableButtonStyle` on tappable rows/cards;
+  `AmountText` rolls its digits (`.contentTransition(.numericText)`); tab
+  bar icons gain filled variants (`chart.bar`, `list.bullet.rectangle.portrait`);
+  dark `Background` `#000000` → `#0B0B0C`.
+- **App icon**: `scripts/gen-app-icon.swift` gets its own `iconTop` /
+  `iconBottom` / `launchBar` constants (no longer aliased to `heroFill`). The
+  old navy gradient was the darkest icon on the home screen; the owner picked
+  a bright cyan→azure wash `#22C7E8 → #0A84FF` (variant "C" of four rendered
+  candidates), white bars. `launchBar` stays `Palette.accent` `#087ED7`.
+
 Still owed (`tasks/backlog.md`): the on-device visual pass — light + dark +
-Dynamic Type, every screen — and a `Spacing`/`Radius` sweep of
-`DashboardView`.
+Dynamic Type, every screen, now including the band-less Panoramica and the
+new dark background — and a `Spacing`/`Radius` sweep of `DashboardView`.
