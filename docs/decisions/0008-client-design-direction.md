@@ -520,3 +520,18 @@ light + dark + Dynamic Type — which is owed the same as every visual change
 here.
 
 **Verified**: `make test-app` 213 at each slice; `xcodebuild` clean.
+
+### Accent, again: plum → cobalt blue (2026-09-08)
+
+The deep-plum accent above lasted about half a day on device — the owner did
+not warm to it ("chemmerda pure sto colore"). Fifth and (for now) final
+accent: **cobalt blue `#025BAD` / `#6DABEC`**, `AccentPressed` `#01498E` /
+`#528ECE`, `AccentTint` `#EAF3FE` / `#162434`, `HeroFill*` a deep blue to
+match. `#025BAD` is 6.8:1 on white. It is deliberately deeper and more
+saturated than the `blue` data tone (`#4687DB`) — a ~2:1 luminance step, so
+"the brand blue" and "a blue category" do not read as the same colour — and
+it is not the periwinkle/indigo that this ADR's first review and the indigo
+data tone both rule out. `make icon` re-run so the home-screen icon follows.
+The full accent lineage is now indigo → petrol → forest → plum → blue; the
+lesson recorded here is that this choice is the owner's to make by eye on the
+device, not one to litigate in advance.
