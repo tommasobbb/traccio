@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1B5E3F; } a:hover { color: #124A31; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="background: #F2F5F3; padding: 28px 24px 40px; box-sizing: border-box; width: 100%;">
+
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93;">Sistema · 03</div>
+  <h1 style="margin: 6px 0 4px; font-size: 27px; font-weight: 700; letter-spacing: -0.02em; color: #1C1C1E;">Superfici ed elevazione</h1>
+  <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.5; color: #6E6E73; max-width: 34ch;">
+    Oggi c&rsquo;&egrave; una sola card e una sola ombra, ovunque. Tre livelli invece,
+    e un vero modello di raggruppamento al posto delle righe che galleggiano.
+  </p>
+
+  <!-- ELEVATION LADDER -->
+  <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 28px;">
+
+    <div style="background: #FFFFFF; border-radius: 16px; border: 1px solid rgba(60,60,67,0.10); padding: 16px 18px;">
+      <div style="font-size: 12px; font-weight: 700; color: #1C1C1E;">Livello 0 &mdash; a filo</div>
+      <div style="font-size: 12px; color: #8E8E93; margin-top: 2px;">Solo bordo hairline. Righe di lista, gruppi interni. Nessuna ombra.</div>
+    </div>
+
+    <div style="background: #FFFFFF; border-radius: 18px; border: 1px solid rgba(60,60,67,0.08); padding: 16px 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 20px -14px rgba(0,0,0,0.14);">
+      <div style="font-size: 12px; font-weight: 700; color: #1C1C1E;">Livello 1 &mdash; a riposo</div>
+      <div style="font-size: 12px; color: #8E8E93; margin-top: 2px;">La card standard. Ombra appena percettibile, il bordo fa il lavoro.</div>
+    </div>
+
+    <div style="background: #FFFFFF; border-radius: 20px; border: 1px solid rgba(60,60,67,0.06); padding: 16px 18px; box-shadow: 0 2px 6px rgba(0,0,0,0.05), 0 20px 40px -20px rgba(0,0,0,0.24);">
+      <div style="font-size: 12px; font-weight: 700; color: #1C1C1E;">Livello 2 &mdash; sollevato</div>
+      <div style="font-size: 12px; color: #8E8E93; margin-top: 2px;">Solo per ci&ograve; che galleggia davvero: hero, foglio attivo, menu.</div>
+    </div>
+
+    <div style="border-radius: 20px; padding: 16px 18px; background: linear-gradient(135deg, #1B5E3F, #124A31); box-shadow: 0 2px 6px rgba(0,0,0,0.05), 0 20px 40px -20px rgba(0,0,0,0.30);">
+      <div style="font-size: 12px; font-weight: 700; color: #FFFFFF;">Banda hero</div>
+      <div style="font-size: 12px; color: rgba(255,255,255,0.72); margin-top: 2px;">Forest profondo in chiaro e scuro. L&rsquo;unico gradiente dell&rsquo;app.</div>
+    </div>
+
+  </div>
+
+  <!-- GROUPING: before / after -->
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 12px;">Raggruppare una lista</div>
+
+  <div style="display: flex; gap: 14px; align-items: flex-start;">
+
+    <!-- BEFORE -->
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #AEAEB2; margin-bottom: 8px;">Oggi</div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93; margin: 0 0 6px 2px;">Ieri</div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+          <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.06); border-radius: 16px; padding: 11px 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 14px 28px -18px rgba(0,0,0,0.20); display: flex; align-items: center; gap: 9px;">
+            <div style="width: 26px; height: 26px; border-radius: 8px; background: {{r.tint}}; flex: none;"></div>
+            <span style="font-size: 12px; color: #1C1C1E; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{r.name}}</span>
+            <span class="tnum" style="font-size: 12px; font-weight: 600; color: #1C1C1E;">{{r.amt}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size: 11px; color: #AEAEB2; margin-top: 8px; line-height: 1.4;">Tre rettangoli identici, ognuno con la sua ombra, staccati di 6px. Il tell.</div>
+    </div>
+
+    <!-- AFTER -->
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #338A5E; margin-bottom: 8px;">Proposta</div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93; margin: 0 0 6px 2px;">Ieri</div>
+      <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.08); border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 20px -14px rgba(0,0,0,0.14); overflow: hidden;">
+        <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+          <div style="padding: 11px 13px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid rgba(60,60,67,0.07);">
+            <div style="width: 26px; height: 26px; border-radius: 8px; background: {{r.solid}}; display: flex; align-items: center; justify-content: center; flex: none;">
+              <div style="width: 11px; height: 11px; border-radius: 3px; background: #FFFFFF;"></div>
+            </div>
+            <span style="font-size: 12px; color: #1C1C1E; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{r.name}}</span>
+            <span class="tnum" style="font-size: 12px; font-weight: 700; color: #1C1C1E;">{{r.amt}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-size: 11px; color: #AEAEB2; margin-top: 8px; line-height: 1.4;">Un contenitore, hairline tra le righe, una sola elevazione. Il giorno &egrave; un gruppo.</div>
+    </div>
+
+  </div>
+
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":440,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { name: "Esselunga",  tint: "#E1FAEA", solid: "#009F63", amt: "‒42,10" },
+        { name: "Trenord",    tint: "#EBF3FF", solid: "#4687DB", amt: "‒8,50" },
+        { name: "Netflix",    tint: "#FFEEEC", solid: "#CF5E55", amt: "‒17,99" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

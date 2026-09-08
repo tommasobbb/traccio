@@ -1,0 +1,18 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Sistema" },
+    { "id": "page-2", "name": "Schermate" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Palette dei dati", "page": "page-1", "x": 0, "y": 0, "w": 440, "h": 1620 },
+    { "file": "Typografia.dc.html", "title": "Registro tipografico", "page": "page-1", "x": 560, "y": 0, "w": 440, "h": 1180 },
+    { "file": "Superfici.dc.html", "title": "Superfici ed elevazione", "page": "page-1", "x": 1120, "y": 0, "w": 440, "h": 1260 },
+    { "file": "Panoramica.dc.html", "title": "Panoramica ricomposta", "page": "page-2", "x": 0, "y": 0, "w": 390, "h": 1520 },
+    { "file": "Movimenti.dc.html", "title": "Movimenti ricomposti", "page": "page-2", "x": 520, "y": 0, "w": 390, "h": 1440 }
+  ],
+  "annotations": [
+    { "id": "note-sistema", "page": "page-1", "x": -320, "y": 0, "w": 260, "text": "TONO — il sistema\n\nL'impianto è già ottimo: 57 file passano dai token, zero colori grezzi. Il problema è cosa c'è dentro i token.\n\n1 · Palette dati riarmonizzata: stessi 10 nomi e famiglie, luminosità pari fra le tinte, chroma su. Il colore è il RIEMPIMENTO della tile con glifo bianco — non un tratto sottile su fondo chiaro, che è ciò che incupiva. Nessuna migrazione dati.\n2 · Registro tipografico: sempre SF, ma tracking negativo sulle cifre, salti di scala netti, trattamento valuta/decimali.\n3 · Tre livelli di superficie al posto di una card unica, e un vero modello di gruppo." },
+    { "id": "note-schermate", "page": "page-2", "x": -320, "y": 0, "w": 260, "text": "TONO — applicato\n\nStesse feature, stessa struttura. Cambia la gerarchia.\n\nPanoramica: un solo protagonista (lo speso), il resto subordinato; il nastro categorie sulla banda fa da colpo d'occhio; comparazione in una riga, non una card.\n\nMovimenti: il giorno è un contenitore con una sola elevazione e hairline tra le righe — non tre card che galleggiano a 6px. Colonna importo col nuovo trattamento cifre.\n\nConti non si tocca: è il modello." }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

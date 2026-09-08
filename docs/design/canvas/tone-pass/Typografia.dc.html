@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1B5E3F; } a:hover { color: #124A31; }
+    .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  </style>
+</helmet>
+
+<div style="background: #F2F5F3; padding: 28px 24px 40px; box-sizing: border-box; width: 100%;">
+
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93;">Sistema · 02</div>
+  <h1 style="margin: 6px 0 4px; font-size: 27px; font-weight: 700; letter-spacing: -0.02em; color: #1C1C1E;">Registro tipografico</h1>
+  <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.5; color: #6E6E73; max-width: 34ch;">
+    Sempre SF, zero dipendenze. Ma progettato: tracking negativo sulle cifre grandi,
+    salti di scala netti, un trattamento dedicato per valuta e decimali.
+  </p>
+
+  <!-- THE FIGURE TREATMENT -->
+  <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); border-radius: 20px; padding: 22px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 14px 28px -18px rgba(0,0,0,0.20); margin-bottom: 16px;">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 14px;">La cifra protagonista</div>
+
+    <div style="display: flex; gap: 22px; align-items: flex-start;">
+      <div style="flex: 1;">
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #AEAEB2; margin-bottom: 6px;">Oggi</div>
+        <div class="tnum" style="font-size: 34px; font-weight: 700; color: #1C1C1E;">&euro;1.284,50</div>
+      </div>
+      <div style="flex: 1;">
+        <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #338A5E; margin-bottom: 6px;">Proposta</div>
+        <div class="tnum" style="display: flex; align-items: baseline; color: #1C1C1E; letter-spacing: -0.035em;">
+          <span style="font-size: 17px; font-weight: 600; color: #8E8E93; letter-spacing: 0; margin-right: 3px;">&euro;</span>
+          <span style="font-size: 40px; font-weight: 700;">1.284</span>
+          <span style="font-size: 21px; font-weight: 700; color: #8E8E93; letter-spacing: 0;">,50</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 1px; background: rgba(60,60,67,0.08); margin: 18px 0;"></div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #AEAEB2;">In colonna &mdash; gli euro si leggono per primi</div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span style="font-size: 14px; color: #6E6E73;">{{r.label}}</span>
+          <span class="tnum" style="display: flex; align-items: baseline; letter-spacing: -0.02em;">
+            <span style="font-size: 13px; font-weight: 600; color: {{r.signColor}}; letter-spacing: 0; margin-right: 2px;">{{r.sign}}</span>
+            <span style="font-size: 17px; font-weight: 700; color: {{r.mainColor}};">{{r.main}}</span>
+            <span style="font-size: 12px; font-weight: 600; color: #AEAEB2; letter-spacing: 0;">{{r.cents}}</span>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- THE SCALE -->
+  <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); border-radius: 20px; padding: 22px 20px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 14px 28px -18px rgba(0,0,0,0.20);">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 16px;">La scala &mdash; salti netti, non una rampa molle</div>
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">display 40/700</span>
+        <span style="font-size: 32px; font-weight: 700; letter-spacing: -0.03em; color: #1C1C1E;">Panoramica</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">titolo 22/700</span>
+        <span style="font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: #1C1C1E;">Settembre 2026</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">sezione 15/600</span>
+        <span style="font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: #1C1C1E;">Per categoria</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">corpo 16/400</span>
+        <span style="font-size: 16px; font-weight: 400; color: #1C1C1E;">Supermercato Esselunga</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">caption 13/400</span>
+        <span style="font-size: 13px; font-weight: 400; color: #6E6E73;">Ieri &middot; Carta &middot; 3 movimenti</span>
+      </div>
+      <div style="display: flex; align-items: baseline; gap: 12px;">
+        <span class="tnum" style="font-size: 10px; color: #AEAEB2; width: 74px; flex: none;">eyebrow 11/700</span>
+        <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93;">Speso questo periodo</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { label: "Entrate",   sign: "+", signColor: "#248A3D", main: "3.200", cents: ",00", mainColor: "#248A3D" },
+        { label: "Uscite",    sign: "",  signColor: "#8E8E93", main: "1.284", cents: ",50", mainColor: "#1C1C1E" },
+        { label: "Netto",     sign: "+", signColor: "#1B5E3F", main: "1.915", cents: ",50", mainColor: "#1B5E3F" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

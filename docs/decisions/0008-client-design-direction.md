@@ -409,3 +409,71 @@ reasoning as the petrol revision.
 touched); `xcodebuild` clean, zero warnings. Manual pass still owed — every
 screen light and dark, Dynamic Type up, accent-vs-income in the hero, and the
 home-screen icon (regenerated in the same milestone).
+
+## 2026-09-08 revision: a tone pass — harmonized data palette, filled tiles, elevations, figure treatment
+
+After starting to use the app daily the owner said it still read as a
+"vibe-coded app": the ten data tones were Apple's system colours at full
+chroma with luminosity all over the place (`red` ~48, `amber` ~75), six of
+them in a row in the donut and the category ribbon; one flat `Card` and one
+shadow on every screen; the system type used at its defaults. The reliability
+and accent work of the "Bella e affidabile" milestone had not touched any of
+that.
+
+Scoped as a **tone pass** — three system changes plus a recompose of the two
+daily screens. Judged on a dedicated design canvas ("Traccio Visual Tone", a
+separate artifact from the M3 canvas) before any SwiftUI, same as Fase B.
+Client-only, no backend, no schema change.
+
+**1 — The ten `PaletteColor` light values are rebuilt on one perceptual
+model.** Same ten names, same hue families (a "blue" category still reads
+blue), but luminosity is levelled across the tones and chroma is equalized —
+raised back toward Apple's saturation so they are not timid, but consistent so
+ten tones read as one family instead of ten unrelated system colours. The
+contrast-vs-white spread goes from 2.6× to ~1.3×. Dark values are unchanged.
+No data migration: a stored `PaletteColor` is a name, and every name still
+resolves. e.g. green `#248A3D`→`#009F63`, blue `#2A78D6`→`#4687DB`, red
+`#D70015`→`#CF5E55`.
+
+**2 — `IconTile` anatomy flips to solid fill + white glyph.** The old tile was
+a pale tint background with a thin coloured glyph; at 28–32pt row size a
+2pt coloured stroke on near-white read as muddy no matter the value — this was
+most of what "opaque" meant. The colour now fills the tile and the glyph is
+white `.semibold`, which is where the saturation carries (the Revolut/Monzo
+pattern). `Palette.tint(_:)` had exactly one consumer — this tile — so the ten
+`PaletteColor<Name>Tint` colorsets and the accessor are deleted with it.
+
+**3 — Three elevation levels replace the single card recipe.** `CardElevation`
+`.flush` (border only) / `.resting` (one soft shadow, the new default) /
+`.raised` (the deep two-layer, for what genuinely floats — `HeroCard`, a
+sheet). One card and one shadow on every grouping was part of what read as
+unfinished. In Movimenti this lands as a real grouping model: a day is now
+**one** `.resting` card with hairline dividers between rows, not N rounded
+rows floating 6pt apart each with its own shadow (the single most recognizable
+tell). `TransactionRow` loses its per-row background/border/shadow; a muted
+row gets a faint inset fill instead of the old dashed border.
+
+**4 — `AmountText` gets a designed figure treatment.** The `",dd"` cents are a
+separate run: a receded ink tone for a spend or a non-counted leg so the whole
+units read first (income / positive net keep the tail coloured — a grey tail
+on a green figure reads broken). A large protagonist figure — the dashboard
+hero — also passes a smaller `fractionFont` and slight negative `tracking`.
+Display-only; VoiceOver still reads the whole figure. Italian formatting only
+(the split keys off a trailing "," + two digits and falls back to one run
+otherwise).
+
+Typography stays SF — no bundled face (this ADR's original review and Fase B
+both rejected a display typeface as "generic AI product"). The "designed"
+part is the figure treatment above plus tracking at figure sites, not a new
+family.
+
+**What is deliberately NOT in this revision.** The deeper Panoramica hierarchy
+re-layout — quieter period picker, comparison demoted from a card to a
+caption, a full `Spacing`/`Radius` sweep — is left for the on-device visual
+pass rather than done blind. The `Conti` screen is untouched: the owner calls
+it the cleanest, and it is the model the others follow.
+
+**Verified**: `make test-app` 213 pass at each slice; `xcodebuild` clean. The
+on-device visual pass — light + dark + Dynamic Type, every screen the palette
+and surfaces touch — is owed, same as every prior visual revision here; no
+unit test covers layout or colour.

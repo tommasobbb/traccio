@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1B5E3F; } a:hover { color: #124A31; }
+    .mono { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  </style>
+</helmet>
+
+<div style="background: #F2F5F3; padding: 28px 24px 40px; box-sizing: border-box; width: 100%;">
+
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #8E8E93;">Sistema · 01</div>
+  <h1 style="margin: 6px 0 4px; font-size: 27px; font-weight: 700; letter-spacing: -0.02em; color: #1C1C1E;">Palette dei dati</h1>
+  <p style="margin: 0 0 24px; font-size: 14px; line-height: 1.5; color: #6E6E73; max-width: 34ch;">
+    Stessi dieci nomi, stesse famiglie di tinta &mdash; ricostruiti su un solo modello:
+    una banda di luminosit&agrave; costante e chroma equalizzata. Nessuna migrazione dati.
+    Il chiaro &egrave; stato schiarito rispetto alla prima versione: pi&ugrave; vicino al carattere dello scuro,
+    ma il glifo tiene ~3:1 sul bianco (una tinta piena a 2:1 sbiadisce).
+  </p>
+
+  <!-- BEFORE / AFTER ribbon -->
+  <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px;">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93;">Sei categorie in fila &mdash; oggi</div>
+    <div style="display: flex; height: 14px; border-radius: 999px; overflow: hidden;">
+      <div style="flex: 1; background: #2A78D6;"></div>
+      <div style="flex: 1; background: #AF52DE;"></div>
+      <div style="flex: 1; background: #D70015;"></div>
+      <div style="flex: 1; background: #EB6834;"></div>
+      <div style="flex: 1; background: #EDA100;"></div>
+      <div style="flex: 1; background: #1C93A6;"></div>
+    </div>
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #338A5E;">&mdash; proposta</div>
+    <div style="display: flex; height: 14px; border-radius: 999px; overflow: hidden;">
+      <div style="flex: 1; background: #4687DB;"></div>
+      <div style="flex: 1; background: #A569C2;"></div>
+      <div style="flex: 1; background: #CF5E55;"></div>
+      <div style="flex: 1; background: #C96726;"></div>
+      <div style="flex: 1; background: #B48701;"></div>
+      <div style="flex: 1; background: #0096AE;"></div>
+    </div>
+  </div>
+
+  <!-- LIGHT swatch table -->
+  <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); border-radius: 20px; padding: 18px 18px 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 14px 28px -18px rgba(0,0,0,0.20);">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 4px;">Chiaro &mdash; oggi · riempimento · tint</div>
+    <div style="font-size: 11px; line-height: 1.45; color: #AEAEB2; margin-bottom: 12px;">Il colore &egrave; il <b style="color: #8E8E93;">riempimento</b> della tile, glifo bianco &mdash; non un tratto sottile su fondo chiaro, che &egrave; ci&ograve; che incupiva. Chroma su, luminosit&agrave; pari fra le tinte.</div>
+    <div style="display: flex; flex-direction: column;">
+
+      <sc-for list="{{light}}" as="t" hint-placeholder-count="10">
+        <div style="display: flex; align-items: center; gap: 11px; padding: 9px 0; border-bottom: 1px solid rgba(60,60,67,0.08);">
+          <div style="width: 12px; height: 12px; border-radius: 4px; background: {{t.old}}; flex: none;" title="oggi"></div>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="flex: none;"><path d="M8 5l8 7-8 7" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div style="width: 32px; height: 32px; border-radius: 10px; background: {{t.fill}}; display: flex; align-items: center; justify-content: center; flex: none;">
+            <div style="width: 13px; height: 13px; border-radius: 4px; background: #FFFFFF;"></div>
+          </div>
+          <div style="width: 24px; height: 24px; border-radius: 7px; background: {{t.tint}}; border: 1px solid rgba(60,60,67,0.06); flex: none;"></div>
+          <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+            <span style="font-size: 13px; font-weight: 600; color: #1C1C1E; text-transform: capitalize;">{{t.name}}</span>
+            <span class="mono" style="font-size: 11px; color: #8E8E93;">{{t.fill}} &nbsp;·&nbsp; {{t.tint}}</span>
+          </div>
+        </div>
+      </sc-for>
+
+    </div>
+  </div>
+
+  <!-- DARK swatch table -->
+  <div style="background: #000000; border-radius: 20px; padding: 18px 18px 6px; margin-top: 16px;">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 12px;">Scuro &mdash; luminosit&agrave; alzata, non un flip d'opacit&agrave;</div>
+    <div style="display: flex; flex-direction: column;">
+
+      <sc-for list="{{dark}}" as="t" hint-placeholder-count="10">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <div style="width: 30px; height: 30px; border-radius: 9px; background: {{t.tint}}; display: flex; align-items: center; justify-content: center; flex: none;">
+            <div style="width: 13px; height: 13px; border-radius: 4px; background: {{t.solid}};"></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1;">
+            <span style="font-size: 13px; font-weight: 600; color: #F2F2F7; text-transform: capitalize;">{{t.name}}</span>
+            <span class="mono" style="font-size: 11px; color: #98989D;">{{t.solid}} &nbsp;·&nbsp; {{t.tint}}</span>
+          </div>
+          <span style="font-size: 13px; font-weight: 600; color: {{t.solid}}; flex: none;">Aa</span>
+        </div>
+      </sc-for>
+
+    </div>
+  </div>
+
+  <!-- fixed brand colours -->
+  <div style="margin-top: 24px;">
+    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8E8E93; margin-bottom: 12px;">Non cambiano &mdash; colori di marca</div>
+    <div style="display: flex; gap: 10px;">
+      <div style="flex: 1; border-radius: 14px; overflow: hidden; border: 1px solid rgba(60,60,67,0.10);">
+        <div style="height: 46px; background: linear-gradient(135deg, #1B5E3F, #124A31);"></div>
+        <div style="padding: 8px 10px; background: #FFF;"><div style="font-size: 12px; font-weight: 600; color: #1C1C1E;">Accento</div><div class="mono" style="font-size: 10px; color: #8E8E93;">#1B5E3F</div></div>
+      </div>
+      <div style="flex: 1; border-radius: 14px; overflow: hidden; border: 1px solid rgba(60,60,67,0.10);">
+        <div style="height: 46px; background: #248A3D;"></div>
+        <div style="padding: 8px 10px; background: #FFF;"><div style="font-size: 12px; font-weight: 600; color: #1C1C1E;">Entrate</div><div class="mono" style="font-size: 10px; color: #8E8E93;">#248A3D</div></div>
+      </div>
+      <div style="flex: 1; border-radius: 14px; overflow: hidden; border: 1px solid rgba(60,60,67,0.10);">
+        <div style="height: 46px; background: #F2F5F3;"></div>
+        <div style="padding: 8px 10px; background: #FFF;"><div style="font-size: 12px; font-weight: 600; color: #1C1C1E;">Sfondo</div><div class="mono" style="font-size: 10px; color: #8E8E93;">#F2F5F3</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":440,"height":1620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      light: [
+        { name: "blue",   old: "#2A78D6", fill: "#4687DB", tint: "#EBF3FF" },
+        { name: "indigo", old: "#5856D6", fill: "#7D77D9", tint: "#F1F1FF" },
+        { name: "purple", old: "#AF52DE", fill: "#A569C2", tint: "#F9EEFF" },
+        { name: "pink",   old: "#E87BA4", fill: "#C85C89", tint: "#FFEDF3" },
+        { name: "red",    old: "#D70015", fill: "#CF5E55", tint: "#FFEEEC" },
+        { name: "orange", old: "#EB6834", fill: "#C96726", tint: "#FEEFE7" },
+        { name: "amber",  old: "#EDA100", fill: "#B48701", tint: "#FDF1D9" },
+        { name: "green",  old: "#248A3D", fill: "#009F63", tint: "#E1FAEA" },
+        { name: "teal",   old: "#1C93A6", fill: "#0096AE", tint: "#DDF8FF" },
+        { name: "slate",  old: "#8E8E93", fill: "#7E8792", tint: "#EEF3F9" }
+      ],
+      dark: [
+        { name: "blue",   solid: "#88B5F2", tint: "#1C2C41" },
+        { name: "indigo", solid: "#ABAAF0", tint: "#292841" },
+        { name: "purple", solid: "#CAA0DF", tint: "#33253B" },
+        { name: "pink",   solid: "#E698B5", tint: "#3D222C" },
+        { name: "red",    solid: "#EC9A90", tint: "#3F221F" },
+        { name: "orange", solid: "#E6A078", tint: "#3D2517" },
+        { name: "amber",  solid: "#D0AE65", tint: "#35290F" },
+        { name: "green",  solid: "#79C69A", tint: "#163223" },
+        { name: "teal",   solid: "#5CC3D9", tint: "#0A3139" },
+        { name: "slate",  solid: "#ADB3BB", tint: "#282C31" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

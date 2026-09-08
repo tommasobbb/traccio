@@ -131,48 +131,63 @@ by ADR 0018). **User-chosen and persisted per entity**, not assigned by rank
 or sorted position — a `PaletteColor` survives regardless of how a list
 re-sorts, which is exactly why the dashboard donut/breakdown list above draws
 from this same vocabulary rather than its own rank-based one. Each of the ten
-tones ships as
-two colorsets: a solid (`PaletteColor<Name>`, the icon glyph) and a paler tint
-(`PaletteColor<Name>Tint`, the icon tile's background) — see `IconTile.swift`.
+tones ships as **one** colorset (`PaletteColor<Name>`, the tile fill) with an
+explicit dark variant — see `IconTile.swift`. There was a paler
+`PaletteColor<Name>Tint` counterpart per tone until the 2026-09-08 tone
+revision, when `IconTile` — its only consumer — moved to a solid fill with a
+white glyph; the tint colorsets and `Palette.tint(_:)` went with it.
+
+The **light** values were rebuilt in that revision on one perceptual model:
+luminosity levelled across the tones and chroma equalized (raised toward
+Apple's own saturation, but consistent so ten tones read as one family rather
+than ten unrelated system colours). A thin coloured glyph on a pale tile read
+as muddy at row size — the colour now carries as a full 32pt fill with a white
+`.semibold` glyph, which is where the saturation reads. Dark values are
+unchanged from the 2026-08-25 dark-mode revision.
 
 | Token   | Hex (light) | Hex (dark) | Swift name (`Palette.color(_:)`) | Wire value |
 | ------- | --------- | --------- | ----------------------------------- | ---------- |
-| Blue    | `#2A78D6` | `#409CFF` | `.color(.blue)`   | `blue`   |
-| Indigo  | `#5856D6` | `#7D7AFF` | `.color(.indigo)` | `indigo` |
-| Purple  | `#AF52DE` | `#BF5AF2` | `.color(.purple)` | `purple` |
-| Pink    | `#E87BA4` | `#FF9EC0` | `.color(.pink)`   | `pink`   |
-| Red     | `#D70015` | `#FF453A` | `.color(.red)`    | `red`    |
-| Orange  | `#EB6834` | `#FF8F66` | `.color(.orange)` | `orange` |
-| Amber   | `#EDA100` | `#FFC53D` | `.color(.amber)`  | `amber`  |
-| Green   | `#248A3D` | `#30D158` | `.color(.green)`  | `green`  |
-| Teal    | `#1C93A6` | `#4DC8DB` | `.color(.teal)`   | `teal`   |
-| Slate   | `#8E8E93` | `#6C6C70` | `.color(.slate)`  | `slate`  |
+| Blue    | `#4687DB` | `#409CFF` | `.color(.blue)`   | `blue`   |
+| Indigo  | `#7D77D9` | `#7D7AFF` | `.color(.indigo)` | `indigo` |
+| Purple  | `#A569C2` | `#BF5AF2` | `.color(.purple)` | `purple` |
+| Pink    | `#C85C89` | `#FF9EC0` | `.color(.pink)`   | `pink`   |
+| Red     | `#CF5E55` | `#FF453A` | `.color(.red)`    | `red`    |
+| Orange  | `#C96726` | `#FF8F66` | `.color(.orange)` | `orange` |
+| Amber   | `#B48701` | `#FFC53D` | `.color(.amber)`  | `amber`  |
+| Green   | `#009F63` | `#30D158` | `.color(.green)`  | `green`  |
+| Teal    | `#0096AE` | `#4DC8DB` | `.color(.teal)`   | `teal`   |
+| Slate   | `#7E8792` | `#6C6C70` | `.color(.slate)`  | `slate`  |
 
-`.tint(_:)` mirrors the same ten cases, each colorset's paler counterpart
-(light: base blended ~12% toward white; dark: base blended ~24% toward
-black — a systematic default, not the fully hand-tuned pass the rest of this
-file follows; refining one by eye later is a fair follow-up). `slate` is the
-neutral default for anything the user has not deliberately coloured yet.
+`slate` is the neutral default for anything the user has not deliberately
+coloured yet.
 
 Icons are a fixed SF Symbol map per entity, kept in `App/Sources/DesignSystem/
 IconTile.swift` (`AccountIcon.systemImageName`) rather than on the wire enum —
 the backend has no notion that SF Symbols exist (ADR 0017).
 
-## Separators and shadows
+## Separators and elevation
 
 | Token             | Value                              | Use                        |
 | ------------------ | ----------------------------------- | ---------------------------- |
 | Separator (subtle) | `rgba(60,60,67,.06)`                | Card border                  |
 | Separator (visible)| `rgba(60,60,67,.08)`–`.12`          | Dividers, stat separators    |
-| Card shadow, near   | `0 1px 2px rgba(0,0,0,.04)`         | Card elevation, layer 1      |
-| Card shadow, far    | `0 14px 28px -18px rgba(0,0,0,.22)` | Card elevation, layer 2      |
 
-In Swift, `Palette.cardShadow` is **opaque** `Color.black` and each `Card`
-`.shadow` modifier carries the opacity above (`.04` near, `.22` far). It used
-to carry its own `.opacity(0.16)`, which the modifiers then multiplied again
-— the far shadow rendered at ~1/14 of the value here and cards dissolved into
-the background. If `.22` reads heavy on device (SwiftUI has no negative
-spread to match the `-18px` above), tune the modifier, not the token.
+Three elevation levels since the 2026-09-08 tone revision (`CardElevation` /
+`View.cardElevationShadow(_:)` in `Card.swift`) — one card and one shadow
+everywhere was part of what read as unfinished:
+
+| Level      | Shadow                                                          | Radius | Use                                        |
+| ---------- | -------------------------------------------------------------- | ------ | ------------------------------------------- |
+| `.flush`   | none — leans on the border                                            | `Radius.row` (16)  | A group nested inside another card |
+| `.resting` | one soft layer: `radius 10, y 4, black .05`                           | `Radius.card` (20) | The everyday card — the new default |
+| `.raised`  | two layers: `radius 1, y 1, black .04` + `radius 14, y 8, black .22`  | `Radius.card` (20) | Something that genuinely floats — `HeroCard`, an active sheet |
+
+`Palette.cardShadow` is **opaque** `Color.black`; each level's modifier carries
+the opacity. `.raised` keeps the deep two-layer recipe that used to be on every
+`Card` (it once also carried its own `.opacity(0.16)`, multiplied again by the
+modifiers — the far shadow rendered at ~1/14 strength and cards dissolved into
+the background; that bug is fixed). If a level reads heavy on device, tune the
+modifier in `Card.swift`, not a token.
 
 **Dark mode**: `separator`/`separatorSubtle` stay a low-opacity overlay of
 `Palette.ink` rather than gaining their own asset — `ink` itself is
@@ -208,6 +223,16 @@ a tracked cleanup in `tasks/backlog.md`).
   day-one requirement per ADR 0008, not a follow-up.
 - Weight scale used across the canvas: regular (400) body text, semibold (600)
   labels and secondary figures, bold (700) headlines and primary amounts.
+- **The designed figure treatment** (2026-09-08 tone revision): `AmountText`
+  renders the `",dd"` cents as a separate run. For a spend or a non-counted
+  leg the cents take a receded ink tone (`inkTertiary` / `inkQuaternary`) so
+  the whole units read first; income and positive net keep the tail the
+  figure colour, since a grey tail on a green number reads as broken. A large
+  protagonist figure (the dashboard hero) also passes a smaller `fractionFont`
+  and a slight negative `tracking`. The split is display-only — VoiceOver
+  still gets the whole formatted figure via `accessibilityLabel`. Italian
+  formatting only: the split keys off a trailing `","` + two digits and falls
+  back to one run for any other shape.
 
 ## Text never wraps
 
@@ -303,3 +328,31 @@ generic "AI product" look after months of daily use. `PaletteColor.indigo`
 (the data tone) is unchanged; accent and that tone are now separate colours.
 A per-user accent picker in Settings was considered and parked
 (`tasks/backlog.md`).
+
+**Accent moved from petrol to forest green, 2026-09-07** (ADR 0008's Fase C
+revision, "Bella e affidabile"). The petrol accent lasted a day; the owner
+preferred a deeper, less teal green. `AccentColor` / `AccentPressed` /
+`AccentTint` are now forest `#1B5E3F` / `#58BF95`, pressed `#124A31` /
+`#3E9E78`, tint `#E8F2EC` / `#132A20`; the `HeroFill*` / `OnHero*` band
+colorsets and a barely-green `#F2F5F3` background landed in the same pass,
+along with the `Card` double-multiplied-shadow fix. The Accent and Hero
+tables above carry the current values.
+
+**Data palette harmonized, tiles filled, elevations, figure treatment,
+2026-09-08** (ADR 0008's tone revision — the "darle un tono" pass). Four
+changes, client-only, no backend:
+- The ten `PaletteColor` **light** values rebuilt on one perceptual model
+  (luminosity levelled, chroma equalized). Dark unchanged. See "Appearance
+  tokens".
+- `IconTile` anatomy → **solid fill + white glyph**; the ten
+  `PaletteColor<Name>Tint` colorsets and `Palette.tint(_:)` deleted with it.
+- **Three elevation levels** (`.flush` / `.resting` / `.raised`), `.resting`
+  the new default. A Movimenti day group is now one card with hairline
+  dividers instead of rows floating apart. See "Separators and elevation".
+- **`AmountText` figure treatment** — receded cents, optional smaller
+  fraction font and negative tracking on the hero. See "Typography".
+
+Still owed (`tasks/backlog.md`): the on-device visual pass — light + dark +
+Dynamic Type, every screen — and the deeper Panoramica hierarchy work
+(period-picker weight, comparison demoted to a caption, a `Spacing`/`Radius`
+sweep).
