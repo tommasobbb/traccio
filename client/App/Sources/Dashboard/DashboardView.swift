@@ -232,6 +232,8 @@ struct DashboardView: View {
                 currencyCode: summary.currency,
                 kind: .spending,
                 font: Typography.heroFigure,
+                fractionFont: Typography.statFigure,
+                tracking: -0.6,
                 tone: .onHero
             )
             Text(summary.currency)
