@@ -106,7 +106,9 @@ struct DashboardView: View {
                 .disabled(!model.canGoToNext)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Palette.accent)
+            // The period chevrons are navigation chrome, not a brand touch —
+            // ink, not accent (2026-09-08 tone revision, second pass).
+            .foregroundStyle(Palette.inkSecondary)
 
             Picker("Unità", selection: unitBinding) {
                 Text("Mese").tag(CalendarPeriod.Unit.month)
@@ -311,9 +313,12 @@ struct DashboardView: View {
         return "minus"
     }
 
+    /// Spending up carries `warning` (a genuine flag); spending down or flat
+    /// stays ink — the direction is already in the words ("in meno"), and the
+    /// dashboard keeps blue off its chrome (2026-09-08 tone revision, second
+    /// pass).
     private func comparisonColor(_ c: ComparisonSummaryResponse) -> Color {
         if c.spendingDelta > 0 { return Palette.warning }
-        if c.spendingDelta < 0 { return Palette.accent }
         return Palette.inkTertiary
     }
 
@@ -415,7 +420,7 @@ struct DashboardView: View {
         _ others: [CurrencySummaryResponse], combined: Bool
     ) -> some View {
         Card {
-            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.accent)
+            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.ink)
             HStack(spacing: 10) {
                 ForEach(others, id: \.currency) { summary in
                     VStack(alignment: .leading, spacing: 3) {
@@ -466,7 +471,7 @@ struct DashboardView: View {
 
         if !segments.isEmpty {
             Card {
-                EyebrowLabel(text: "Per categoria", color: Palette.accent)
+                EyebrowLabel(text: "Per categoria", color: Palette.ink)
                 HStack {
                     Spacer(minLength: 0)
                     ZStack {
@@ -543,7 +548,7 @@ struct DashboardView: View {
 
         if !bars.isEmpty {
             Card {
-                EyebrowLabel(text: "Andamento spesa", color: Palette.accent)
+                EyebrowLabel(text: "Andamento spesa", color: Palette.ink)
                 BucketBarsChart(
                     bars: bars,
                     currency: summary.currency,

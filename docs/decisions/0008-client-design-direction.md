@@ -535,3 +535,9 @@ data tone both rule out. `make icon` re-run so the home-screen icon follows.
 The full accent lineage is now indigo → petrol → forest → plum → blue; the
 lesson recorded here is that this choice is the owner's to make by eye on the
 device, not one to litigate in advance.
+
+Brightened once more the same day to `#056DB8` / `#66B2F2` (a PayPal-ish
+premium blue, 5.4:1 on white) at the owner's request. In the same change,
+Panoramica's period chevrons and card eyebrows drop the accent for `ink` —
+the dashboard keeps blue off titles and navigation chrome; the comparison
+delta stays `warning` for a rise in spend and `ink` otherwise.
