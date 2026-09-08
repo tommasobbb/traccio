@@ -6,12 +6,16 @@ import TraccioCore
 /// A separate file from `Palette.swift` (`.claude/rules/swift.md`: "small,
 /// focused files") because this is a mapping *from* a backend-owned
 /// vocabulary, not a fixed design token like the rest of `Palette`. Each of
-/// the ten tones has its own colorset (`PaletteColor<Name>`) plus a paler
-/// `...Tint` counterpart for an icon tile's background — see `IconTile.swift`.
-/// Every colorset carries an explicit dark-appearance variant, same
-/// convention as the rest of `Palette` (ADR 0008's dark-mode revision).
+/// the ten tones ships as one colorset (`PaletteColor<Name>`) with an explicit
+/// dark-appearance variant, same convention as the rest of `Palette` (ADR
+/// 0008's dark-mode revision).
+///
+/// There was a paler `...Tint` counterpart per tone until ADR 0008's
+/// 2026-09-08 tone revision, when `IconTile` — its only consumer — moved to a
+/// solid fill with a white glyph; the tint colorsets went with it.
 extension Palette {
-    /// The solid colour for `token` — an icon glyph, a legend dot, a fill bar.
+    /// The solid colour for `token` — a filled icon tile, a legend dot, a
+    /// donut/ribbon segment, a fill bar.
     static func color(_ token: PaletteColor) -> Color {
         switch token {
         case .blue: Color("PaletteColorBlue", bundle: .main)
@@ -24,23 +28,6 @@ extension Palette {
         case .green: Color("PaletteColorGreen", bundle: .main)
         case .teal: Color("PaletteColorTeal", bundle: .main)
         case .slate: Color("PaletteColorSlate", bundle: .main)
-        }
-    }
-
-    /// The pale background for `token` — an icon tile's fill, so the glyph
-    /// (in `color(_:)`) reads at full strength on top of it.
-    static func tint(_ token: PaletteColor) -> Color {
-        switch token {
-        case .blue: Color("PaletteColorBlueTint", bundle: .main)
-        case .indigo: Color("PaletteColorIndigoTint", bundle: .main)
-        case .purple: Color("PaletteColorPurpleTint", bundle: .main)
-        case .pink: Color("PaletteColorPinkTint", bundle: .main)
-        case .red: Color("PaletteColorRedTint", bundle: .main)
-        case .orange: Color("PaletteColorOrangeTint", bundle: .main)
-        case .amber: Color("PaletteColorAmberTint", bundle: .main)
-        case .green: Color("PaletteColorGreenTint", bundle: .main)
-        case .teal: Color("PaletteColorTealTint", bundle: .main)
-        case .slate: Color("PaletteColorSlateTint", bundle: .main)
         }
     }
 }
