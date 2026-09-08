@@ -409,3 +409,140 @@ reasoning as the petrol revision.
 touched); `xcodebuild` clean, zero warnings. Manual pass still owed — every
 screen light and dark, Dynamic Type up, accent-vs-income in the hero, and the
 home-screen icon (regenerated in the same milestone).
+
+## 2026-09-08 revision: a tone pass — harmonized data palette, filled tiles, elevations, figure treatment
+
+After starting to use the app daily the owner said it still read as a
+"vibe-coded app": the ten data tones were Apple's system colours at full
+chroma with luminosity all over the place (`red` ~48, `amber` ~75), six of
+them in a row in the donut and the category ribbon; one flat `Card` and one
+shadow on every screen; the system type used at its defaults. The reliability
+and accent work of the "Bella e affidabile" milestone had not touched any of
+that.
+
+Scoped as a **tone pass** — three system changes plus a recompose of the two
+daily screens. Judged on a dedicated design canvas ("Traccio Visual Tone", a
+separate artifact from the M3 canvas) before any SwiftUI, same as Fase B.
+Client-only, no backend, no schema change.
+
+**1 — The ten `PaletteColor` light values are rebuilt on one perceptual
+model.** Same ten names, same hue families (a "blue" category still reads
+blue), but luminosity is levelled across the tones and chroma is equalized —
+raised back toward Apple's saturation so they are not timid, but consistent so
+ten tones read as one family instead of ten unrelated system colours. The
+contrast-vs-white spread goes from 2.6× to ~1.3×. Dark values are unchanged.
+No data migration: a stored `PaletteColor` is a name, and every name still
+resolves. e.g. green `#248A3D`→`#009F63`, blue `#2A78D6`→`#4687DB`, red
+`#D70015`→`#CF5E55`.
+
+**2 — `IconTile` anatomy flips to solid fill + white glyph.** The old tile was
+a pale tint background with a thin coloured glyph; at 28–32pt row size a
+2pt coloured stroke on near-white read as muddy no matter the value — this was
+most of what "opaque" meant. The colour now fills the tile and the glyph is
+white `.semibold`, which is where the saturation carries (the Revolut/Monzo
+pattern). `Palette.tint(_:)` had exactly one consumer — this tile — so the ten
+`PaletteColor<Name>Tint` colorsets and the accessor are deleted with it.
+
+**3 — Three elevation levels replace the single card recipe.** `CardElevation`
+`.flush` (border only) / `.resting` (one soft shadow, the new default) /
+`.raised` (the deep two-layer, for what genuinely floats — `HeroCard`, a
+sheet). One card and one shadow on every grouping was part of what read as
+unfinished. In Movimenti this lands as a real grouping model: a day is now
+**one** `.resting` card with hairline dividers between rows, not N rounded
+rows floating 6pt apart each with its own shadow (the single most recognizable
+tell). `TransactionRow` loses its per-row background/border/shadow; a muted
+row gets a faint inset fill instead of the old dashed border.
+
+**4 — `AmountText` gets a designed figure treatment.** The `",dd"` cents are a
+separate run: a receded ink tone for a spend or a non-counted leg so the whole
+units read first (income / positive net keep the tail coloured — a grey tail
+on a green figure reads broken). A large protagonist figure — the dashboard
+hero — also passes a smaller `fractionFont` and slight negative `tracking`.
+Display-only; VoiceOver still reads the whole figure. Italian formatting only
+(the split keys off a trailing "," + two digits and falls back to one run
+otherwise).
+
+Typography stays SF — no bundled face (this ADR's original review and Fase B
+both rejected a display typeface as "generic AI product"). The "designed"
+part is the figure treatment above plus tracking at figure sites, not a new
+family.
+
+**What is deliberately NOT in this revision.** The deeper Panoramica hierarchy
+re-layout — quieter period picker, comparison demoted from a card to a
+caption, a full `Spacing`/`Radius` sweep — is left for the on-device visual
+pass rather than done blind. The `Conti` screen is untouched: the owner calls
+it the cleanest, and it is the model the others follow.
+
+**Verified**: `make test-app` 213 pass at each slice; `xcodebuild` clean. The
+on-device visual pass — light + dark + Dynamic Type, every screen the palette
+and surfaces touch — is owed, same as every prior visual revision here; no
+unit test covers layout or colour.
+
+## 2026-09-08 revision (second pass): deep-plum accent, Panoramica recomposed
+
+The tone revision above shipped to the phone. On device two things stood out:
+the forest-green accent still did not sit right — a green brand next to green
+`income` (both green) reads as a semantic muddle, and it competed with the ten
+data tones — and Panoramica had been left untouched (its hierarchy work was
+deferred). Both addressed here; still client-only, no backend.
+
+**Accent: forest green → deep plum.** `AccentColor` `#1B5E3F` / `#58BF95` →
+**`#582832` / `#D48F96`**, `AccentPressed` → `#461823` / `#B6737B`,
+`AccentTint` → `#FEECEE` / `#2F1D20`. `HeroFill` / `HeroFillDeep` move to a
+deep plum to match the band (`#532730` / `#370D18` light). The owner chose a
+warm-dark plum ("prugna / testa di moro") from a short set of non-green
+directions. `#582832` is AAA on white (11.9:1); the dark accent is a
+luminosity-raised warm rose. It is the fourth accent (indigo → petrol →
+forest → plum) and the first that is deliberately not a green — the point is
+to stop the brand colour from overlapping the `income` semantic and the data
+palette. The one caveat: the dark accent is near the dark `pink` data tone in
+luminance; they differ in hue and never share a surface (chrome vs. a
+category glyph). `scripts/gen-app-icon.swift`'s palette constants are updated
+and `make icon` re-run, so the home-screen icon follows this time.
+
+**Panoramica recomposed for hierarchy.** The hero body was three stacked
+sections (ribbon + legend, Entrate/Netto, and a three-column stat row) plus a
+separate full `ComparisonCard` below — four things competing under one figure.
+Now: the hero body is the ribbon + Entrate/Netto only; the three secondary
+stats (media/giorno, movimenti, categorie) and the comparison collapse into
+`heroFootnote`, a single `inkTertiary` caption line on the background under the
+hero ("↓ 12% in meno di agosto · €175/g · 84 mov. · 12 cat."). The comparison
+keeps `ComparisonCard`'s old two-colour rule (a rise in spend is `warning`, a
+fall is `accent`) but reads as prose. `ComparisonCard.swift` is deleted. The
+period strip drops the `accentTint` block for a quiet flush card — it is
+navigation, not a headline. The donut, trend and per-account cards are
+unchanged (they already carry the `.resting` elevation and their own
+eyebrows).
+
+**Still deferred**: the `Spacing`/`Radius` literal sweep of `DashboardView`
+(tracked since ADR 0017), and the on-device pass of this whole revision —
+light + dark + Dynamic Type — which is owed the same as every visual change
+here.
+
+**Verified**: `make test-app` 213 at each slice; `xcodebuild` clean.
+
+### Accent, again: plum → cobalt blue (2026-09-08)
+
+The deep-plum accent above lasted about half a day on device — the owner did
+not warm to it ("chemmerda pure sto colore"). Fifth and (for now) final
+accent: **cobalt blue `#025BAD` / `#6DABEC`**, `AccentPressed` `#01498E` /
+`#528ECE`, `AccentTint` `#EAF3FE` / `#162434`, `HeroFill*` a deep blue to
+match. `#025BAD` is 6.8:1 on white. It is deliberately deeper and more
+saturated than the `blue` data tone (`#4687DB`) — a ~2:1 luminance step, so
+"the brand blue" and "a blue category" do not read as the same colour — and
+it is not the periwinkle/indigo that this ADR's first review and the indigo
+data tone both rule out. `make icon` re-run so the home-screen icon follows.
+The full accent lineage is now indigo → petrol → forest → plum → blue; the
+lesson recorded here is that this choice is the owner's to make by eye on the
+device, not one to litigate in advance.
+
+Brightened once more the same day to `#056DB8` / `#66B2F2` (a PayPal-ish
+premium blue, 5.4:1 on white) at the owner's request. In the same change,
+Panoramica's period chevrons and card eyebrows drop the accent for `ink` —
+the dashboard keeps blue off titles and navigation chrome; the comparison
+delta stays `warning` for a rise in spend and `ink` otherwise.
+
+Lightened again to a bright azure `#087ED7` / `#6FB4F3` (Apple `systemBlue`
+territory, 4.2:1 on white) — the owner asked for it lighter twice. It is now
+close to the `blue` data tone in lightness; the two stay apart by chroma
+(the accent is much more saturated) and by never sharing a surface.

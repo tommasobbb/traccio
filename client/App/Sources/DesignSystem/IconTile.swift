@@ -1,14 +1,19 @@
 import SwiftUI
 import TraccioCore
 
-/// A rounded, tinted tile with a centered SF Symbol — the shared visual for
-/// "this row's semantic colour and icon" (an account, later a category).
+/// A rounded tile filled with a semantic colour and a centered white SF
+/// Symbol — the shared visual for "this row's colour and icon" (an account, a
+/// category).
 ///
 /// Introduced for account appearance (ADR 0017); reused by categories once
-/// `CategoryIcon` lands. `AccountIcon`'s mapping to a concrete SF Symbol name
-/// lives here rather than on the enum itself — the backend has no notion that
-/// SF Symbols exist (see `AccountIcon`'s own doc comment), so the mapping is a
-/// client-only, presentation-layer fact.
+/// `CategoryIcon` lands. The anatomy is **solid fill + white glyph** since
+/// ADR 0008's 2026-09-08 tone revision — a thin coloured glyph on a pale tint
+/// read as muddy at row size; the colour now carries as a full fill.
+///
+/// `AccountIcon`'s mapping to a concrete SF Symbol name lives here rather than
+/// on the enum itself — the backend has no notion that SF Symbols exist (see
+/// `AccountIcon`'s own doc comment), so the mapping is a client-only,
+/// presentation-layer fact.
 struct IconTile: View {
     let systemImage: String
     let color: PaletteColor
@@ -16,10 +21,10 @@ struct IconTile: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: diameter * 0.42, weight: .medium))
-            .foregroundStyle(Palette.color(color))
+            .font(.system(size: diameter * 0.42, weight: .semibold))
+            .foregroundStyle(.white)
             .frame(width: diameter, height: diameter)
-            .background(Palette.tint(color))
+            .background(Palette.color(color))
             .clipShape(RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
             .accessibilityHidden(true)
     }

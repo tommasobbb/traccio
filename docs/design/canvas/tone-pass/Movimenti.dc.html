@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    a { color: #1B5E3F; } a:hover { color: #124A31; }
+    .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  </style>
+</helmet>
+
+<div style="background: #F2F5F3; width: 100%; box-sizing: border-box; padding: 20px 20px 32px;">
+
+  <div style="display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px;">
+    <h1 style="margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -0.03em; color: #1C1C1E;">Movimenti</h1>
+    <div style="display: flex; gap: 8px;">
+      <div style="width: 32px; height: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); display: flex; align-items: center; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#1B5E3F" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </div>
+      <div style="width: 32px; height: 32px; border-radius: 10px; background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); display: flex; align-items: center; justify-content: center;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M7 12h10M10 18h4" stroke="#6E6E73" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- search -->
+  <div style="display: flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid rgba(60,60,67,0.10); border-radius: 12px; padding: 9px 12px; margin-bottom: 10px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#AEAEB2" stroke-width="2.2"/><path d="M20 20l-3.5-3.5" stroke="#AEAEB2" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <span style="font-size: 14px; color: #AEAEB2;">Cerca un movimento</span>
+  </div>
+
+  <!-- active filter -->
+  <div style="display: flex; gap: 7px; margin-bottom: 18px;">
+    <div style="display: flex; align-items: center; gap: 5px; background: #E8F2EC; border: 1px solid rgba(27,94,63,0.24); border-radius: 999px; padding: 5px 10px;">
+      <span style="font-size: 12px; font-weight: 600; color: #1B5E3F;">Ultimi 3 mesi</span>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#1B5E3F" stroke-width="2.6" stroke-linecap="round"/></svg>
+    </div>
+  </div>
+
+  <!-- transfer suggestion, quieter -->
+  <div style="display: flex; align-items: center; gap: 11px; background: #E8F2EC; border-radius: 14px; padding: 12px 14px; margin-bottom: 22px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 8h11l-3-3M17 16H6l3 3" stroke="#1B5E3F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span style="font-size: 13px; font-weight: 600; color: #1B5E3F; flex: 1;">2 trasferimenti da confermare</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="#1B5E3F" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+
+  <!-- TODAY group -->
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: #8E8E93; margin: 0 0 8px 2px;">Oggi</div>
+  <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.08); border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 20px -14px rgba(0,0,0,0.14); overflow: hidden; margin-bottom: 22px;">
+    <sc-for list="{{today}}" as="t" hint-placeholder-count="3">
+      <div style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(60,60,67,0.07); background: {{t.rowBg}};">
+        <div style="width: 34px; height: 34px; border-radius: 11px; background: {{t.solid}}; display: flex; align-items: center; justify-content: center; flex: none; color: #FFFFFF;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="{{t.icon}}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 15px; font-weight: 600; color: {{t.nameColor}}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{t.name}}</div>
+          <div style="font-size: 12px; color: #8E8E93; margin-top: 1px; display: flex; align-items: center; gap: 6px;">
+            <span style="width: 7px; height: 7px; border-radius: 2px; background: {{t.acct}}; flex: none;"></span>
+            <span>{{t.meta}}</span>
+          </div>
+        </div>
+        <span class="tnum" style="display: flex; align-items: baseline; letter-spacing: -0.02em; flex: none;">
+          <span style="font-size: 13px; font-weight: 600; color: {{t.signColor}}; margin-right: 1px;">{{t.sign}}</span>
+          <span style="font-size: 16px; font-weight: 700; color: {{t.mainColor}};">{{t.main}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: #AEAEB2;">{{t.cents}}</span>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- YESTERDAY group -->
+  <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: #8E8E93; margin: 0 0 8px 2px;">Ieri</div>
+  <div style="background: #FFFFFF; border: 1px solid rgba(60,60,67,0.08); border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 20px -14px rgba(0,0,0,0.14); overflow: hidden;">
+    <sc-for list="{{yest}}" as="t" hint-placeholder-count="3">
+      <div style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(60,60,67,0.07); background: {{t.rowBg}};">
+        <div style="width: 34px; height: 34px; border-radius: 11px; background: {{t.solid}}; display: flex; align-items: center; justify-content: center; flex: none; color: #FFFFFF;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="{{t.icon}}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 15px; font-weight: 600; color: {{t.nameColor}}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{t.name}}</div>
+          <div style="font-size: 12px; color: #8E8E93; margin-top: 1px; display: flex; align-items: center; gap: 6px;">
+            <span style="width: 7px; height: 7px; border-radius: 2px; background: {{t.acct}}; flex: none;"></span>
+            <span>{{t.meta}}</span>
+          </div>
+        </div>
+        <span class="tnum" style="display: flex; align-items: baseline; letter-spacing: -0.02em; flex: none;">
+          <span style="font-size: 13px; font-weight: 600; color: {{t.signColor}}; margin-right: 1px;">{{t.sign}}</span>
+          <span style="font-size: 16px; font-weight: 700; color: {{t.mainColor}};">{{t.main}}</span>
+          <span style="font-size: 12px; font-weight: 600; color: #AEAEB2;">{{t.cents}}</span>
+        </span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="font-size: 11px; color: #AEAEB2; text-align: center; margin-top: 18px; line-height: 1.5;">
+    Il giorno &egrave; un contenitore, non tre card che galleggiano.<br>Un&rsquo;elevazione per gruppo, hairline tra le righe.
+  </div>
+
+</div>
+
+<script data-dc-script data-props='{"$preview":{"width":390,"height":1440}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const cart   = "M4 5h2l2.4 10.5h9L20 8H7M9 20h.01M17 20h.01";
+    const tram   = "M7 4h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2zM5 11h14M9 20l1.5-2M15 20l-1.5-2";
+    const cup    = "M5 8h11v5a5 5 0 01-5 5h-1a5 5 0 01-5-5V8zM16 9h2.5a2 2 0 010 4H16";
+    const tv     = "M4 6h16v10H4zM9 20h6";
+    const arrows = "M7 8h11l-3-3M17 16H6l3 3";
+    const euro   = "M17 7a6 6 0 100 10M5 10h9M5 14h9";
+    return {
+      today: [
+        { name: "Esselunga",   meta: "Carta · 14:20", icon: cart, solid: "#009F63", acct: "#4687DB", sign: "−", signColor: "#8E8E93", main: "42",    cents: ",10", mainColor: "#1C1C1E", nameColor: "#1C1C1E", rowBg: "#FFFFFF" },
+        { name: "Stipendio",   meta: "Conto · 09:00", icon: euro, solid: "#248A3D", acct: "#7E8792", sign: "+",      signColor: "#248A3D", main: "3.200", cents: ",00", mainColor: "#248A3D", nameColor: "#1C1C1E", rowBg: "#FFFFFF" },
+        { name: "Trenord",     meta: "Carta · 08:12", icon: tram, solid: "#4687DB", acct: "#4687DB", sign: "−", signColor: "#8E8E93", main: "8",     cents: ",50", mainColor: "#1C1C1E", nameColor: "#1C1C1E", rowBg: "#FFFFFF" }
+      ],
+      yest: [
+        { name: "Bar Centrale", meta: "Carta · 16:40", icon: cup,    solid: "#C96726", acct: "#4687DB", sign: "−", signColor: "#8E8E93", main: "4",   cents: ",20", mainColor: "#1C1C1E", nameColor: "#1C1C1E", rowBg: "#FFFFFF" },
+        { name: "Netflix",      meta: "Carta · 02:00", icon: tv,     solid: "#CF5E55", acct: "#4687DB", sign: "−", signColor: "#8E8E93", main: "17",  cents: ",99", mainColor: "#1C1C1E", nameColor: "#1C1C1E", rowBg: "#FFFFFF" },
+        { name: "Giroconto → Libretto", meta: "Non conteggiato", icon: arrows, solid: "#C3C9D0", acct: "#7E8792", sign: "", signColor: "#C7C7CC", main: "500", cents: ",00", mainColor: "#AEAEB2", nameColor: "#8E8E93", rowBg: "#FAFAFB" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

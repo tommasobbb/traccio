@@ -106,7 +106,9 @@ struct DashboardView: View {
                 .disabled(!model.canGoToNext)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Palette.accent)
+            // The period chevrons are navigation chrome, not a brand touch —
+            // ink, not accent (2026-09-08 tone revision, second pass).
+            .foregroundStyle(Palette.inkSecondary)
 
             Picker("Unità", selection: unitBinding) {
                 Text("Mese").tag(CalendarPeriod.Unit.month)
@@ -116,11 +118,18 @@ struct DashboardView: View {
             .pickerStyle(.segmented)
             .tint(Palette.accent)
         }
-        // A tinted control strip rather than bare text on the background —
-        // the top of the screen no longer reads as empty white.
-        .padding(Spacing.cardPadding)
-        .background(Palette.accentTint)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        // A quiet flush card, not the old accent-tint block — the period
+        // strip is navigation, not a headline, and the accent no longer wants
+        // that much presence at the top of the screen (2026-09-08 tone
+        // revision, Panoramica recompose).
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Palette.card)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
+                .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
+        )
     }
 
     private var unitBinding: Binding<CalendarPeriod.Unit> {
@@ -164,6 +173,7 @@ struct DashboardView: View {
         // currency up front, the rest listed separately and never summed.
         if let converted = summary.converted {
             heroCard(converted.summary)
+            heroFootnote(converted.summary)
             conversionCaption(converted)
 
             if summary.currencies.count > 1 {
@@ -172,6 +182,7 @@ struct DashboardView: View {
             breakdownCards(converted.summary)
         } else if let primary = summary.currencies.primary() {
             heroCard(primary)
+            heroFootnote(primary)
 
             let others = summary.currencies.filter { $0.currency != primary.currency }
             if !others.isEmpty {
@@ -194,20 +205,16 @@ struct DashboardView: View {
         }
     }
 
-    /// The donut / trend / comparison / account cards, all read from one
+    /// The donut / trend / account cards, all read from one
     /// `CurrencySummaryResponse` — the converted combined summary when FX is
     /// on, else the primary currency. Each renders nothing when it has
-    /// nothing to show (pure-income period, no comparison, no accounts).
+    /// nothing to show (pure-income period, no accounts). The period
+    /// comparison is no longer a card here — it is a chunk of `heroFootnote`
+    /// (2026-09-08 tone revision).
     @ViewBuilder
     private func breakdownCards(_ summary: CurrencySummaryResponse) -> some View {
         categoryBreakdownCard(summary)
         dailySpendingCard(summary)
-        if let comparison = summary.comparison {
-            ComparisonCard(
-                comparison: comparison, currency: summary.currency,
-                previousPeriodLabel: title(for: model.period.previous())
-            )
-        }
         AccountBreakdownCard(
             accounts: summary.byAccount, currency: summary.currency, totalSpending: summary.spending
         )
@@ -232,6 +239,8 @@ struct DashboardView: View {
                 currencyCode: summary.currency,
                 kind: .spending,
                 font: Typography.heroFigure,
+                fractionFont: Typography.statFigure,
+                tracking: -0.6,
                 tone: .onHero
             )
             Text(summary.currency)
@@ -259,24 +268,74 @@ struct DashboardView: View {
                     AmountText(amount: summary.net, currencyCode: summary.currency, kind: .net)
                 }
             }
-
-            Divider().overlay(Palette.separator)
-
-            HStack(spacing: 16) {
-                statColumn(
-                    title: "Media/giorno",
-                    value: summary.averageDailySpending.map {
-                        TraccioCore.formatMoney(amount: $0, currencyCode: summary.currency)
-                    } ?? "—"
-                )
-                Rectangle().fill(Palette.separator).frame(width: 1)
-                statColumn(title: "Movimenti", value: "\(summary.transactionCount)")
-                Rectangle().fill(Palette.separator).frame(width: 1)
-                statColumn(
-                    title: "Categorie", value: "\(summary.byCategory.filter { $0.spending > 0 }.count)"
-                )
-            }
         }
+    }
+
+    /// A single quiet line under the hero card, on the background — the
+    /// period comparison and the three secondary stats (media/giorno,
+    /// movimenti, categorie) that used to be a second and third crammed
+    /// section inside the hero body and a whole `ComparisonCard` of their
+    /// own (2026-09-08 tone revision, Panoramica recompose). The comparison
+    /// chunk keeps `ComparisonCard`'s old two-colour rule: a rise in spend is
+    /// `warning`, a fall is `accent`.
+    @ViewBuilder
+    private func heroFootnote(_ summary: CurrencySummaryResponse) -> some View {
+        let stats = [
+            summary.averageDailySpending.map {
+                "\(TraccioCore.formatMoney(amount: $0, currencyCode: summary.currency))/g"
+            },
+            "\(summary.transactionCount) mov.",
+            "\(summary.byCategory.filter { $0.spending > 0 }.count) cat.",
+        ].compactMap { $0 }
+
+        HStack(spacing: 6) {
+            if let comparison = summary.comparison {
+                Image(systemName: comparisonImage(comparison))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(comparisonColor(comparison))
+                Text(comparisonText(comparison, currency: summary.currency))
+                    .font(Typography.caption)
+                    .foregroundStyle(comparisonColor(comparison))
+                Text("·").font(Typography.caption).foregroundStyle(Palette.inkQuaternary)
+            }
+            Text(stats.joined(separator: " · "))
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func comparisonImage(_ c: ComparisonSummaryResponse) -> String {
+        if c.spendingDelta > 0 { return "arrow.up.right" }
+        if c.spendingDelta < 0 { return "arrow.down.right" }
+        return "minus"
+    }
+
+    /// Spending up carries `warning` (a genuine flag); spending down or flat
+    /// stays ink — the direction is already in the words ("in meno"), and the
+    /// dashboard keeps blue off its chrome (2026-09-08 tone revision, second
+    /// pass).
+    private func comparisonColor(_ c: ComparisonSummaryResponse) -> Color {
+        if c.spendingDelta > 0 { return Palette.warning }
+        return Palette.inkTertiary
+    }
+
+    /// "12% in più di agosto" / "12% in meno di agosto", or the signed
+    /// amount when the previous period spent nothing (no percentage). The
+    /// period label is the same `title(for:)` the picker uses.
+    private func comparisonText(_ c: ComparisonSummaryResponse, currency: String) -> String {
+        let previous = title(for: model.period.previous())
+        guard let pct = c.spendingDeltaPct else {
+            let amount = TraccioCore.formatMoney(
+                amount: c.spendingDelta, currencyCode: currency, explicitSign: true
+            )
+            return "\(amount) su \(previous)"
+        }
+        let percentage = abs(Int((pct * 100).rounded()))
+        let direction = c.spendingDelta > 0 ? "in più" : "in meno"
+        return "\(percentage)% \(direction) di \(previous)"
     }
 
     /// The category-spend ribbon under the hero total (Fase B redesign, the
@@ -353,23 +412,6 @@ struct DashboardView: View {
         }
     }
 
-    /// One column of the hero card's stats row (media/giorno, movimenti,
-    /// categorie) — all values the backend already computed or a plain
-    /// count of already-fetched entries, never a financial derivation.
-    private func statColumn(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
-            Text(value)
-                .font(Typography.compactFigure)
-                .foregroundStyle(Palette.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     /// Per-currency net figures. `combined == false` is the pre-FX card:
     /// currencies *other* than the primary, explicitly not summed.
     /// `combined == true` lists *every* currency and notes that they are
@@ -378,7 +420,7 @@ struct DashboardView: View {
         _ others: [CurrencySummaryResponse], combined: Bool
     ) -> some View {
         Card {
-            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.accent)
+            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.ink)
             HStack(spacing: 10) {
                 ForEach(others, id: \.currency) { summary in
                     VStack(alignment: .leading, spacing: 3) {
@@ -429,7 +471,7 @@ struct DashboardView: View {
 
         if !segments.isEmpty {
             Card {
-                EyebrowLabel(text: "Per categoria", color: Palette.accent)
+                EyebrowLabel(text: "Per categoria", color: Palette.ink)
                 HStack {
                     Spacer(minLength: 0)
                     ZStack {
@@ -506,7 +548,7 @@ struct DashboardView: View {
 
         if !bars.isEmpty {
             Card {
-                EyebrowLabel(text: "Andamento spesa", color: Palette.accent)
+                EyebrowLabel(text: "Andamento spesa", color: Palette.ink)
                 BucketBarsChart(
                     bars: bars,
                     currency: summary.currency,

@@ -101,6 +101,12 @@ struct TransactionRow: View {
         }
     }
 
+    /// The row is a plain padded line — no card of its own. Its day group
+    /// (`TransactionsView.dayGroup`) is the one container, one elevation, with
+    /// hairline dividers between rows (ADR 0008's 2026-09-08 tone revision:
+    /// rows floating apart, each with its own shadow, was the vibe-coded
+    /// tell). A muted row (pending, or a zero-`effectiveAmount` leg) gets a
+    /// faint inset fill instead of the old dashed border.
     private var rowContent: some View {
         HStack(spacing: 12) {
             leadingTile
@@ -114,16 +120,10 @@ struct TransactionRow: View {
             Spacer(minLength: 8)
             amountColumn
         }
-        .padding(14)
-        .background(isMuted ? Palette.neutralFill : Palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                .strokeBorder(
-                    isMuted ? Palette.separator : Palette.separatorSubtle,
-                    style: isMuted ? StrokeStyle(lineWidth: 1, dash: [4, 3]) : StrokeStyle(lineWidth: 1)
-                )
-        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(isMuted ? Palette.neutralFill.opacity(0.6) : Palette.card)
+        .contentShape(Rectangle())
     }
 
     /// The 28pt leading element: normally the category `IconTile`, but a

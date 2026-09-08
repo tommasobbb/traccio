@@ -140,8 +140,8 @@ final class DashboardViewModel {
     /// can reload with different data.
     ///
     /// Requests a comparison against `period.previous()` unconditionally —
-    /// `ComparisonCard` always has something to show — and sends
-    /// `period.granularity` and the device's own time zone.
+    /// the hero footnote's comparison chunk always has something to show —
+    /// and sends `period.granularity` and the device's own time zone.
     func reloadSummary() async {
         state = .loading
         selectedCategoryID = .none

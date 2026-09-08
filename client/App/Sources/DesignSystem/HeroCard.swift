@@ -41,7 +41,6 @@ struct HeroCard<Header: View, Content: View>: View {
             RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                 .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
         )
-        .shadow(color: Palette.cardShadow.opacity(0.04), radius: 1, x: 0, y: 1)
-        .shadow(color: Palette.cardShadow.opacity(0.22), radius: 14, x: 0, y: 8)
+        .cardElevationShadow(.raised)
     }
 }

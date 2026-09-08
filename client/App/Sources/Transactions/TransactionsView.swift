@@ -506,31 +506,40 @@ struct TransactionsView: View {
         }
     }
 
+    /// A day's rows in one card — one border, one resting shadow, hairline
+    /// dividers between rows (ADR 0008's 2026-09-08 tone revision). The rows
+    /// carry their own padding, so the card's `contentPadding` is `0` and its
+    /// rounded corners clip the row fills.
     private func dayGroup(_ group: TransactionDayGroup, isLastGroup: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             EyebrowLabel(text: title(for: group.day))
-            VStack(spacing: 6) {
-                ForEach(group.transactions) { transaction in
-                    TransactionRow(
-                        transaction: transaction,
-                        categories: model.categories,
-                        categoryNames: model.categoryNames,
-                        categoriesByID: model.categoriesByID,
-                        advancesByTransactionID: model.advancesByTransactionID,
-                        transfersByTransactionID: model.transfersByTransactionID,
-                        accountsByID: model.accountsByID,
-                        events: model.events,
-                        client: model.client,
-                        onUpdate: { model.replace($0) },
-                        onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
-                        onDashboardStale: { freshness.markStale([.dashboard]) },
-                        onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
-                        onDelete: { model.remove(id: $0) },
-                        selection: rowSelection(for: transaction)
-                    )
-                    .onAppear {
-                        if isLastGroup, transaction.id == group.transactions.last?.id {
-                            Task { await model.loadMore() }
+            Card(elevation: .resting, contentPadding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.transactions.enumerated()), id: \.element.id) { index, transaction in
+                        if index > 0 {
+                            Divider().overlay(Palette.separatorSubtle).padding(.leading, 16)
+                        }
+                        TransactionRow(
+                            transaction: transaction,
+                            categories: model.categories,
+                            categoryNames: model.categoryNames,
+                            categoriesByID: model.categoriesByID,
+                            advancesByTransactionID: model.advancesByTransactionID,
+                            transfersByTransactionID: model.transfersByTransactionID,
+                            accountsByID: model.accountsByID,
+                            events: model.events,
+                            client: model.client,
+                            onUpdate: { model.replace($0) },
+                            onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
+                            onDashboardStale: { freshness.markStale([.dashboard]) },
+                            onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
+                            onDelete: { model.remove(id: $0) },
+                            selection: rowSelection(for: transaction)
+                        )
+                        .onAppear {
+                            if isLastGroup, transaction.id == group.transactions.last?.id {
+                                Task { await model.loadMore() }
+                            }
                         }
                     }
                 }
