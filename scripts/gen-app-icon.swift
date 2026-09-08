@@ -29,10 +29,10 @@ import UniformTypeIdentifiers
 
 /// Hero-band gradient stops (`Palette.heroFill` / `Palette.heroFillDeep`,
 /// light values) — the icon background.
-let heroFill = (r: 0x1B / 255.0, g: 0x5E / 255.0, b: 0x3F / 255.0)
-let heroFillDeep = (r: 0x12 / 255.0, g: 0x4A / 255.0, b: 0x31 / 255.0)
+let heroFill = (r: 0x53 / 255.0, g: 0x27 / 255.0, b: 0x30 / 255.0)
+let heroFillDeep = (r: 0x37 / 255.0, g: 0x0D / 255.0, b: 0x18 / 255.0)
 /// `Palette.accent` (light) — the launch mark's bar colour.
-let accent = (r: 0x1B / 255.0, g: 0x5E / 255.0, b: 0x3F / 255.0)
+let accent = (r: 0x58 / 255.0, g: 0x28 / 255.0, b: 0x32 / 255.0)
 
 let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 
