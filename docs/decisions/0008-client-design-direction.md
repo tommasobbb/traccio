@@ -541,3 +541,8 @@ premium blue, 5.4:1 on white) at the owner's request. In the same change,
 Panoramica's period chevrons and card eyebrows drop the accent for `ink` —
 the dashboard keeps blue off titles and navigation chrome; the comparison
 delta stays `warning` for a rise in spend and `ink` otherwise.
+
+Lightened again to a bright azure `#087ED7` / `#6FB4F3` (Apple `systemBlue`
+territory, 4.2:1 on white) — the owner asked for it lighter twice. It is now
+close to the `blue` data tone in lightness; the two stay apart by chroma
+(the accent is much more saturated) and by never sharing a surface.

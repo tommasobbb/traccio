@@ -32,8 +32,8 @@ it would fail contrast. The band stays a deep blue in both appearances.
 
 | Token           | Hex (light) | Hex (dark) | Swift name              | Use                          |
 | ---------------- | --------- | --------- | ------------------------ | ----------------------------- |
-| Hero fill        | `#004F89` | `#013C6A` | `Palette.heroFill`       | Hero band — top gradient stop  |
-| Hero fill deep   | `#013258` | `#002443` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
+| Hero fill        | `#024981` | `#003967` | `Palette.heroFill`       | Hero band — top gradient stop  |
+| Hero fill deep   | `#002C52` | `#002241` | `Palette.heroFillDeep`   | Hero band — bottom gradient stop |
 | On hero          | `#FFFFFF` | `#FFFFFF` | `Palette.onHero`         | Text/figures on the band       |
 | On hero (2nd)    | white 72% | white 72% | `Palette.onHeroSecondary`| Eyebrow/caption on the band    |
 
@@ -50,11 +50,11 @@ it would fail contrast. The band stays a deep blue in both appearances.
 
 | Token          | Hex (light) | Hex (dark) | Swift name           | Use                                |
 | -------------- | --------- | --------- | ---------------------- | ------------------------------------ |
-| Accent         | `#056DB8` | `#66B2F2` | `Palette.accent`       | Bright cobalt blue — links, primary buttons, positive net, active tab |
-| Accent pressed | `#015998` | `#4A95D4` | `Palette.accentPressed`| Pressed/hover state                  |
-| Accent tint    | `#E8F3FF` | `#142434` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, period strip |
+| Accent         | `#087ED7` | `#6FB4F3` | `Palette.accent`       | Bright azure blue — links, primary buttons, positive net, active tab |
+| Accent pressed | `#0368B4` | `#5398D5` | `Palette.accentPressed`| Pressed/hover state                  |
+| Accent tint    | `#EAF4FF` | `#132435` | `Palette.accentTint`   | Pale brand wash — active filter token, card eyebrow, period strip |
 
-`#056DB8` is a bright cobalt blue — 5.4:1 on white, tuned toward a PayPal-ish premium blue. The dark accent is a
+`#087ED7` is a bright azure — 4.2:1 on white, in Apple `systemBlue` territory (the owner asked for it lighter twice). It sits close to the `blue` data tone (`#4687DB`) in lightness now; they stay apart by chroma (the accent is markedly more saturated) and never share a surface. The dark accent is a
 luminosity-raised sky blue. Deliberately distinct from the `blue` data tone
 (`#4687DB`, a lighter mid-azure): the accent is deeper and more saturated, a
 ~2:1 luminance step between them. Not periwinkle/indigo — that hue was the
