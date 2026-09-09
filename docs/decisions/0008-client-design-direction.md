@@ -605,3 +605,43 @@ white bars. The launch mark keeps `launchBar` = `Palette.accent` `#087ED7`
 clean for macOS and iOS. The on-device pass — light + dark + Dynamic Type,
 now including the band-less Panoramica and the raised dark background — is
 owed the same as every visual change in this ADR.
+
+## 2026-09-09 revision: Eventi and Anticipi recomposed to the shipped idiom
+
+The Eventi and Anticipi screens (ADR 0026 / the 2026-08-24 Eventi slice) were
+built before the "dose, non tinta" tone work and never revisited — a
+`ProgressView` on first load, `EventRow` with no leading tile, N rounded rows
+each with its own divider inside one flat `Card`. This revision brings both to
+the idiom the tone revision established for Movimenti, alongside the Eventi
+feature work in ADR 0027 / ADR 0028.
+
+- **`EventsView`**: `ListSkeleton` replaces the spinner; events render as one
+  `.resting` `Card(contentPadding: 0)` per section (active, then a separate
+  "Chiusi" section) with hairline dividers between self-padded rows and
+  `.pressableRow`; the "Nuovo evento" CTA is its own element below, not a row
+  inside the list card. `EventRow` leads with an `EventTile` (ADR 0027).
+- **`EventDetailView`**: the header is now the screen's **one** `.raised`
+  card — `EventTile` + name + status badge, the net total at
+  `Typography.heroFigure`, and a single `inkTertiary` footnote line
+  ("N movimenti · 3–17 mag · 4 categorie"), the same treatment "dose, non
+  tinta" gave Panoramica. `EventSections`' old plain "totale netto" card is
+  removed (it duplicated the header). Below: the category breakdown card
+  (ADR 0028, reusing `DonutChart` / `CategoryBreakdownList` unchanged), the
+  members list, the "Movimenti suggeriti" card (ADR 0028), then the actions.
+- **`AdvancesView`**: `ListSkeleton` replaces the spinner; the advance rows
+  and the now-navigable "Chi ti deve" rows (ADR 0026 follow-up) take
+  `.pressableRow`. The three summary cards keep their structure — they are
+  one `Card` per grouping already, not the "N floating rows" tell.
+
+No token changed. The accent-dosage rule is respected throughout: no accent on
+the Eventi/Anticipi headings or chrome, the event's identity colour is the
+data's own `PaletteColor` (an `EventTile`, not the brand accent), and each
+screen has at most one filled CTA.
+
+**Canvas**: `docs/design/canvas/` still has no Eventi or Anticipi artboard —
+tracked in `tasks/backlog.md`. As with every screen since Fase C, these were
+built from `docs/design/tokens.md` directly and are owed the on-device
+light/dark/Dynamic-Type pass, not a mockup.
+
+**Verified**: `make test-core` 402, `make test-app` 230, `xcodebuild` clean
+for macOS and the iOS Simulator, `make lint` clean.

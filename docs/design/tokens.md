@@ -199,6 +199,17 @@ Icons are a fixed SF Symbol map per entity, kept in `App/Sources/DesignSystem/
 IconTile.swift` (`AccountIcon.systemImageName`) rather than on the wire enum —
 the backend has no notion that SF Symbols exist (ADR 0017).
 
+**`EventTile`** (ADR 0027) is the exception to "solid fill + white glyph". An
+event's identity is a free-text `emoji` plus an optional `PaletteColor`, so
+the tile has two anatomies: with an emoji, the glyph sits on a **pale wash**
+of the colour — `Palette.color(...)` at `0.16`, a `0.32` hairline border —
+because an emoji is its own colour and would be unreadable on a saturated
+fill (the tone revision's "muddy" finding was about a *thin coloured stroke*,
+which this is not); with no emoji, it falls back to a plain `IconTile`
+(`calendar`, solid fill, white glyph). The opacity rides on an already
+theme-dynamic colour, so it resolves in both appearances without a separate
+dark value — the `Palette.separator` technique.
+
 ## Separators and elevation
 
 | Token             | Value                              | Use                        |

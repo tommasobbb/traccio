@@ -113,3 +113,28 @@ filters the visible rows.
 - **FX-converted grand total** reusing ADR 0021's resolver. Deferred: no
   multi-currency-per-person case exists yet, and ADR 0021 itself is opt-in
   and dashboard-only.
+
+## 2026-09-09 note: `person_key` on the wire, rows self-sufficient
+
+Two follow-ups this ADR filed are done. `AdvanceResponse` now carries the
+transaction's `description` / `display_description` / `booked_at` (populated
+from the transaction the router already holds — no extra query), so the
+Anticipi list no longer fans out one `GET /transactions/{id}` per row; a row
+navigates through a `TransactionDetailLoader` that resolves the transaction
+only when opened. `ParticipantResponse` and `PersonSummaryResponse` expose
+the server-computed `person_key` (`domain/advances.person_key`), so the
+client — the new `PersonDetailView` drill-down — ties a participant to its
+roll-up row by an exact string compare rather than re-implementing the
+normalization. The name-key grouping stays a §2 backend concern; the client
+only matches on the key it is handed.
+
+## 2026-09-09 note: the tracking-start floor applies
+
+`GET /advances` originally computed `summary` over every advance regardless of
+the user's `tracking_start_date` (ADR 0024). It now excludes an advance whose
+transaction falls before that floor — from `advances` and from `summary`
+alike — so the receivables roll-up counts the same movements the dashboard
+does. Implementation and rationale are in ADR 0024's 2026-09-09 revision. §6
+still holds: `status` narrows only the visible rows; the floor narrows both,
+because a movement the user cannot see anywhere else should not silently prop
+up a "da ricevere" figure.

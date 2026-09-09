@@ -118,3 +118,30 @@ needs the same hand-written `encode(to:)` to emit an explicit `null`.
   JSON column) is worth it, and `/settings` grows a real shape.
 - Per-account start dates are wanted (keep account A from June but account B
   from March) — this decision deliberately does one global floor.
+
+## 2026-09-09 revision: the floor reaches the Anticipi list and its summary
+
+ADR 0026's cross-advance receivables summary (`GET /advances`) shipped without
+the floor — "chi ti deve" and "da ricevere" counted **every** advance the user
+had ever created, including ones whose transaction predates the tracking start
+and is therefore invisible on the dashboard and in Movimenti. That is exactly
+the "misleading total from partial history" this ADR exists to prevent, so the
+floor now applies there too.
+
+- **Same "list-and-dashboard filter" category as §3**, not a new kind of
+  thing. `GET /advances` gains `tracking_start: Depends(current_tracking_start)`
+  — the fourth consumer of that single dependency, alongside `GET /transactions`,
+  `GET /dashboard/summary`, and transfer detection.
+- **Applied in Python, not SQL.** `list_advances` stays a plain user-scoped
+  select (the dashboard also calls it, unfloored, as a by-id lookup map —
+  see ADR 0026). The router loop in `api/routers/advances.py` already loads
+  each advance's transaction to derive its state; a new pure predicate
+  `domain/tracking.is_within_tracking(transaction, tracking_start)` — the
+  single-transaction counterpart of `_tracking_floor`'s SQL bound
+  (`coalesce(booked_at, value_date) >= UTC midnight`, a dateless row excluded)
+  — gates the advance before it reaches `advance_states` /
+  `participant_states_by_advance`, so the returned rows and the `summary`
+  move together and cannot disagree.
+- **§5 still holds.** `GET /advances/{id}` does not filter — an explicit link
+  to an old movement keeps working, and the floored-out advance stays
+  reachable by id. Raising or clearing the date is still fully reversible.

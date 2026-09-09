@@ -363,8 +363,8 @@ has not connected. The outgoing leg has no counterpart and stays
 A user-defined grouping of transactions that belong to the same real-world
 occasion: a trip, a renovation, a wedding.
 
-Fields: `name`, optional `start_date` and `end_date`, `status`
-(`active` | `closed`).
+Fields: `name`, optional `emoji` and `color` (visual identity, ADR 0027),
+optional `start_date` and `end_date`, `status` (`active` | `closed`).
 
 A transaction belongs to at most one `Event`. Events do not replace
 categories — they cut across them. "Turkey 2026" contains transport, food,
@@ -407,6 +407,28 @@ members, assigns/unassigns transactions, and closes/reopens or deletes the
 event. `start_date`/`end_date` introduced a new client-side type,
 `TraccioCore.CalendarDate` — the first date-only (`yyyy-MM-dd`) field in the
 API, deliberately not folded into the shared timestamp decoder.
+
+**Implementation note** (2026-09-09, ADR 0028): two reads the event backend
+never had. `GET /events/{id}/summary` returns the members' spending broken
+down by category — it reuses `domain/dashboard.py::summarize` over the member
+list (an event's members are just a transaction sequence), so `by_category`
+is the dashboard's own two-level shape and the client renders it with the
+same donut/breakdown-list. `event_total` is untouched — the breakdown is a
+separate, richer read, not an extension of the net figure.
+`GET /events/{id}/suggestions` returns un-grouped transactions dated within
+`[start_date, end_date]` (empty without both bounds) — it consumes the date
+range that was until now a stored-but-unused hint. It only suggests; every
+assignment is still an explicit `POST`.
+
+**Implementation note** (2026-09-09, ADR 0027): an event gained an optional
+`emoji` (free-text, validated as a single emoji by `domain/emoji.py` at the
+API edge — a deliberate exception to ADR 0017's "closed vocabulary only",
+since an emoji needs no dark-mode asset) and an optional `color`
+(`PaletteColor`, the same shared vocabulary as accounts/categories). A single
+`POST /events/{id}` full-replaces the editable fields (`name`, `emoji`,
+`color`, dates); `status` keeps its own close/reopen endpoints. Client:
+`EventTile` renders the emoji on a pale wash of the colour, or a `calendar`
+`IconTile` when no emoji is set.
 
 **Implementation note** (2026-08-24): `TransactionResponse.event_id` now
 exposes membership on the transaction read model, and `GET /transactions`
