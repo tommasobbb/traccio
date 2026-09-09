@@ -22,11 +22,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from traccio.api.deps import current_user_id
+from traccio.api.schemas.dashboard import CategoryDisplay
 from traccio.api.schemas.events import (
     AssignTransactionRequest,
     CreateEventRequest,
     EventResponse,
     EventsResponse,
+    EventSummaryResponse,
+    UpdateEventRequest,
 )
 from traccio.api.schemas.transactions import TransactionResponse, TransactionsResponse
 from traccio.core.logging import get_logger
@@ -38,13 +41,17 @@ from traccio.db.repositories import (
     get_transaction,
     get_transaction_event_id,
     list_advances,
+    list_categories,
+    list_event_candidates,
     list_event_members,
     list_events,
     set_event_status,
     sum_reimbursements_by_advance,
     unassign_transaction_from_event,
+    update_event,
 )
 from traccio.db.session import get_session
+from traccio.domain.dashboard import summarize
 from traccio.domain.enums import EventStatus
 from traccio.domain.events import event_total
 from traccio.domain.models import Event, Transaction
@@ -126,6 +133,8 @@ def create_event_endpoint(
     event = Event(
         user_id=user_id,
         name=body.name,
+        emoji=body.emoji,
+        color=body.color,
         start_date=body.start_date,
         end_date=body.end_date,
     )
@@ -133,6 +142,53 @@ def create_event_endpoint(
     session.commit()
     logger.info("events.create", event_id=str(created.id))
     return _event_response(session, user_id=user_id, event=created)
+
+
+@router.post("/events/{event_id}", response_model=EventResponse)
+def update_event_endpoint(
+    event_id: UUID,
+    body: UpdateEventRequest,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> EventResponse:
+    """Edit an event's name, emoji, colour and date range (ADR 0027).
+
+    A full replace of the fields the client's single event editor owns; the
+    event's ``status`` and membership are untouched. ``emoji`` is validated as
+    a single emoji by the request schema (a ``422`` otherwise). Scoped to the
+    current user; a ``404`` if the event is unknown or not the caller's.
+
+    Parameters
+    ----------
+    event_id : UUID
+        The event to edit.
+    body : UpdateEventRequest
+        The new name, emoji, colour and dates (each ``null`` clears).
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the event belongs to.
+
+    Returns
+    -------
+    EventResponse
+        The updated event, with its derived total and member count.
+    """
+    updated = update_event(
+        session,
+        user_id=user_id,
+        event_id=event_id,
+        name=body.name,
+        emoji=body.emoji,
+        color=body.color,
+        start_date=body.start_date,
+        end_date=body.end_date,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="unknown event")
+    session.commit()
+    logger.info("events.update", event_id=str(updated.id))
+    return _event_response(session, user_id=user_id, event=updated)
 
 
 @router.get("/events", response_model=EventsResponse)
@@ -231,6 +287,100 @@ def event_transactions(
     ]
     logger.info("events.transactions.list", event_id=str(event_id), count=len(responses))
     return TransactionsResponse(transactions=responses)
+
+
+@router.get("/events/{event_id}/suggestions", response_model=TransactionsResponse)
+def event_suggestions(
+    event_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> TransactionsResponse:
+    """Suggest un-grouped transactions dated within the event's range.
+
+    The date range is a *hint*, never a rule (``docs/domain.md`` §Event), so
+    this only *suggests* — the client still assigns each one with an explicit
+    ``POST``, the same posture as transfer and reimbursement matching. Returns
+    un-grouped (``event_id IS NULL``) transactions whose
+    ``coalesce(booked_at, value_date)`` falls within ``[start_date, end_date]``,
+    most recent first. An event without **both** bounds set yields an empty
+    list — there is no window to suggest from. Scoped to the current user; a
+    ``404`` if the event is unknown or not the caller's.
+
+    Parameters
+    ----------
+    event_id : UUID
+        The event whose date range drives the suggestion.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the event belongs to.
+
+    Returns
+    -------
+    TransactionsResponse
+        Candidate transactions (empty when the event has no full date range).
+    """
+    event = _load_event(session, user_id=user_id, event_id=event_id)
+    if event.start_date is None or event.end_date is None:
+        return TransactionsResponse(transactions=[])
+    candidates = list_event_candidates(
+        session, user_id=user_id, start=event.start_date, end=event.end_date
+    )
+    responses = [TransactionResponse.from_domain(transaction) for transaction in candidates]
+    logger.info("events.suggestions", event_id=str(event_id), count=len(responses))
+    return TransactionsResponse(transactions=responses)
+
+
+@router.get("/events/{event_id}/summary", response_model=EventSummaryResponse)
+def event_summary(
+    event_id: UUID,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> EventSummaryResponse:
+    """Return an event's spending broken down by category (ADR 0028).
+
+    Reuses the dashboard's :func:`~traccio.domain.dashboard.summarize` over the
+    event's members — the same two-level ``by_category`` (ADR 0018) the
+    dashboard returns for a period, so the client renders it with the same
+    donut and breakdown list. An event is single-currency by construction, so
+    there is exactly one currency summary; an empty event yields zeros and
+    ``currency: null``. Scoped to the current user; a ``404`` if the event is
+    unknown or not the caller's.
+
+    Parameters
+    ----------
+    event_id : UUID
+        The event whose breakdown to compute.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the event belongs to.
+
+    Returns
+    -------
+    EventSummaryResponse
+        The members' spending/income and their per-category partition.
+    """
+    _load_event(session, user_id=user_id, event_id=event_id)
+    members = list_event_members(session, user_id=user_id, event_id=event_id)
+    shares = _advance_spending_shares(session, user_id=user_id, transactions=members)
+
+    categories = list_categories(session, user_id)
+    parents = {category.id: category.parent_id for category in categories}
+    display = {
+        category.id: CategoryDisplay(
+            name=category.name, color=category.color, icon=category.icon
+        )
+        for category in categories
+    }
+
+    summaries = summarize(members, advance_shares=shares, parents=parents)
+    # One currency by construction (a mixed-currency member is refused on
+    # assign); an empty event produces no summary at all.
+    summary = summaries[0] if summaries else None
+    category_count = 0 if summary is None else len(summary.by_category)
+    logger.info("events.summary", event_id=str(event_id), categories=category_count)
+    return EventSummaryResponse.from_currency_summary(summary, display=display)
 
 
 @router.delete("/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT)

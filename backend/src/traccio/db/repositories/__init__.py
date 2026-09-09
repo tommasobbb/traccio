@@ -65,10 +65,12 @@ from traccio.db.repositories.events import (
     event_ids_for_transactions,
     get_event,
     get_transaction_event_id,
+    list_event_candidates,
     list_event_members,
     list_events,
     set_event_status,
     unassign_transaction_from_event,
+    update_event,
 )
 from traccio.db.repositories.fx import (
     get_fx_rates,
@@ -174,6 +176,7 @@ __all__ = [
     "list_child_category_ids",
     "list_connections",
     "list_connections_without_logo",
+    "list_event_candidates",
     "list_event_members",
     "list_events",
     "list_reimbursements",
@@ -207,6 +210,7 @@ __all__ = [
     "transaction_is_linked",
     "transfer_exists_for_transaction",
     "unassign_transaction_from_event",
+    "update_event",
     "update_manual_transaction",
     "upsert_account",
     "upsert_fx_rates",

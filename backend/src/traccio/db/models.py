@@ -615,6 +615,12 @@ class EventRow(Base):
         Owning user (foreign key, indexed).
     name : str
         Human-readable name for the occasion.
+    emoji : str or None
+        Optional single emoji for the event's tile (validated at the API
+        edge, ADR 0027). ``VARCHAR(16)`` — comfortably wide for a joined
+        emoji sequence, never a caption.
+    color : PaletteColor or None
+        Optional colour token for the tile, shared vocabulary (ADR 0017).
     start_date : date or None
         Optional first day of the occasion (a hint, not a membership rule).
     end_date : date or None
@@ -630,6 +636,8 @@ class EventRow(Base):
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
+    emoji: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    color: Mapped[PaletteColor | None] = mapped_column(_token_column(PaletteColor), nullable=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[EventStatus] = mapped_column(_enum_column(EventStatus))

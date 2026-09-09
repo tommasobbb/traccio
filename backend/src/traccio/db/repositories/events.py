@@ -1,14 +1,11 @@
 """Event queries: CRUD, status, and membership."""
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from datetime import UTC, date, datetime, time
 from uuid import UUID
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
-
-if TYPE_CHECKING:
-    pass
 
 from traccio.db.mappers import (
     event_to_row,
@@ -22,6 +19,7 @@ from traccio.db.models import (
 from traccio.db.repositories._common import _transaction_when
 from traccio.domain.enums import (
     EventStatus,
+    PaletteColor,
 )
 from traccio.domain.models import (
     Event,
@@ -97,6 +95,63 @@ def list_events(session: Session, user_id: UUID) -> list[Event]:
         select(EventRow).where(EventRow.user_id == user_id).order_by(EventRow.created_at)
     ).all()
     return [row_to_event(row) for row in rows]
+
+
+def update_event(
+    session: Session,
+    *,
+    user_id: UUID,
+    event_id: UUID,
+    name: str,
+    emoji: str | None,
+    color: PaletteColor | None,
+    start_date: date | None,
+    end_date: date | None,
+) -> Event | None:
+    """Replace an event's editable fields, scoped by ``user_id``.
+
+    A full replace of ``name``, ``emoji``, ``color`` and the date range — the
+    fields the client's single event editor owns (ADR 0027). ``status`` and
+    ``created_at`` are not touched (close/reopen has its own write). Returns
+    the updated event, or ``None`` if no row matches the user. The caller owns
+    the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the event; the update is scoped to it.
+    event_id : UUID
+        The event to update.
+    name : str
+        The new name (required; the client never clears it).
+    emoji : str or None
+        The new emoji, already validated at the API edge, or ``None`` to clear.
+    color : PaletteColor or None
+        The new colour token, or ``None`` to clear.
+    start_date, end_date : date or None
+        The new date-range hint, or ``None`` to clear either bound.
+
+    Returns
+    -------
+    Event or None
+        The updated domain event, or ``None`` if not found for this user.
+    """
+    if get_event(session, user_id=user_id, event_id=event_id) is None:
+        return None
+    session.execute(
+        update(EventRow)
+        .where(EventRow.id == event_id, EventRow.user_id == user_id)
+        .values(
+            name=name,
+            emoji=emoji,
+            color=color,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    )
+    return get_event(session, user_id=user_id, event_id=event_id)
 
 
 def delete_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event | None:
@@ -321,5 +376,57 @@ def list_event_members(session: Session, *, user_id: UUID, event_id: UUID) -> li
         select(TransactionRow)
         .where(TransactionRow.user_id == user_id, TransactionRow.event_id == event_id)
         .order_by(_transaction_when().desc(), TransactionRow.id)
+    ).all()
+    return [row_to_transaction(row) for row in rows]
+
+
+def list_event_candidates(
+    session: Session,
+    *,
+    user_id: UUID,
+    start: date,
+    end: date,
+    limit: int = 200,
+) -> list[Transaction]:
+    """Return the user's un-grouped transactions dated within ``[start, end]``.
+
+    The date-range membership *suggestion* (``docs/domain.md`` §Event: the
+    range is a hint, never a rule). A dedicated read rather than another flag
+    on :func:`~traccio.db.repositories.transactions.list_transactions`, which
+    already carries ten parameters — one module, one responsibility. Only
+    ``event_id IS NULL`` rows are returned (a transaction already in an event
+    is never a candidate), most-recent-first, capped at ``limit``. The bound
+    is the same ``coalesce(booked_at, value_date)`` expression every other
+    date filter uses, so a dateless row is naturally excluded.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner whose transactions to consider; the query is scoped to it.
+    start, end : date
+        Inclusive day bounds; ``end`` is widened to the end of that day.
+    limit : int, optional
+        Maximum rows to return.
+
+    Returns
+    -------
+    list[Transaction]
+        Candidate transactions, most recent first (empty if none).
+    """
+    when = _transaction_when()
+    lower = datetime.combine(start, time.min, tzinfo=UTC)
+    upper = datetime.combine(end, time.max, tzinfo=UTC)
+    rows = session.scalars(
+        select(TransactionRow)
+        .where(
+            TransactionRow.user_id == user_id,
+            TransactionRow.event_id.is_(None),
+            when >= lower,
+            when <= upper,
+        )
+        .order_by(when.desc(), TransactionRow.id)
+        .limit(limit)
     ).all()
     return [row_to_transaction(row) for row in rows]

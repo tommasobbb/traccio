@@ -108,6 +108,90 @@ def test_create_event_starts_empty() -> None:
     assert body["currency"] is None
 
 
+def test_create_event_with_emoji_and_color_round_trips() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post(
+        "/events", json={"name": "TEST TRIP 01", "emoji": "🇹🇷", "color": "teal"}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["emoji"] == "🇹🇷"
+    assert body["color"] == "teal"
+    # And it survives a fresh read.
+    assert client.get(f"/events/{body['id']}").json()["emoji"] == "🇹🇷"
+
+
+def test_create_event_rejects_a_non_emoji() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post("/events", json={"name": "TEST TRIP 01", "emoji": "trip"})
+
+    assert response.status_code == 422
+
+
+def test_update_event_replaces_name_emoji_color_and_dates() -> None:
+    client = _client(_sqlite_engine())
+    event_id = client.post(
+        "/events", json={"name": "TEST TRIP 01", "emoji": "🎉", "color": "blue"}
+    ).json()["id"]
+
+    response = client.post(
+        f"/events/{event_id}",
+        json={
+            "name": "TEST TRIP 02",
+            "emoji": "🏠",
+            "color": None,
+            "start_date": "2026-05-03",
+            "end_date": "2026-05-17",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "TEST TRIP 02"
+    assert body["emoji"] == "🏠"
+    assert body["color"] is None  # explicit null clears it
+    assert body["start_date"] == "2026-05-03"
+    assert body["status"] == "active"  # untouched
+
+
+def test_update_event_rejects_a_non_emoji() -> None:
+    client = _client(_sqlite_engine())
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+
+    response = client.post(
+        f"/events/{event_id}", json={"name": "TEST TRIP 01", "emoji": "🎉🎂"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_update_unknown_event_is_404() -> None:
+    client = _client(_sqlite_engine())
+
+    response = client.post(
+        f"/events/{uuid4()}", json={"name": "TEST TRIP 01"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_update_another_users_event_is_404() -> None:
+    engine = _sqlite_engine()
+    stranger_id = uuid4()
+    with Session(engine) as session:
+        created = create_event(session, event=Event(user_id=stranger_id, name="TEST TRIP 01"))
+        session.commit()
+        their_event_id = str(created.id)
+
+    response = _client(engine).post(
+        f"/events/{their_event_id}", json={"name": "HIJACKED"}
+    )
+    assert response.status_code == 404
+
+
 def test_assign_transactions_and_derive_total() -> None:
     dev_user_id = get_settings().dev_user_id
     engine = _sqlite_engine()
@@ -327,6 +411,96 @@ def test_event_transactions_exposes_advance_share_not_full_amount() -> None:
 
     assert member["amount"] == -100000
     assert member["effective_amount"] == -20000
+
+
+def test_event_summary_breaks_spending_down_by_category() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_a = _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="TX-A")
+    tx_b = _seed_tx(engine, user_id=dev_user_id, amount=-2500, stable_key="TX-B")
+    income_tx = _seed_tx(engine, user_id=dev_user_id, amount=1000, stable_key="TX-INC")
+    client = _client(engine)
+
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+    for tx in (tx_a, tx_b, income_tx):
+        client.post(f"/events/{event_id}/transactions", json={"transaction_id": tx})
+
+    summary = client.get(f"/events/{event_id}/summary").json()
+    assert summary["spending"] == 7500
+    assert summary["income"] == 1000
+    assert summary["net"] == -6500  # matches EventResponse.total
+    assert summary["currency"] == "EUR"
+    # Every member is uncategorized, so one "no category" root holds it all.
+    [group] = summary["by_category"]
+    assert group["category_id"] is None
+    assert group["spending"] == 7500
+    assert group["income"] == 1000
+
+
+def test_event_summary_of_an_empty_event_is_all_zeros() -> None:
+    client = _client(_sqlite_engine())
+    event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+
+    summary = client.get(f"/events/{event_id}/summary").json()
+    assert summary == {"spending": 0, "income": 0, "net": 0, "currency": None, "by_category": []}
+
+
+def test_event_summary_of_an_unknown_event_is_404() -> None:
+    client = _client(_sqlite_engine())
+    assert client.get(f"/events/{uuid4()}/summary").status_code == 404
+
+
+def _seed_tx_dated(engine: Engine, *, user_id: UUID, stable_key: str, when: datetime) -> str:
+    with Session(engine) as session:
+        tx = _tx(user_id=user_id, amount=-3000, stable_key=stable_key)
+        tx.booked_at = when
+        tx.value_date = when
+        session.add(tx)
+        session.commit()
+        return str(tx.id)
+
+
+def test_event_suggestions_returns_ungrouped_transactions_in_the_date_range() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    inside = _seed_tx_dated(
+        engine, user_id=dev_user_id, stable_key="TX-IN", when=datetime(2026, 5, 10, tzinfo=UTC)
+    )
+    _seed_tx_dated(
+        engine, user_id=dev_user_id, stable_key="TX-OUT", when=datetime(2026, 3, 1, tzinfo=UTC)
+    )
+    already = _seed_tx_dated(
+        engine, user_id=dev_user_id, stable_key="TX-MEMBER", when=datetime(2026, 5, 12, tzinfo=UTC)
+    )
+    client = _client(engine)
+    event_id = client.post(
+        "/events",
+        json={"name": "TEST TRIP 01", "start_date": "2026-05-01", "end_date": "2026-05-31"},
+    ).json()["id"]
+    client.post(f"/events/{event_id}/transactions", json={"transaction_id": already})
+
+    suggested = client.get(f"/events/{event_id}/suggestions").json()["transactions"]
+    ids = {t["id"] for t in suggested}
+    assert ids == {inside}  # in range, and not already grouped
+
+
+def test_event_suggestions_is_empty_without_a_full_date_range() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx_dated(
+        engine, user_id=dev_user_id, stable_key="TX-IN", when=datetime(2026, 5, 10, tzinfo=UTC)
+    )
+    client = _client(engine)
+    only_start = client.post(
+        "/events", json={"name": "TEST TRIP 01", "start_date": "2026-05-01"}
+    ).json()["id"]
+
+    assert client.get(f"/events/{only_start}/suggestions").json() == {"transactions": []}
+
+
+def test_event_suggestions_of_an_unknown_event_is_404() -> None:
+    client = _client(_sqlite_engine())
+    assert client.get(f"/events/{uuid4()}/suggestions").status_code == 404
 
 
 def test_cannot_assign_another_users_transaction() -> None:

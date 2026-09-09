@@ -18,6 +18,7 @@ from traccio.domain.advances import (
     PersonSummary,
     ReceivableTotal,
     derive_advance,
+    person_key,
 )
 from traccio.domain.enums import AdvanceStatus, ParticipantStatus
 from traccio.domain.models import Advance, Transaction
@@ -60,6 +61,12 @@ class ParticipantResponse(BaseModel):
         itself to via ``participant_id``.
     name : str
         The participant's plain name.
+    person_key : str
+        The cross-advance grouping key for ``name``
+        (:func:`~traccio.domain.advances.person_key` — whitespace collapsed,
+        case-folded). Lets the client tie a participant row to its
+        :class:`PersonSummaryResponse` entry by an exact string compare
+        instead of re-implementing the normalization (ADR 0026).
     expected_amount : int
         What the participant is expected to pay back, a positive magnitude in
         minor units (cents).
@@ -78,6 +85,7 @@ class ParticipantResponse(BaseModel):
 
     id: UUID
     name: str
+    person_key: str
     expected_amount: int
     reimbursed: int
     outstanding: int
@@ -90,6 +98,7 @@ class ParticipantResponse(BaseModel):
         return cls(
             id=state.participant.id,
             name=state.participant.name,
+            person_key=person_key(state.participant.name),
             expected_amount=state.participant.expected_amount.amount,
             reimbursed=state.reimbursed.amount,
             outstanding=state.outstanding.amount,
@@ -132,6 +141,15 @@ class AdvanceResponse(BaseModel):
         Stable identifier of the advance.
     transaction_id : UUID
         The outgoing transaction this advance is on.
+    description : str
+        The transaction's raw bank description — so the Anticipi list can show
+        *what* each advance was for without a per-id fetch.
+    display_description : str or None
+        The cleaned-up description when one exists, else ``None`` (same
+        precedence the transaction read model uses).
+    booked_at : datetime or None
+        When the transaction was booked (timezone-aware, UTC), or ``None`` for
+        a still-pending row.
     own_share : int
         The user's declared share, a positive magnitude (cents).
     receivable : int
@@ -158,6 +176,9 @@ class AdvanceResponse(BaseModel):
 
     id: UUID
     transaction_id: UUID
+    description: str
+    display_description: str | None
+    booked_at: datetime | None
     own_share: int
     receivable: int
     reimbursed: int
@@ -236,6 +257,9 @@ class AdvanceResponse(BaseModel):
         return cls(
             id=advance.id,
             transaction_id=advance.transaction_id,
+            description=transaction.description,
+            display_description=transaction.display_description,
+            booked_at=transaction.booked_at,
             own_share=advance.own_share.amount,
             receivable=state.receivable.amount,
             reimbursed=state.reimbursed.amount,
@@ -260,6 +284,10 @@ class PersonSummaryResponse(BaseModel):
     ----------
     name : str
         Display spelling — the first one seen for this person.
+    person_key : str
+        The grouping key this row was rolled up under
+        (:func:`~traccio.domain.advances.person_key`). The client matches a
+        :class:`ParticipantResponse` to this row on this exact string.
     currency : str
         ISO 4217 code of every amount here.
     expected : int
@@ -274,6 +302,7 @@ class PersonSummaryResponse(BaseModel):
     """
 
     name: str
+    person_key: str
     currency: str
     expected: int
     reimbursed: int
@@ -285,6 +314,7 @@ class PersonSummaryResponse(BaseModel):
         """Project a :class:`~traccio.domain.advances.PersonSummary`."""
         return cls(
             name=summary.name,
+            person_key=person_key(summary.name),
             currency=summary.currency,
             expected=summary.expected.amount,
             reimbursed=summary.reimbursed.amount,

@@ -264,8 +264,20 @@
         "type": "object"
       },
       "AdvanceResponse": {
-        "description": "One advance as returned to the client.\n\nProjects :class:`~traccio.domain.models.Advance` and adds the derived\n``receivable``/``outstanding`` (positive magnitudes). The transaction carries\n``role=advance``, so its ``effective_amount`` on ``GET /transactions`` is the\nuser's share, not the full amount.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the advance.\ntransaction_id : UUID\n    The outgoing transaction this advance is on.\nown_share : int\n    The user's declared share, a positive magnitude (cents).\nreceivable : int\n    What the user is owed: ``|amount| - own_share`` (positive magnitude).\nreimbursed : int\n    The sum paid back so far, a positive magnitude.\noutstanding : int\n    What is still owed after reimbursements, clamped at zero\n    (``max(0, receivable - reimbursed)``).\nexcess : int\n    Over-reimbursement, ``max(0, reimbursed - receivable)`` \u2014 flagged for the\n    user rather than silently absorbed. Zero in the normal case.\ncurrency : str\n    ISO 4217 code of every amount here (the transaction's currency).\nstatus : AdvanceStatus\n    Derived lifecycle state: ``written_off`` when written off, else\n    ``settled`` once reimbursements cover the receivable, else ``open``.\nparticipants : list[ParticipantResponse]\n    People who owe the user back, each with their own derived\n    reimbursement status (ADR 0012).\ncreated_at : datetime\n    When the advance was created (timezone-aware, UTC).",
+        "description": "One advance as returned to the client.\n\nProjects :class:`~traccio.domain.models.Advance` and adds the derived\n``receivable``/``outstanding`` (positive magnitudes). The transaction carries\n``role=advance``, so its ``effective_amount`` on ``GET /transactions`` is the\nuser's share, not the full amount.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the advance.\ntransaction_id : UUID\n    The outgoing transaction this advance is on.\ndescription : str\n    The transaction's raw bank description \u2014 so the Anticipi list can show\n    *what* each advance was for without a per-id fetch.\ndisplay_description : str or None\n    The cleaned-up description when one exists, else ``None`` (same\n    precedence the transaction read model uses).\nbooked_at : datetime or None\n    When the transaction was booked (timezone-aware, UTC), or ``None`` for\n    a still-pending row.\nown_share : int\n    The user's declared share, a positive magnitude (cents).\nreceivable : int\n    What the user is owed: ``|amount| - own_share`` (positive magnitude).\nreimbursed : int\n    The sum paid back so far, a positive magnitude.\noutstanding : int\n    What is still owed after reimbursements, clamped at zero\n    (``max(0, receivable - reimbursed)``).\nexcess : int\n    Over-reimbursement, ``max(0, reimbursed - receivable)`` \u2014 flagged for the\n    user rather than silently absorbed. Zero in the normal case.\ncurrency : str\n    ISO 4217 code of every amount here (the transaction's currency).\nstatus : AdvanceStatus\n    Derived lifecycle state: ``written_off`` when written off, else\n    ``settled`` once reimbursements cover the receivable, else ``open``.\nparticipants : list[ParticipantResponse]\n    People who owe the user back, each with their own derived\n    reimbursement status (ADR 0012).\ncreated_at : datetime\n    When the advance was created (timezone-aware, UTC).",
         "properties": {
+          "booked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Booked At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -274,6 +286,21 @@
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Description"
           },
           "excess": {
             "title": "Excess",
@@ -319,6 +346,9 @@
         "required": [
           "id",
           "transaction_id",
+          "description",
+          "display_description",
+          "booked_at",
           "own_share",
           "receivable",
           "reimbursed",
@@ -1119,8 +1149,29 @@
         "type": "object"
       },
       "CreateEventRequest": {
-        "description": "Body for creating an event.\n\nAttributes\n----------\nname : str\n    Human-readable name for the occasion (e.g. ``\"Turkey 2026\"``).\nstart_date : date or None\n    Optional first day of the occasion; a hint, not a membership rule.\nend_date : date or None\n    Optional last day of the occasion.",
+        "description": "Body for creating an event.\n\nAttributes\n----------\nname : str\n    Human-readable name for the occasion (e.g. ``\"Turkey 2026\"``).\nemoji : str or None\n    Optional single emoji for the event's tile (ADR 0027), validated.\ncolor : PaletteColor or None\n    Optional colour for the tile, from the shared PaletteColor vocabulary.\nstart_date : date or None\n    Optional first day of the occasion; a hint, not a membership rule.\nend_date : date or None\n    Optional last day of the occasion.",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
           "end_date": {
             "anyOf": [
               {
@@ -1473,8 +1524,18 @@
         "type": "object"
       },
       "EventResponse": {
-        "description": "One event as returned to the client, with its derived total.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the event.\nname : str\n    Human-readable name for the occasion.\nstart_date : date or None\n    Optional first day of the occasion.\nend_date : date or None\n    Optional last day of the occasion.\nstatus : EventStatus\n    Lifecycle state (``active`` or ``closed``); purely organizational.\nmember_count : int\n    How many transactions are grouped under the event.\ntotal : int\n    The net cost of the event in minor units (cents): the sum of its members'\n    ``effective_amount`` (transfers count zero, advances only the user's\n    share, reimbursements zero). ``0`` for an empty event.\ncurrency : str or None\n    ISO 4217 code of ``total`` \u2014 the members' shared currency. ``null`` for an\n    empty event, which has no currency of its own.\ncreated_at : datetime\n    When the event was created (timezone-aware, UTC).",
+        "description": "One event as returned to the client, with its derived total.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the event.\nname : str\n    Human-readable name for the occasion.\nemoji : str or None\n    The event's emoji, or ``null`` if unset (ADR 0027).\ncolor : PaletteColor or None\n    The event's colour, or ``null`` if unset.\nstart_date : date or None\n    Optional first day of the occasion.\nend_date : date or None\n    Optional last day of the occasion.\nstatus : EventStatus\n    Lifecycle state (``active`` or ``closed``); purely organizational.\nmember_count : int\n    How many transactions are grouped under the event.\ntotal : int\n    The net cost of the event in minor units (cents): the sum of its members'\n    ``effective_amount`` (transfers count zero, advances only the user's\n    share, reimbursements zero). ``0`` for an empty event.\ncurrency : str or None\n    ISO 4217 code of ``total`` \u2014 the members' shared currency. ``null`` for an\n    empty event, which has no currency of its own.\ncreated_at : datetime\n    When the event was created (timezone-aware, UTC).",
         "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -1490,6 +1551,17 @@
               }
             ],
             "title": "Currency"
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
           },
           "end_date": {
             "anyOf": [
@@ -1539,6 +1611,8 @@
         "required": [
           "id",
           "name",
+          "emoji",
+          "color",
           "start_date",
           "end_date",
           "status",
@@ -1558,6 +1632,50 @@
         ],
         "title": "EventStatus",
         "type": "string"
+      },
+      "EventSummaryResponse": {
+        "description": "An event's spending, broken down by category (ADR 0028).\n\nReuses the dashboard's own aggregation: the members are a sequence of\ntransactions, so :func:`~traccio.domain.dashboard.summarize` produces the\nsame two-level ``by_category`` (ADR 0018) it does for a period. An event\nis single-currency by construction (``assign_transaction`` refuses a\nmixed-currency member), so there is exactly one figure per field;\n``currency`` is ``null`` and the totals are ``0`` for an empty event.\n\nAttributes\n----------\nspending : int\n    Total spending across the members, a positive magnitude (cents) \u2014 the\n    sum of every negative ``effective_amount``.\nincome : int\n    Total income across the members, a positive magnitude.\nnet : int\n    ``income - spending``, signed. Matches ``EventResponse.total``.\ncurrency : str or None\n    ISO 4217 code of the figures, or ``null`` for an empty event.\nby_category : list[CategoryGroupSummaryResponse]\n    The members' spending/income partitioned by category root, each with\n    its children rolled up \u2014 the same shape the dashboard returns, so the\n    client reuses its donut and breakdown list unchanged.",
+        "properties": {
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryGroupSummaryResponse"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "net": {
+            "title": "Net",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "spending",
+          "income",
+          "net",
+          "currency",
+          "by_category"
+        ],
+        "title": "EventSummaryResponse",
+        "type": "object"
       },
       "EventsResponse": {
         "description": "Envelope for the events list.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\nevents : list[EventResponse]\n    The user's events, oldest first.",
@@ -1949,7 +2067,7 @@
         "type": "object"
       },
       "ParticipantResponse": {
-        "description": "One person who owes the user back, as returned to the client.\n\nAdds a stable ``id`` and the derived reimbursement state (ADR 0012) on top\nof what :class:`ParticipantRequest` carries \u2014 split from a single shared\nschema because the request side genuinely has neither: the id doesn't\nexist yet, and there is nothing to derive over zero reimbursements.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the participant \u2014 what a reimbursement attributes\n    itself to via ``participant_id``.\nname : str\n    The participant's plain name.\nexpected_amount : int\n    What the participant is expected to pay back, a positive magnitude in\n    minor units (cents).\nreimbursed : int\n    The sum of reimbursements attributed to this participant, a positive\n    magnitude.\noutstanding : int\n    What this participant still owes, clamped at zero.\nexcess : int\n    Over-reimbursement for this participant specifically, clamped at zero\n    \u2014 flagged, not absorbed, same as the advance-level ``excess``.\nstatus : ParticipantStatus\n    ``settled`` once this participant's reimbursements cover their\n    ``expected_amount``, else ``outstanding``.",
+        "description": "One person who owes the user back, as returned to the client.\n\nAdds a stable ``id`` and the derived reimbursement state (ADR 0012) on top\nof what :class:`ParticipantRequest` carries \u2014 split from a single shared\nschema because the request side genuinely has neither: the id doesn't\nexist yet, and there is nothing to derive over zero reimbursements.\n\nAttributes\n----------\nid : UUID\n    Stable identifier of the participant \u2014 what a reimbursement attributes\n    itself to via ``participant_id``.\nname : str\n    The participant's plain name.\nperson_key : str\n    The cross-advance grouping key for ``name``\n    (:func:`~traccio.domain.advances.person_key` \u2014 whitespace collapsed,\n    case-folded). Lets the client tie a participant row to its\n    :class:`PersonSummaryResponse` entry by an exact string compare\n    instead of re-implementing the normalization (ADR 0026).\nexpected_amount : int\n    What the participant is expected to pay back, a positive magnitude in\n    minor units (cents).\nreimbursed : int\n    The sum of reimbursements attributed to this participant, a positive\n    magnitude.\noutstanding : int\n    What this participant still owes, clamped at zero.\nexcess : int\n    Over-reimbursement for this participant specifically, clamped at zero\n    \u2014 flagged, not absorbed, same as the advance-level ``excess``.\nstatus : ParticipantStatus\n    ``settled`` once this participant's reimbursements cover their\n    ``expected_amount``, else ``outstanding``.",
         "properties": {
           "excess": {
             "title": "Excess",
@@ -1972,6 +2090,10 @@
             "title": "Outstanding",
             "type": "integer"
           },
+          "person_key": {
+            "title": "Person Key",
+            "type": "string"
+          },
           "reimbursed": {
             "title": "Reimbursed",
             "type": "integer"
@@ -1983,6 +2105,7 @@
         "required": [
           "id",
           "name",
+          "person_key",
           "expected_amount",
           "reimbursed",
           "outstanding",
@@ -2002,7 +2125,7 @@
         "type": "string"
       },
       "PersonSummaryResponse": {
-        "description": "One person's receivable rolled up across every advance they appear on.\n\nNames are matched loosely (case- and whitespace-insensitive); there is no\nperson entity, so ``\"Marco\"`` and ``\" marco \"`` are the same person but a\nreal typo is not (ADR 0026). All amounts are positive magnitudes in\n``currency``.\n\nAttributes\n----------\nname : str\n    Display spelling \u2014 the first one seen for this person.\ncurrency : str\n    ISO 4217 code of every amount here.\nexpected : int\n    Sum of this person's expected repayments (cents).\nreimbursed : int\n    Sum attributed back to this person (cents).\noutstanding : int\n    What this person still owes in total (cents), each advance clamped at\n    zero before summing.\nadvance_count : int\n    How many advances this person appears on.",
+        "description": "One person's receivable rolled up across every advance they appear on.\n\nNames are matched loosely (case- and whitespace-insensitive); there is no\nperson entity, so ``\"Marco\"`` and ``\" marco \"`` are the same person but a\nreal typo is not (ADR 0026). All amounts are positive magnitudes in\n``currency``.\n\nAttributes\n----------\nname : str\n    Display spelling \u2014 the first one seen for this person.\nperson_key : str\n    The grouping key this row was rolled up under\n    (:func:`~traccio.domain.advances.person_key`). The client matches a\n    :class:`ParticipantResponse` to this row on this exact string.\ncurrency : str\n    ISO 4217 code of every amount here.\nexpected : int\n    Sum of this person's expected repayments (cents).\nreimbursed : int\n    Sum attributed back to this person (cents).\noutstanding : int\n    What this person still owes in total (cents), each advance clamped at\n    zero before summing.\nadvance_count : int\n    How many advances this person appears on.",
         "properties": {
           "advance_count": {
             "title": "Advance Count",
@@ -2024,6 +2147,10 @@
             "title": "Outstanding",
             "type": "integer"
           },
+          "person_key": {
+            "title": "Person Key",
+            "type": "string"
+          },
           "reimbursed": {
             "title": "Reimbursed",
             "type": "integer"
@@ -2031,6 +2158,7 @@
         },
         "required": [
           "name",
+          "person_key",
           "currency",
           "expected",
           "reimbursed",
@@ -2815,6 +2943,65 @@
         "title": "TransfersResponse",
         "type": "object"
       },
+      "UpdateEventRequest": {
+        "description": "Body for editing an event (``POST /events/{event_id}``, ADR 0027).\n\nA **full replace** of the fields the client's single event editor owns:\n``name`` (required \u2014 the editor never clears it), ``emoji``, ``color`` and\nthe date range are all sent every time, ``null`` meaning \"cleared\". The\nevent's ``status`` is not here \u2014 close/reopen has its own endpoint.\n\nAttributes\n----------\nname : str\n    The new name.\nemoji : str or None\n    The new emoji, validated, or ``null`` to clear.\ncolor : PaletteColor or None\n    The new colour, or ``null`` to clear.\nstart_date : date or None\n    New first day, or ``null`` to clear.\nend_date : date or None\n    New last day, or ``null`` to clear.",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaletteColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "emoji": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emoji"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "UpdateEventRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -3151,7 +3338,7 @@
     },
     "/advances": {
       "get": {
-        "description": "List the current user's advances, oldest first, with cross-advance totals.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction; the ``summary`` rolls every advance up by person and\nby currency (ADR 0026).\n\nThe optional ``status`` query parameter narrows the returned ``advances`` to\none lifecycle state. It is applied **after** deriving every advance, because\n``open``/``settled`` are derived and only ``written_off`` is stored \u2014 and\nthe ``summary`` is always computed over the full set, so the totals do not\nmove when the caller filters the rows.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\nstatus : AdvanceStatus or None\n    When given, only advances whose derived status matches are returned in\n    ``advances`` (the ``summary`` is unaffected).\n\nReturns\n-------\nAdvancesResponse\n    The user's advances (oldest first, optionally filtered) and the\n    cross-advance summary.",
+        "description": "List the current user's advances, oldest first, with cross-advance totals.\n\nScoped to the current user. Each advance's receivable/outstanding is derived\nfrom its transaction; the ``summary`` rolls every advance up by person and\nby currency (ADR 0026).\n\nAn advance whose transaction falls **before** the user's tracking-start\nfloor (ADR 0024) is omitted entirely \u2014 from ``advances`` and from\n``summary`` alike \u2014 so \"chi ti deve\" and \"da ricevere\" count the same\nmovements the dashboard and Movimenti do. The floor is skipped when unset,\nand by-id reads (``GET /advances/{id}``) still see every advance: an\nexplicit link to an old movement keeps working (ADR 0024 \u00a75).\n\nThe optional ``status`` query parameter narrows the returned ``advances`` to\none lifecycle state. It is applied **after** deriving every advance, because\n``open``/``settled`` are derived and only ``written_off`` is stored \u2014 and\nthe ``summary`` is always computed over the full (in-window) set, so the\ntotals do not move when the caller filters the rows.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose advances to return.\ntracking_start : date or None\n    The user's tracking-start floor; advances on a movement before it are\n    excluded. ``None`` means no floor.\nstatus : AdvanceStatus or None\n    When given, only advances whose derived status matches are returned in\n    ``advances`` (the ``summary`` is unaffected).\n\nReturns\n-------\nAdvancesResponse\n    The user's advances (oldest first, optionally filtered) and the\n    cross-advance summary.",
         "operationId": "advances_advances_get",
         "parameters": [
           {
@@ -4822,6 +5009,71 @@
           }
         },
         "summary": "Event"
+      },
+      "post": {
+        "description": "Edit an event's name, emoji, colour and date range (ADR 0027).\n\nA full replace of the fields the client's single event editor owns; the\nevent's ``status`` and membership are untouched. ``emoji`` is validated as\na single emoji by the request schema (a ``422`` otherwise). Scoped to the\ncurrent user; a ``404`` if the event is unknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event to edit.\nbody : UpdateEventRequest\n    The new name, emoji, colour and dates (each ``null`` clears).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventResponse\n    The updated event, with its derived total and member count.",
+        "operationId": "update_event_endpoint_events__event_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Event Endpoint"
       }
     },
     "/events/{event_id}/close": {
@@ -4936,6 +5188,120 @@
           }
         },
         "summary": "Reopen Event"
+      }
+    },
+    "/events/{event_id}/suggestions": {
+      "get": {
+        "description": "Suggest un-grouped transactions dated within the event's range.\n\nThe date range is a *hint*, never a rule (``docs/domain.md`` \u00a7Event), so\nthis only *suggests* \u2014 the client still assigns each one with an explicit\n``POST``, the same posture as transfer and reimbursement matching. Returns\nun-grouped (``event_id IS NULL``) transactions whose\n``coalesce(booked_at, value_date)`` falls within ``[start_date, end_date]``,\nmost recent first. An event without **both** bounds set yields an empty\nlist \u2014 there is no window to suggest from. Scoped to the current user; a\n``404`` if the event is unknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event whose date range drives the suggestion.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nTransactionsResponse\n    Candidate transactions (empty when the event has no full date range).",
+        "operationId": "event_suggestions_events__event_id__suggestions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Event Suggestions"
+      }
+    },
+    "/events/{event_id}/summary": {
+      "get": {
+        "description": "Return an event's spending broken down by category (ADR 0028).\n\nReuses the dashboard's :func:`~traccio.domain.dashboard.summarize` over the\nevent's members \u2014 the same two-level ``by_category`` (ADR 0018) the\ndashboard returns for a period, so the client renders it with the same\ndonut and breakdown list. An event is single-currency by construction, so\nthere is exactly one currency summary; an empty event yields zeros and\n``currency: null``. Scoped to the current user; a ``404`` if the event is\nunknown or not the caller's.\n\nParameters\n----------\nevent_id : UUID\n    The event whose breakdown to compute.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the event belongs to.\n\nReturns\n-------\nEventSummaryResponse\n    The members' spending/income and their per-category partition.",
+        "operationId": "event_summary_events__event_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Event Summary"
       }
     },
     "/events/{event_id}/transactions": {

@@ -25,15 +25,17 @@ from traccio.domain.enums import KeyStrategy, TransactionStatus
 _DAY = datetime(2026, 3, 1, tzinfo=UTC)
 
 
-def _tx(*, user_id: UUID, amount: int, stable_key: str) -> TransactionRow:
+def _tx(
+    *, user_id: UUID, amount: int, stable_key: str, when: datetime | None = _DAY
+) -> TransactionRow:
     return TransactionRow(
         id=uuid4(),
         user_id=user_id,
         account_id=uuid4(),
         amount=amount,
         currency="EUR",
-        booked_at=_DAY,
-        value_date=_DAY,
+        booked_at=when,
+        value_date=when,
         description="TEST MERCHANT 01",
         display_description=None,
         status=TransactionStatus.BOOKED,
@@ -199,9 +201,16 @@ def test_create_on_another_users_transaction_is_404() -> None:
     assert response.status_code == 404
 
 
-def _seed_named_tx(engine: Engine, *, user_id: UUID, amount: int, stable_key: str) -> str:
+def _seed_named_tx(
+    engine: Engine,
+    *,
+    user_id: UUID,
+    amount: int,
+    stable_key: str,
+    when: datetime | None = _DAY,
+) -> str:
     with Session(engine) as session:
-        tx = _tx(user_id=user_id, amount=amount, stable_key=stable_key)
+        tx = _tx(user_id=user_id, amount=amount, stable_key=stable_key, when=when)
         session.add(tx)
         session.commit()
         return str(tx.id)
@@ -232,6 +241,7 @@ def test_list_envelope_carries_cross_advance_summary() -> None:
     [person] = summary["by_person"]
     assert person == {
         "name": "TEST FRIEND 01",
+        "person_key": "test friend 01",
         "currency": "EUR",
         "expected": 4000,
         "reimbursed": 1500,
@@ -308,3 +318,123 @@ def test_summary_is_scoped_to_the_caller() -> None:
     summary = client.get("/advances").json()["summary"]
     assert summary["totals"] == [{"currency": "EUR", "outstanding": 4000, "open_advances": 1}]
     assert [p["name"] for p in summary["by_person"]] == ["TEST FRIEND 01"]
+
+
+def test_tracking_start_floor_hides_pre_cutoff_advances_from_rows_and_summary() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    old_tx = _seed_named_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-5000,
+        stable_key="TX-OLD",
+        when=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    new_tx = _seed_named_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-3000,
+        stable_key="TX-NEW",
+        when=datetime(2026, 8, 10, tzinfo=UTC),
+    )
+    client = _client(engine)
+    for tx_id, share in ((old_tx, 1000), (new_tx, 500)):
+        client.post(
+            "/advances",
+            json={
+                "transaction_id": tx_id,
+                "own_share": share,
+                "participants": [{"name": "TEST FRIEND 01", "expected_amount": share + 500}],
+            },
+        )
+
+    # No floor: both advances count.
+    unfiltered = client.get("/advances").json()
+    assert {a["transaction_id"] for a in unfiltered["advances"]} == {old_tx, new_tx}
+    assert unfiltered["summary"]["totals"] == [
+        {"currency": "EUR", "outstanding": 6500, "open_advances": 2}
+    ]
+
+    # Floor after the old movement: only the new advance is left, rows and
+    # summary in lockstep.
+    assert client.post("/settings", json={"tracking_start_date": "2026-07-01"}).status_code == 200
+    floored = client.get("/advances").json()
+    assert [a["transaction_id"] for a in floored["advances"]] == [new_tx]
+    assert floored["summary"]["totals"] == [
+        {"currency": "EUR", "outstanding": 2500, "open_advances": 1}
+    ]
+    assert [p["name"] for p in floored["summary"]["by_person"]] == ["TEST FRIEND 01"]
+    assert floored["summary"]["by_person"][0]["advance_count"] == 1
+
+    # The floored-out advance is still reachable by id (ADR 0024 §5).
+    old_advance_id = next(a["id"] for a in unfiltered["advances"] if a["transaction_id"] == old_tx)
+    assert client.get(f"/advances/{old_advance_id}").status_code == 200
+
+
+def test_tracking_start_none_leaves_every_advance_visible() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_named_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-5000,
+        stable_key="TX-OLD",
+        when=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    client = _client(engine)
+    client.post("/advances", json={"transaction_id": tx_id, "own_share": 1000})
+
+    body = client.get("/advances").json()
+    assert [a["transaction_id"] for a in body["advances"]] == [tx_id]
+    assert body["summary"]["totals"] == [
+        {"currency": "EUR", "outstanding": 4000, "open_advances": 1}
+    ]
+
+
+def test_advance_response_carries_transaction_description_and_date() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_named_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-5000,
+        stable_key="TX-DESC",
+        when=datetime(2026, 8, 4, 9, 30, tzinfo=UTC),
+    )
+    client = _client(engine)
+    client.post(
+        "/advances",
+        json={
+            "transaction_id": tx_id,
+            "own_share": 1000,
+            "participants": [{"name": "  Marco Rossi  ", "expected_amount": 4000}],
+        },
+    )
+
+    [advance] = client.get("/advances").json()["advances"]
+    # The list row can show what the advance was for without a per-id fetch.
+    assert advance["description"] == "TEST MERCHANT 01"
+    assert advance["display_description"] is None
+    assert advance["booked_at"].startswith("2026-08-04")
+    # The participant carries the same grouping key as its summary row.
+    [participant] = advance["participants"]
+    assert participant["person_key"] == "marco rossi"
+    [person] = client.get("/advances").json()["summary"]["by_person"]
+    assert person["person_key"] == participant["person_key"]
+    assert person["name"] == "Marco Rossi"  # whitespace collapsed, case kept
+
+
+def test_a_dateless_advance_transaction_is_hidden_once_a_floor_is_set() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    tx_id = _seed_named_tx(
+        engine, user_id=dev_user_id, amount=-5000, stable_key="TX-DATELESS", when=None
+    )
+    client = _client(engine)
+    client.post("/advances", json={"transaction_id": tx_id, "own_share": 1000})
+
+    assert len(client.get("/advances").json()["advances"]) == 1
+    client.post("/settings", json={"tracking_start_date": "2026-07-01"})
+    floored = client.get("/advances").json()
+    assert floored["advances"] == []
+    assert floored["summary"]["totals"] == []

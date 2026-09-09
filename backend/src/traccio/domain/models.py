@@ -482,6 +482,14 @@ class Event(BaseModel):
         Owning user. Every member transaction belongs to this user.
     name : str
         Human-readable name for the occasion (e.g. ``"Turkey 2026"``).
+    emoji : str or None
+        Optional single emoji for visual identity, free text validated by
+        :func:`~traccio.domain.emoji.validate_emoji` at the API edge (ADR
+        0027). ``None`` before the user picks one.
+    color : PaletteColor or None
+        Optional colour token for the event's tile, from the shared
+        vocabulary (ADR 0017). ``None`` falls back to the neutral default
+        client-side.
     start_date : date or None
         Optional first day of the occasion. A hint for the user, not a rule that
         assigns membership (a flight booked months earlier still belongs).
@@ -498,6 +506,8 @@ class Event(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     user_id: UUID
     name: str
+    emoji: str | None = None
+    color: PaletteColor | None = None
     start_date: date | None = None
     end_date: date | None = None
     status: EventStatus = EventStatus.ACTIVE

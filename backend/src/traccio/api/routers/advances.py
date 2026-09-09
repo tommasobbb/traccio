@@ -17,13 +17,14 @@ Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
 counts — never amounts or descriptions.
 """
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_tracking_start, current_user_id
 from traccio.api.schemas.advances import (
     AdvanceResponse,
     AdvancesResponse,
@@ -68,6 +69,7 @@ from traccio.domain.advances import (
 from traccio.domain.enums import AdvanceStatus, TransactionRole
 from traccio.domain.models import Advance, Participant, Reimbursement, Transaction
 from traccio.domain.money import Money
+from traccio.domain.tracking import is_within_tracking
 
 logger = get_logger(__name__)
 
@@ -193,6 +195,7 @@ def create_advance_endpoint(
 def advances(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
+    tracking_start: Annotated[date | None, Depends(current_tracking_start)] = None,
     status: Annotated[AdvanceStatus | None, Query()] = None,
 ) -> AdvancesResponse:
     """List the current user's advances, oldest first, with cross-advance totals.
@@ -201,11 +204,18 @@ def advances(
     from its transaction; the ``summary`` rolls every advance up by person and
     by currency (ADR 0026).
 
+    An advance whose transaction falls **before** the user's tracking-start
+    floor (ADR 0024) is omitted entirely — from ``advances`` and from
+    ``summary`` alike — so "chi ti deve" and "da ricevere" count the same
+    movements the dashboard and Movimenti do. The floor is skipped when unset,
+    and by-id reads (``GET /advances/{id}``) still see every advance: an
+    explicit link to an old movement keeps working (ADR 0024 §5).
+
     The optional ``status`` query parameter narrows the returned ``advances`` to
     one lifecycle state. It is applied **after** deriving every advance, because
     ``open``/``settled`` are derived and only ``written_off`` is stored — and
-    the ``summary`` is always computed over the full set, so the totals do not
-    move when the caller filters the rows.
+    the ``summary`` is always computed over the full (in-window) set, so the
+    totals do not move when the caller filters the rows.
 
     Parameters
     ----------
@@ -213,6 +223,9 @@ def advances(
         Request-scoped database session.
     user_id : UUID
         The user whose advances to return.
+    tracking_start : date or None
+        The user's tracking-start floor; advances on a movement before it are
+        excluded. ``None`` means no floor.
     status : AdvanceStatus or None
         When given, only advances whose derived status matches are returned in
         ``advances`` (the ``summary`` is unaffected).
@@ -236,6 +249,12 @@ def advances(
         transaction = _load_transaction(
             session, user_id=user_id, transaction_id=advance.transaction_id
         )
+        # Applied here, where the transaction is already in hand: skipping the
+        # advance before it reaches ``advance_states`` /
+        # ``participant_states_by_advance`` keeps the rows and the summary in
+        # lockstep (ADR 0024 / ADR 0026).
+        if not is_within_tracking(transaction, tracking_start):
+            continue
         currency = advance.own_share.currency
         reimbursed = reimbursed_by_advance.get(advance.id, Money(amount=0, currency=currency))
         state = derive_advance(
@@ -264,7 +283,12 @@ def advances(
         by_person=summarize_people(participant_states_by_advance),
         totals=total_receivable(advance_states),
     )
-    logger.info("advances.list", count=len(responses), total=len(found))
+    logger.info(
+        "advances.list",
+        count=len(responses),
+        in_window=len(advance_states),
+        total=len(found),
+    )
     return AdvancesResponse(advances=responses, summary=summary)
 
 
