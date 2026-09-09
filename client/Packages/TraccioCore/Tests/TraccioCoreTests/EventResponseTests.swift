@@ -19,6 +19,8 @@ struct EventResponseTests {
             {
               "id": "11111111-1111-1111-1111-111111111111",
               "name": "TEST TRIP 01",
+              "emoji": "🇹🇷",
+              "color": "teal",
               "start_date": "2026-08-01",
               "end_date": "2026-08-10",
               "status": "active",
@@ -45,9 +47,52 @@ struct EventResponseTests {
         #expect(event.startDate == CalendarDate(year: 2026, month: 8, day: 1))
         #expect(event.endDate == CalendarDate(year: 2026, month: 8, day: 10))
         #expect(event.status == .active)
+        #expect(event.emoji == "🇹🇷")
+        #expect(event.color == .teal)
         #expect(event.memberCount == 3)
         #expect(event.total == -23000)
         #expect(event.currency == "EUR")
+    }
+
+    @Test func decodesAnEventWithNoEmojiOrColour() throws {
+        // Both are optional on the wire; an omitted key is `nil`, not an error.
+        let json = """
+            { "events": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "name": "TEST TRIP 01",
+              "start_date": null,
+              "end_date": null,
+              "status": "active",
+              "member_count": 0,
+              "total": 0,
+              "currency": null,
+              "created_at": "2026-08-18T21:40:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(EventsResponse.self, from: Data(json.utf8))
+        #expect(response.events[0].emoji == nil)
+        #expect(response.events[0].color == nil)
+    }
+
+    @Test func rejectsUnknownColour() {
+        let json = """
+            { "events": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "name": "TEST TRIP 01",
+              "emoji": null,
+              "color": "chartreuse",
+              "start_date": null,
+              "end_date": null,
+              "status": "active",
+              "member_count": 0,
+              "total": 0,
+              "currency": null,
+              "created_at": "2026-08-18T21:40:00+00:00"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(EventsResponse.self, from: Data(json.utf8))
+        }
     }
 
     @Test func decodesAnEmptyEventWithNullDatesAndCurrency() throws {

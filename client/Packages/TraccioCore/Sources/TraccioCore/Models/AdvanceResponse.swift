@@ -15,6 +15,14 @@ public struct AdvanceResponse: Codable, Sendable, Identifiable, Equatable {
     public let id: UUID
     /// The outgoing transaction this advance is on.
     public let transactionID: UUID
+    /// The transaction's raw bank description — so the Anticipi list can name
+    /// what each advance was for without a per-id fetch.
+    public let description: String
+    /// The cleaned-up description when one exists (same precedence as
+    /// `TransactionResponse`), else `nil`.
+    public let displayDescription: String?
+    /// When the transaction was booked, or `nil` for a still-pending row.
+    public let bookedAt: Date?
     /// The user's declared share, a positive magnitude (cents).
     public let ownShare: Int
     /// What the user is owed: `|amount| - ownShare`.
@@ -34,9 +42,16 @@ public struct AdvanceResponse: Codable, Sendable, Identifiable, Equatable {
     /// When the advance was created.
     public let createdAt: Date
 
+    /// The description to show: the cleaned-up one when present, else the raw
+    /// bank text — the same precedence `TransactionResponse` callers apply.
+    public var resolvedDescription: String { displayDescription ?? description }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case transactionID = "transaction_id"
+        case description
+        case displayDescription = "display_description"
+        case bookedAt = "booked_at"
         case ownShare = "own_share"
         case receivable
         case reimbursed
@@ -51,6 +66,9 @@ public struct AdvanceResponse: Codable, Sendable, Identifiable, Equatable {
     public init(
         id: UUID,
         transactionID: UUID,
+        description: String,
+        displayDescription: String?,
+        bookedAt: Date?,
         ownShare: Int,
         receivable: Int,
         reimbursed: Int,
@@ -63,6 +81,9 @@ public struct AdvanceResponse: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.id = id
         self.transactionID = transactionID
+        self.description = description
+        self.displayDescription = displayDescription
+        self.bookedAt = bookedAt
         self.ownShare = ownShare
         self.receivable = receivable
         self.reimbursed = reimbursed

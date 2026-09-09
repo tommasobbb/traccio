@@ -114,7 +114,9 @@ struct TransactionsViewModelTests {
 
     private static func makeAdvance(transactionID: UUID) -> AdvanceResponse {
         AdvanceResponse(
-            id: UUID(), transactionID: transactionID, ownShare: 1800, receivable: 3600,
+            id: UUID(), transactionID: transactionID,
+            description: "TEST MERCHANT 01", displayDescription: nil, bookedAt: nil,
+            ownShare: 1800, receivable: 3600,
             reimbursed: 0, outstanding: 3600, excess: 0, currency: "EUR", status: .open,
             participants: [], createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )

@@ -17,11 +17,16 @@ struct AdvancesViewModelTests {
         id: UUID = advanceID,
         transactionID: UUID = txID,
         outstanding: Int = 4000,
-        status: AdvanceStatus = .open
+        status: AdvanceStatus = .open,
+        participantName: String = "Marco",
+        participantKey: String = "marco"
     ) -> AdvanceResponse {
         AdvanceResponse(
             id: id,
             transactionID: transactionID,
+            description: "TEST MERCHANT 01",
+            displayDescription: nil,
+            bookedAt: Date(timeIntervalSince1970: 1_755_000_000),
             ownShare: 1000,
             receivable: 4000,
             reimbursed: 4000 - outstanding,
@@ -32,7 +37,8 @@ struct AdvancesViewModelTests {
             participants: [
                 ParticipantResponse(
                     id: UUID(),
-                    name: "Marco",
+                    name: participantName,
+                    personKey: participantKey,
                     expectedAmount: 4000,
                     reimbursed: 4000 - outstanding,
                     outstanding: outstanding,
@@ -88,6 +94,7 @@ struct AdvancesViewModelTests {
             byPerson: [
                 PersonSummaryResponse(
                     name: "Marco",
+                    personKey: "marco",
                     currency: "EUR",
                     expected: 4000,
                     reimbursed: 4000 - personOutstanding,
@@ -103,12 +110,10 @@ struct AdvancesViewModelTests {
         )
     }
 
-    @Test func loadPublishesRowsAndResolvesTransactions() async throws {
+    @Test func loadPublishesRowsFromTheResponseWithNoPerAdvanceFetch() async throws {
         let client = FakeAPIClient()
         await client.setAdvances([Self.makeAdvance()])
         await client.setAdvancesSummary(Self.summary())
-        await client.setTransaction(Self.makeTransaction(), forID: Self.txID)
-        await client.setAccounts([Self.makeAccount()])
         let model = AdvancesViewModel(client: client)
 
         await model.load()
@@ -118,10 +123,30 @@ struct AdvancesViewModelTests {
             return
         }
         #expect(loaded.response.advances.map(\.id) == [Self.advanceID])
-        #expect(loaded.transactionsByID[Self.txID]?.description == "TEST MERCHANT 01")
-        #expect(loaded.accountsByID[Self.accountID] != nil)
+        // The row renders straight off the envelope — no `transaction(id:)`.
+        #expect(loaded.response.advances.first?.resolvedDescription == "TEST MERCHANT 01")
+        #expect(await client.transactionFetchCount == 0)
         #expect(loaded.response.summary.totals.first?.outstanding == 4000)
         #expect(loaded.hasUnattributedReimbursements == false)
+    }
+
+    @Test func advancesForPersonKeyNarrowsToThatPersonAndCurrency() async throws {
+        let client = FakeAPIClient()
+        await client.setAdvances([
+            Self.makeAdvance(id: UUID(), transactionID: UUID(), participantName: "Marco", participantKey: "marco"),
+            Self.makeAdvance(id: UUID(), transactionID: UUID(), participantName: "Giulia", participantKey: "giulia"),
+        ])
+        await client.setAdvancesSummary(Self.summary())
+        let model = AdvancesViewModel(client: client)
+        await model.load()
+
+        guard case .loaded(let loaded) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(loaded.advances(forPersonKey: "marco", currency: "EUR").count == 1)
+        #expect(loaded.advances(forPersonKey: "giulia", currency: "EUR").count == 1)
+        #expect(loaded.advances(forPersonKey: "marco", currency: "USD").isEmpty)
     }
 
     @Test func statusFilterReloadsWithTheFilterAndNarrowsRows() async throws {
@@ -175,20 +200,4 @@ struct AdvancesViewModelTests {
         #expect(loaded.hasUnattributedReimbursements)
     }
 
-    @Test func keepsRowWhoseTransactionDidNotResolve() async throws {
-        let client = FakeAPIClient()
-        await client.setAdvances([Self.makeAdvance()])
-        await client.setAdvancesSummary(Self.summary())
-        // No setTransaction — transaction(id:) throws, the row survives anyway.
-        let model = AdvancesViewModel(client: client)
-
-        await model.load()
-
-        guard case .loaded(let loaded) = model.state else {
-            Issue.record("expected .loaded")
-            return
-        }
-        #expect(loaded.response.advances.count == 1)
-        #expect(loaded.transactionsByID.isEmpty)
-    }
 }

@@ -67,10 +67,12 @@ struct EventPickerSheet: View {
         return Button {
             onSelect(event.id)
         } label: {
-            HStack {
+            HStack(spacing: 12) {
+                EventTile(emoji: event.emoji, color: event.color, diameter: 32)
                 Text(event.name)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")

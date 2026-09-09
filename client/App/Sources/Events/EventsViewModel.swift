@@ -73,11 +73,21 @@ final class EventsViewModel {
     /// ----------
     /// name:
     ///     The occasion's name.
+    /// emoji:
+    ///     Optional single emoji for the event's tile (ADR 0027).
+    /// color:
+    ///     Optional colour for the tile.
     /// startDate:
     ///     Optional start of the date range.
     /// endDate:
     ///     Optional end of the date range.
-    func createEvent(name: String, startDate: CalendarDate?, endDate: CalendarDate?) async {
+    func createEvent(
+        name: String,
+        emoji: String? = nil,
+        color: PaletteColor? = nil,
+        startDate: CalendarDate?,
+        endDate: CalendarDate?
+    ) async {
         guard !isUpdating else { return }
         isUpdating = true
         defer { isUpdating = false }
@@ -85,7 +95,10 @@ final class EventsViewModel {
 
         do {
             _ = try await client.createEvent(
-                CreateEventRequest(name: name, startDate: startDate, endDate: endDate)
+                CreateEventRequest(
+                    name: name, emoji: emoji, color: color,
+                    startDate: startDate, endDate: endDate
+                )
             )
             await load()
         } catch {

@@ -89,6 +89,22 @@ struct EventsViewModelTests {
         #expect(requests[0].endDate == nil)
     }
 
+    @Test func createEventForwardsEmojiAndColour() async throws {
+        let client = FakeAPIClient()
+        await client.setEvents([])
+        await client.setCreateEventResult(Self.makeEvent())
+        let model = EventsViewModel(client: client)
+        await model.load()
+
+        await model.createEvent(
+            name: "TEST TRIP 01", emoji: "🇹🇷", color: .teal, startDate: nil, endDate: nil
+        )
+
+        let requests = await client.createdEventRequests
+        #expect(requests.first?.emoji == "🇹🇷")
+        #expect(requests.first?.color == .teal)
+    }
+
     @Test func createEventFailureSetsActionFailureAndLeavesTheListUntouched() async throws {
         let client = FakeAPIClient()
         await client.setEvents([Self.makeEvent()])

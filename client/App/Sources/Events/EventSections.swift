@@ -32,49 +32,27 @@ struct EventSections: View {
     let onReopen: () -> Void
     /// Called after the destructive confirmation, to delete this event.
     let onDelete: () -> Void
+    /// The per-category breakdown card (ADR 0028), built by the caller from
+    /// `EventDetailViewModel.summary`. Slotted in right after the net-total
+    /// summary; `nil` (empty event, or the fetch failed) simply omits it.
+    var breakdownCard: AnyView?
+    /// The date-range "Movimenti suggeriti" card (ADR 0028), built by the
+    /// caller from `EventDetailViewModel.suggestions`. Slotted in after the
+    /// members list; `nil` (no date range, nothing matched) omits it.
+    var suggestionsCard: AnyView?
 
     @State private var isConfirmingDelete = false
 
     var body: some View {
-        summaryCard
+        if let breakdownCard {
+            breakdownCard
+        }
         membersCard
+        if let suggestionsCard {
+            suggestionsCard
+        }
         statusRow
         deleteRow
-    }
-
-    // MARK: Summary
-
-    private var summaryCard: some View {
-        Card {
-            EyebrowLabel(text: "Evento · totale netto")
-            if let currency = event.currency {
-                AmountText(amount: event.total, currencyCode: currency, kind: .net, font: Typography.heroFigure)
-            } else {
-                Text("Nessun movimento assegnato")
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkSecondary)
-            }
-            Text(memberCountLabel)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-            if let dateRangeLabel {
-                Text(dateRangeLabel)
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-            }
-        }
-    }
-
-    private var memberCountLabel: String {
-        event.memberCount == 1 ? "1 movimento" : "\(event.memberCount) movimenti"
-    }
-
-    private var dateRangeLabel: String? {
-        guard let start = event.startDate else { return nil }
-        guard let end = event.endDate, end != start else {
-            return TraccioCore.formatCalendarDate(start)
-        }
-        return "\(TraccioCore.formatCalendarDate(start)) – \(TraccioCore.formatCalendarDate(end))"
     }
 
     // MARK: Members

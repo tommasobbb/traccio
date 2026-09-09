@@ -379,19 +379,12 @@ struct AdvanceSections: View {
     }
 
     private var progressBar: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 5).fill(Palette.neutralFill)
-                RoundedRectangle(cornerRadius: 5).fill(Palette.income)
-                    .frame(width: geometry.size.width * progressFraction)
-            }
-        }
-        .frame(height: 8)
+        ProgressBar(fraction: progressFraction)
     }
 
-    private var progressFraction: CGFloat {
+    private var progressFraction: Double {
         guard advance.receivable > 0 else { return 0 }
-        return min(1, CGFloat(advance.reimbursed) / CGFloat(advance.receivable))
+        return Double(advance.reimbursed) / Double(advance.receivable)
     }
 
     // MARK: Unlink

@@ -18,6 +18,7 @@ struct AdvanceResponseTests {
             "by_person": [
               {
                 "name": "Marco",
+                "person_key": "marco",
                 "currency": "EUR",
                 "expected": 1800,
                 "reimbursed": 1800,
@@ -26,6 +27,7 @@ struct AdvanceResponseTests {
               },
               {
                 "name": "Giulia",
+                "person_key": "giulia",
                 "currency": "EUR",
                 "expected": 1800,
                 "reimbursed": 0,
@@ -41,6 +43,9 @@ struct AdvanceResponseTests {
             {
               "id": "11111111-1111-1111-1111-111111111111",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": "2026-08-18T09:30:00+00:00",
               "own_share": 1800,
               "receivable": 3600,
               "reimbursed": 1800,
@@ -52,6 +57,7 @@ struct AdvanceResponseTests {
                 {
                   "id": "33333333-3333-3333-3333-333333333333",
                   "name": "Marco",
+                  "person_key": "marco",
                   "expected_amount": 1800,
                   "reimbursed": 1800,
                   "outstanding": 0,
@@ -61,6 +67,7 @@ struct AdvanceResponseTests {
                 {
                   "id": "44444444-4444-4444-4444-444444444444",
                   "name": "Giulia",
+                  "person_key": "giulia",
                   "expected_amount": 1800,
                   "reimbursed": 0,
                   "outstanding": 1800,
@@ -85,6 +92,10 @@ struct AdvanceResponseTests {
         let advance = response.advances[0]
         #expect(advance.id == UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
         #expect(advance.transactionID == UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+        #expect(advance.description == "TEST MERCHANT 01")
+        #expect(advance.displayDescription == nil)
+        #expect(advance.resolvedDescription == "TEST MERCHANT 01")
+        #expect(advance.bookedAt != nil)
         #expect(advance.ownShare == 1800)
         #expect(advance.receivable == 3600)
         #expect(advance.reimbursed == 1800)
@@ -96,6 +107,7 @@ struct AdvanceResponseTests {
         let marco = advance.participants[0]
         #expect(marco.id == UUID(uuidString: "33333333-3333-3333-3333-333333333333"))
         #expect(marco.name == "Marco")
+        #expect(marco.personKey == "marco")
         #expect(marco.expectedAmount == 1800)
         #expect(marco.reimbursed == 1800)
         #expect(marco.outstanding == 0)
@@ -107,6 +119,9 @@ struct AdvanceResponseTests {
         #expect(response.summary.byPerson.count == 2)
         let marcoSummary = response.summary.byPerson[0]
         #expect(marcoSummary.name == "Marco")
+        #expect(marcoSummary.personKey == "marco")
+        // A participant on this advance ties back to its summary row on the key.
+        #expect(marcoSummary.personKey == marco.personKey)
         #expect(marcoSummary.currency == "EUR")
         #expect(marcoSummary.expected == 1800)
         #expect(marcoSummary.reimbursed == 1800)
@@ -159,6 +174,9 @@ struct AdvanceResponseTests {
             { "summary": { "by_person": [], "totals": [] }, "advances": [ {
               "id": "11111111-1111-1111-1111-111111111111",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": null,
               "own_share": 1000,
               "receivable": 0,
               "reimbursed": 0,
@@ -169,6 +187,7 @@ struct AdvanceResponseTests {
               "participants": [ {
                 "id": "33333333-3333-3333-3333-333333333333",
                 "name": "Marco",
+                "person_key": "marco",
                 "expected_amount": 1800,
                 "reimbursed": 0,
                 "outstanding": 1800,
@@ -188,6 +207,9 @@ struct AdvanceResponseTests {
             { "summary": { "by_person": [], "totals": [] }, "advances": [ {
               "id": "11111111-1111-1111-1111-111111111111",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": null,
               "own_share": 1000,
               "receivable": 0,
               "reimbursed": 0,
@@ -211,6 +233,9 @@ struct AdvanceResponseTests {
                 { "summary": { "by_person": [], "totals": [] }, "advances": [ {
                   "id": "11111111-1111-1111-1111-111111111111",
                   "transaction_id": "22222222-2222-2222-2222-222222222222",
+                  "description": "TEST MERCHANT 01",
+                  "display_description": "Cleaned up",
+                  "booked_at": "2026-08-18T09:30:00+00:00",
                   "own_share": 1000,
                   "receivable": 500,
                   "reimbursed": 500,
@@ -265,6 +290,55 @@ struct AdvanceResponseTests {
               "participants": [],
               "created_at": "2026-08-18T21:40:00+00:00"
             } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(AdvancesResponse.self, from: Data(json.utf8))
+        }
+    }
+
+    @Test func rejectsAdvanceMissingTransactionDescription() {
+        // `description` is required on the advance row now (it carries the
+        // transaction text so the list needs no per-id fetch).
+        let json = """
+            { "summary": { "by_person": [], "totals": [] }, "advances": [ {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "display_description": null,
+              "booked_at": null,
+              "own_share": 1000,
+              "receivable": 0,
+              "reimbursed": 0,
+              "outstanding": 0,
+              "excess": 0,
+              "currency": "EUR",
+              "status": "open",
+              "participants": [],
+              "created_at": "2026-08-18T21:40:00+00:00"
+            } ] }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(AdvancesResponse.self, from: Data(json.utf8))
+        }
+    }
+
+    @Test func rejectsPersonSummaryMissingPersonKey() {
+        let json = """
+            {
+              "summary": {
+                "by_person": [
+                  {
+                    "name": "Marco",
+                    "currency": "EUR",
+                    "expected": 1800,
+                    "reimbursed": 0,
+                    "outstanding": 1800,
+                    "advance_count": 1
+                  }
+                ],
+                "totals": []
+              },
+              "advances": []
+            }
             """
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(AdvancesResponse.self, from: Data(json.utf8))

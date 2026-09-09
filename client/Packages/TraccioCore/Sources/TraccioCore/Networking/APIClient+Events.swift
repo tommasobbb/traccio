@@ -35,6 +35,50 @@ extension APIClient {
         try await get("events/\(id.uuidString)")
     }
 
+    /// Suggested un-grouped transactions dated within an event's range
+    /// (ADR 0028).
+    ///
+    /// Mirrors `GET /events/{id}/suggestions`, `200` with the candidates —
+    /// un-grouped transactions whose date falls in `[start_date, end_date]`,
+    /// most recent first. Empty when the event has no full date range. The
+    /// client still assigns each one with an explicit `assignTransaction` —
+    /// this only *suggests*. A `404` if the event is unknown or not the
+    /// caller's.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The event whose date range drives the suggestion.
+    ///
+    /// Returns
+    /// -------
+    /// Candidate transactions (empty if none / no date range).
+    public func eventSuggestions(id: UUID) async throws -> [TransactionResponse] {
+        let envelope: TransactionsResponse = try await get(
+            "events/\(id.uuidString)/suggestions"
+        )
+        return envelope.transactions
+    }
+
+    /// Fetch an event's spending broken down by category (ADR 0028).
+    ///
+    /// Mirrors `GET /events/{id}/summary`, `200` with the breakdown. The
+    /// backend reuses its own dashboard aggregation over the event's
+    /// members, so `byCategory` is the same shape `dashboardSummary` returns.
+    /// A `404` if the event is unknown or not the caller's.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The event whose breakdown to fetch.
+    ///
+    /// Returns
+    /// -------
+    /// The decoded breakdown; all-zero and `currency: nil` for an empty event.
+    public func eventSummary(id: UUID) async throws -> EventSummaryResponse {
+        try await get("events/\(id.uuidString)/summary")
+    }
+
     /// List an event's member transactions, most recent first.
     ///
     /// Mirrors `GET /events/{id}/transactions`, `200` with the transactions —
@@ -70,6 +114,27 @@ extension APIClient {
     /// The created event.
     public func createEvent(_ request: CreateEventRequest) async throws -> EventResponse {
         try await post("events", body: request)
+    }
+
+    /// Edit an event's name, emoji, colour and date range (ADR 0027).
+    ///
+    /// Mirrors `POST /events/{id}`, `200` with the updated event. A full
+    /// replace of the editable fields — `status` and membership are
+    /// untouched. A `404` if the event is unknown or not the caller's; a
+    /// `422` if `emoji` is not a single emoji.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The event to edit.
+    /// request:
+    ///     The new name, emoji, colour and dates.
+    ///
+    /// Returns
+    /// -------
+    /// The updated event, with its refreshed derived total.
+    public func updateEvent(id: UUID, _ request: UpdateEventRequest) async throws -> EventResponse {
+        try await post("events/\(id.uuidString)", body: request)
     }
 
     /// Delete an event, keeping its member transactions.

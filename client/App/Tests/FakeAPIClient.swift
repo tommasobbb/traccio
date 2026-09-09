@@ -131,9 +131,17 @@ actor FakeAPIClient: APIClientProtocol {
     var eventToReturn: EventResponse?
     var eventError: Error?
     var eventTransactionsToReturn: [TransactionResponse] = []
+    var eventSummaryToReturn: EventSummaryResponse?
+    var eventSummaryError: Error?
+    private(set) var eventSummaryFetchCount = 0
+    var eventSuggestionsToReturn: [TransactionResponse] = []
+    var eventSuggestionsError: Error?
+    private(set) var eventSuggestionsFetchCount = 0
     var eventTransactionsError: Error?
     var createEventToReturn: EventResponse?
     var createEventError: Error?
+    var updateEventToReturn: EventResponse?
+    var updateEventError: Error?
     var deleteEventError: Error?
     var closeEventToReturn: EventResponse?
     var closeEventError: Error?
@@ -177,6 +185,7 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var eventFetchCount = 0
     private(set) var eventTransactionsFetchCount = 0
     private(set) var createdEventRequests: [CreateEventRequest] = []
+    private(set) var updatedEventRequests: [(id: UUID, request: UpdateEventRequest)] = []
     private(set) var deletedEventIDs: [UUID] = []
     private(set) var closeEventCallCount = 0
     private(set) var reopenEventCallCount = 0
@@ -630,12 +639,36 @@ actor FakeAPIClient: APIClientProtocol {
         eventTransactionsError = error
     }
 
+    func setEventSummary(_ summary: EventSummaryResponse) {
+        eventSummaryToReturn = summary
+    }
+
+    func setEventSummaryError(_ error: Error) {
+        eventSummaryError = error
+    }
+
+    func setEventSuggestions(_ transactions: [TransactionResponse]) {
+        eventSuggestionsToReturn = transactions
+    }
+
+    func setEventSuggestionsError(_ error: Error) {
+        eventSuggestionsError = error
+    }
+
     func setCreateEventResult(_ event: EventResponse) {
         createEventToReturn = event
     }
 
     func setCreateEventError(_ error: Error) {
         createEventError = error
+    }
+
+    func setUpdateEventResult(_ event: EventResponse) {
+        updateEventToReturn = event
+    }
+
+    func setUpdateEventError(_ error: Error) {
+        updateEventError = error
     }
 
     func setDeleteEventError(_ error: Error) {
@@ -1054,11 +1087,31 @@ actor FakeAPIClient: APIClientProtocol {
         return eventTransactionsToReturn
     }
 
+    func eventSummary(id: UUID) async throws -> EventSummaryResponse {
+        eventSummaryFetchCount += 1
+        if let eventSummaryError { throw eventSummaryError }
+        guard let eventSummaryToReturn else { throw NotConfigured() }
+        return eventSummaryToReturn
+    }
+
+    func eventSuggestions(id: UUID) async throws -> [TransactionResponse] {
+        eventSuggestionsFetchCount += 1
+        if let eventSuggestionsError { throw eventSuggestionsError }
+        return eventSuggestionsToReturn
+    }
+
     func createEvent(_ request: CreateEventRequest) async throws -> EventResponse {
         if let createEventError { throw createEventError }
         createdEventRequests.append(request)
         guard let createEventToReturn else { throw NotConfigured() }
         return createEventToReturn
+    }
+
+    func updateEvent(id: UUID, _ request: UpdateEventRequest) async throws -> EventResponse {
+        if let updateEventError { throw updateEventError }
+        updatedEventRequests.append((id, request))
+        guard let updateEventToReturn else { throw NotConfigured() }
+        return updateEventToReturn
     }
 
     func deleteEvent(id: UUID) async throws {

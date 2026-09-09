@@ -9,13 +9,16 @@ import Foundation
 /// together but a genuine typo does not. Every amount is a positive magnitude
 /// in `currency`, derived server-side — the client only renders it.
 public struct PersonSummaryResponse: Codable, Sendable, Equatable, Identifiable {
-    /// Stable within one response: the server already emits one row per
-    /// `(folded name, currency)`, and `name` here is that row's first-seen
-    /// spelling with whitespace collapsed, so this is unique. Not a server
-    /// id — there is no person entity — just a key for a SwiftUI `ForEach`.
-    public var id: String { "\(name.lowercased())|\(currency)" }
+    /// Stable within one response: the server emits one row per
+    /// `(personKey, currency)`, so this pair is unique. Not a server id —
+    /// there is no person entity — just a key for a SwiftUI `ForEach`.
+    public var id: String { "\(personKey)|\(currency)" }
     /// Display spelling — the first one seen for this person.
     public let name: String
+    /// The grouping key this row was rolled up under (server-computed). A
+    /// `ParticipantResponse` whose `personKey` equals this — in the same
+    /// `currency` — belongs to this person (ADR 0026).
+    public let personKey: String
     /// ISO 4217 code of every amount here.
     public let currency: String
     /// Sum of this person's expected repayments (cents).
@@ -30,6 +33,7 @@ public struct PersonSummaryResponse: Codable, Sendable, Equatable, Identifiable 
 
     private enum CodingKeys: String, CodingKey {
         case name
+        case personKey = "person_key"
         case currency
         case expected
         case reimbursed
@@ -39,6 +43,7 @@ public struct PersonSummaryResponse: Codable, Sendable, Equatable, Identifiable 
 
     public init(
         name: String,
+        personKey: String,
         currency: String,
         expected: Int,
         reimbursed: Int,
@@ -46,6 +51,7 @@ public struct PersonSummaryResponse: Codable, Sendable, Equatable, Identifiable 
         advanceCount: Int
     ) {
         self.name = name
+        self.personKey = personKey
         self.currency = currency
         self.expected = expected
         self.reimbursed = reimbursed

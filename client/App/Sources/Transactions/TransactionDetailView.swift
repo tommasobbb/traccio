@@ -532,11 +532,11 @@ struct TransactionDetailView: View {
                     NavigationLink {
                         EventDetailView(event: event, client: client)
                     } label: {
-                        eventRow(name: event.name, isNavigable: true)
+                        eventRow(event: event, isNavigable: true)
                     }
                     .buttonStyle(.plain)
                 } else {
-                    eventRow(name: "Evento", isNavigable: false)
+                    eventRow(event: nil, isNavigable: false)
                 }
                 Divider().overlay(Palette.separator)
                 eventActionRow(title: "Cambia evento") { isPresentingEventPickerSheet = true }
@@ -562,11 +562,15 @@ struct TransactionDetailView: View {
         .disabled(model.isUpdating)
     }
 
-    private func eventRow(name: String, isNavigable: Bool) -> some View {
-        HStack {
-            Text(name)
+    private func eventRow(event: EventResponse?, isNavigable: Bool) -> some View {
+        HStack(spacing: 12) {
+            if let event {
+                EventTile(emoji: event.emoji, color: event.color, diameter: 32)
+            }
+            Text(event?.name ?? "Evento")
                 .font(Typography.body.weight(.semibold))
                 .foregroundStyle(isNavigable ? Palette.ink : Palette.inkSecondary)
+                .lineLimit(1)
             Spacer()
             if isNavigable {
                 Image(systemName: "chevron.right")

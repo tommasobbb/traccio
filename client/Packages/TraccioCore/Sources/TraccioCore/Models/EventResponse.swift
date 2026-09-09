@@ -17,6 +17,12 @@ public struct EventResponse: Codable, Sendable, Identifiable, Equatable {
     public let id: UUID
     /// The occasion's name, e.g. "Turkey 2026".
     public let name: String
+    /// Optional single emoji for the event's tile (ADR 0027). `nil` before
+    /// the user picks one.
+    public let emoji: String?
+    /// Optional colour for the event's tile, from the shared vocabulary
+    /// (ADR 0017). `nil` falls back to the neutral default.
+    public let color: PaletteColor?
     /// Optional start of the date range — a hint used to suggest membership,
     /// never a rule that assigns it.
     public let startDate: CalendarDate?
@@ -38,6 +44,8 @@ public struct EventResponse: Codable, Sendable, Identifiable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case id
         case name
+        case emoji
+        case color
         case startDate = "start_date"
         case endDate = "end_date"
         case status
@@ -50,6 +58,8 @@ public struct EventResponse: Codable, Sendable, Identifiable, Equatable {
     public init(
         id: UUID,
         name: String,
+        emoji: String? = nil,
+        color: PaletteColor? = nil,
         startDate: CalendarDate?,
         endDate: CalendarDate?,
         status: EventStatus,
@@ -60,6 +70,8 @@ public struct EventResponse: Codable, Sendable, Identifiable, Equatable {
     ) {
         self.id = id
         self.name = name
+        self.emoji = emoji
+        self.color = color
         self.startDate = startDate
         self.endDate = endDate
         self.status = status

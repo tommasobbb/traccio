@@ -111,7 +111,10 @@ public protocol APIClientProtocol: Sendable {
     func events() async throws -> [EventResponse]
     func event(id: UUID) async throws -> EventResponse
     func eventTransactions(id: UUID) async throws -> [TransactionResponse]
+    func eventSummary(id: UUID) async throws -> EventSummaryResponse
+    func eventSuggestions(id: UUID) async throws -> [TransactionResponse]
     func createEvent(_ request: CreateEventRequest) async throws -> EventResponse
+    func updateEvent(id: UUID, _ request: UpdateEventRequest) async throws -> EventResponse
     func deleteEvent(id: UUID) async throws
     func closeEvent(id: UUID) async throws -> EventResponse
     func reopenEvent(id: UUID) async throws -> EventResponse

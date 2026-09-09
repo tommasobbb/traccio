@@ -9,6 +9,7 @@ struct EventRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            EventTile(emoji: event.emoji, color: event.color, diameter: 36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.name)
                     .font(Typography.body.weight(.semibold))

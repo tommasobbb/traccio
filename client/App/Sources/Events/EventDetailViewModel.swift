@@ -35,6 +35,19 @@ final class EventDetailViewModel {
     private(set) var event: EventResponse
     /// The event's member transactions, most recent first.
     private(set) var members: [TransactionResponse] = []
+    /// The event's spending broken down by category (ADR 0028), best-effort:
+    /// a failure leaves it `nil` and the breakdown card simply doesn't show.
+    /// Reloaded after any membership change, since the totals move with it.
+    private(set) var summary: EventSummaryResponse?
+    /// Which donut segment is selected, if any — reuses the dashboard's own
+    /// selection type so `DonutChart` takes it unchanged.
+    private(set) var selectedCategory: DashboardViewModel.DonutSelection = .none
+    /// Which category roots are expanded in the breakdown list.
+    private(set) var expandedCategoryRootIDs: Set<UUID> = []
+    /// Un-grouped transactions dated within the event's range (ADR 0028) —
+    /// *suggestions*, never auto-assigned. Empty when the event has no full
+    /// date range, or the fetch failed, or none match.
+    private(set) var suggestions: [TransactionResponse] = []
     /// Best-effort candidates for "Aggiungi movimenti": a page of the
     /// caller's transactions, fetched once and filtered against `members` by
     /// `availableCandidates`. Failure leaves it empty; the sheet degrades to
@@ -120,6 +133,54 @@ final class EventDetailViewModel {
         }
     }
 
+    /// Fetch this event's per-category breakdown (ADR 0028).
+    ///
+    /// Best-effort, like `loadMembers()`: a failure leaves `summary` as it
+    /// was, so the breakdown card just doesn't render.
+    func loadSummary() async {
+        if let fetched = try? await client.eventSummary(id: event.id) {
+            summary = fetched
+        }
+    }
+
+    /// Fetch date-range membership suggestions (ADR 0028).
+    ///
+    /// Best-effort: a failure or an event without a full date range leaves
+    /// `suggestions` empty and the suggestions card simply doesn't show.
+    func loadSuggestions() async {
+        if let fetched = try? await client.eventSuggestions(id: event.id) {
+            suggestions = fetched
+        }
+    }
+
+    /// Assign every current suggestion to this event, then refresh.
+    ///
+    /// Each is still an explicit assign server-side; this is only the
+    /// "Aggiungi tutti" convenience over doing them one by one. Stops on the
+    /// first failure and surfaces it, same as a single assign.
+    func assignAllSuggestions() async {
+        let ids = suggestions.map(\.id)
+        for id in ids {
+            await assign(transactionID: id)
+            if actionFailure != nil { return }
+        }
+    }
+
+    /// Select (or, if already selected, deselect) a donut segment.
+    func selectCategory(_ categoryID: UUID?) {
+        let target = DashboardViewModel.DonutSelection.category(categoryID)
+        selectedCategory = selectedCategory == target ? .none : target
+    }
+
+    /// Toggle a category root's expansion in the breakdown list.
+    func toggleCategoryExpanded(_ rootID: UUID) {
+        if expandedCategoryRootIDs.contains(rootID) {
+            expandedCategoryRootIDs.remove(rootID)
+        } else {
+            expandedCategoryRootIDs.insert(rootID)
+        }
+    }
+
     /// Fetch assignment candidates if none were loaded yet.
     ///
     /// A no-op when `candidates` is already non-empty.
@@ -157,6 +218,47 @@ final class EventDetailViewModel {
     func unassign(transactionID: UUID) async {
         await performMembershipUpdate { client in
             try await client.unassignTransaction(eventID: self.event.id, transactionID: transactionID)
+        }
+    }
+
+    /// Edit this event's name, emoji, colour and date range (ADR 0027).
+    ///
+    /// A full replace: whatever the editor holds is sent, and a `nil` clears.
+    /// On success the refreshed event is published and `onEventChange` fires
+    /// so the Eventi list row updates in place.
+    ///
+    /// Parameters
+    /// ----------
+    /// name:
+    ///     The new name.
+    /// emoji / color:
+    ///     The new emoji / colour, or `nil` to clear.
+    /// startDate / endDate:
+    ///     The new date-range hint, or `nil` to clear either bound.
+    func updateEvent(
+        name: String,
+        emoji: String?,
+        color: PaletteColor?,
+        startDate: CalendarDate?,
+        endDate: CalendarDate?
+    ) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        actionFailure = nil
+
+        do {
+            let updated = try await client.updateEvent(
+                id: event.id,
+                UpdateEventRequest(
+                    name: name, emoji: emoji, color: color,
+                    startDate: startDate, endDate: endDate
+                )
+            )
+            event = updated
+            onEventChange(updated)
+        } catch {
+            actionFailure = .generic
         }
     }
 
@@ -245,6 +347,10 @@ final class EventDetailViewModel {
             event = updatedEvent
             members = updatedMembers
             onEventChange(updatedEvent)
+            // The per-category totals and the suggestion set both move with
+            // the member set.
+            await loadSummary()
+            await loadSuggestions()
         } catch APIError.badStatus(let code) {
             actionFailure = mapFailure(code)
         } catch {

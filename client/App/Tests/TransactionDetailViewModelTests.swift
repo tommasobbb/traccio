@@ -73,7 +73,9 @@ struct TransactionDetailViewModelTests {
 
     private static func makeAdvance(ownShare: Int = 1800) -> AdvanceResponse {
         AdvanceResponse(
-            id: advanceID, transactionID: transactionID, ownShare: ownShare, receivable: 3600,
+            id: advanceID, transactionID: transactionID,
+            description: "TEST MERCHANT 01", displayDescription: nil, bookedAt: nil,
+            ownShare: ownShare, receivable: 3600,
             reimbursed: 0, outstanding: 3600, excess: 0, currency: "EUR", status: .open,
             participants: [], createdAt: Date(timeIntervalSince1970: 1_755_000_000)
         )

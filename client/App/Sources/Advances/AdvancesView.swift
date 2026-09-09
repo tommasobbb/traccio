@@ -59,8 +59,7 @@ struct AdvancesView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 300)
+            ListSkeleton()
         case .loaded(let loaded):
             loadedContent(loaded)
         case .failed:
@@ -90,6 +89,7 @@ struct AdvancesView: View {
                 if !summary.byPerson.isEmpty {
                     peopleCard(
                         summary.byPerson,
+                        loaded: loaded,
                         showsGapNote: loaded.hasUnattributedReimbursements
                     )
                 }
@@ -137,33 +137,27 @@ struct AdvancesView: View {
         }
     }
 
-    private func peopleCard(_ people: [PersonSummaryResponse], showsGapNote: Bool) -> some View {
+    private func peopleCard(
+        _ people: [PersonSummaryResponse], loaded: AdvancesViewModel.Loaded, showsGapNote: Bool
+    ) -> some View {
         Card {
             EyebrowLabel(text: "Chi ti deve")
             VStack(spacing: 0) {
                 ForEach(people) { person in
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(person.name)
-                                .font(Typography.body)
-                                .foregroundStyle(Palette.ink)
-                                .lineLimit(1)
-                            Text(countLabel(person.advanceCount, one: "anticipo", many: "anticipi"))
-                                .font(Typography.caption)
-                                .foregroundStyle(Palette.inkTertiary)
-                        }
-                        Spacer()
-                        if person.outstanding == 0 {
-                            Badge(text: "Saldato", style: .neutral)
-                        } else {
-                            AmountText(
-                                amount: person.outstanding,
-                                currencyCode: person.currency,
-                                kind: .income
-                            )
-                        }
+                    NavigationLink {
+                        PersonDetailView(
+                            person: person,
+                            advances: loaded.advances(
+                                forPersonKey: person.personKey, currency: person.currency
+                            ),
+                            client: client,
+                            onNeedsReload: { Task { await model.load() } },
+                            onDashboardStale: { freshness.markStale([.dashboard, .transactions]) }
+                        )
+                    } label: {
+                        personRow(person)
                     }
-                    .padding(.vertical, 9)
+                    .buttonStyle(.pressableRow)
                     if person.id != people.last?.id {
                         Divider().overlay(Palette.separator)
                     }
@@ -177,6 +171,36 @@ struct AdvancesView: View {
                 .foregroundStyle(Palette.inkSecondary)
             }
         }
+    }
+
+    private func personRow(_ person: PersonSummaryResponse) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(person.name)
+                    .font(Typography.body)
+                    .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                Text(countLabel(person.advanceCount, one: "anticipo", many: "anticipi"))
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+            }
+            Spacer()
+            if person.outstanding == 0 {
+                Badge(text: "Saldato", style: .neutral)
+            } else {
+                AmountText(
+                    amount: person.outstanding,
+                    currencyCode: person.currency,
+                    kind: .income
+                )
+            }
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Palette.inkQuaternary)
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Advances list
@@ -199,7 +223,7 @@ struct AdvancesView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(loaded.response.advances) { advance in
-                        advanceRowLink(advance, loaded)
+                        advanceRowLink(advance)
                         if advance.id != loaded.response.advances.last?.id {
                             Divider().overlay(Palette.separator)
                         }
@@ -224,38 +248,27 @@ struct AdvancesView: View {
         }
     }
 
-    @ViewBuilder
-    private func advanceRowLink(
-        _ advance: AdvanceResponse, _ loaded: AdvancesViewModel.Loaded
-    ) -> some View {
-        if let transaction = loaded.transactionsByID[advance.transactionID] {
-            NavigationLink {
-                TransactionDetailView(
-                    transaction: transaction,
-                    categories: [],
-                    advance: advance,
-                    account: loaded.accountsByID[transaction.accountID],
-                    client: client,
-                    onUpdate: { _ in Task { await model.load() } },
-                    onAdvanceChange: { _ in Task { await model.load() } },
-                    onDashboardStale: { freshness.markStale([.dashboard, .transactions]) },
-                    onDelete: { _ in Task { await model.load() } }
-                )
-            } label: {
-                advanceRow(advance, transaction: transaction)
-            }
-            .buttonStyle(.plain)
-        } else {
-            advanceRow(advance, transaction: nil)
+    private func advanceRowLink(_ advance: AdvanceResponse) -> some View {
+        NavigationLink {
+            TransactionDetailLoader(
+                transactionID: advance.transactionID,
+                advance: advance,
+                client: client,
+                onUpdate: { _ in Task { await model.load() } },
+                onAdvanceChange: { _ in Task { await model.load() } },
+                onDashboardStale: { freshness.markStale([.dashboard, .transactions]) },
+                onDelete: { _ in Task { await model.load() } }
+            )
+        } label: {
+            advanceRow(advance)
         }
+        .buttonStyle(.pressableRow)
     }
 
-    private func advanceRow(
-        _ advance: AdvanceResponse, transaction: TransactionResponse?
-    ) -> some View {
+    private func advanceRow(_ advance: AdvanceResponse) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(transaction?.displayDescription ?? transaction?.description ?? "Anticipo")
+                Text(advance.resolvedDescription)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
@@ -266,7 +279,7 @@ struct AdvancesView: View {
                             .foregroundStyle(Palette.inkTertiary)
                             .lineLimit(1)
                     }
-                    if let bookedAt = transaction?.bookedAt {
+                    if let bookedAt = advance.bookedAt {
                         Text(bookedAt.formatted(.dateTime.day().month(.abbreviated)))
                             .font(Typography.caption)
                             .foregroundStyle(Palette.inkQuaternary)

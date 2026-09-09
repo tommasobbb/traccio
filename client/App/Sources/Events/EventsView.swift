@@ -43,12 +43,15 @@ struct EventsView: View {
         .refreshable { await model.load() }
         .task { await model.load() }
         .sheet(isPresented: $isPresentingCreateSheet) {
-            CreateEventSheet(
+            EventEditorSheet(
                 isSaving: model.isUpdating,
                 failureMessage: model.actionFailure != nil ? failureMessage : nil,
-                onSave: { name, startDate, endDate in
+                onSave: { name, emoji, color, startDate, endDate in
                     Task {
-                        await model.createEvent(name: name, startDate: startDate, endDate: endDate)
+                        await model.createEvent(
+                            name: name, emoji: emoji, color: color,
+                            startDate: startDate, endDate: endDate
+                        )
                         if model.actionFailure == nil {
                             isPresentingCreateSheet = false
                         }
@@ -73,14 +76,25 @@ struct EventsView: View {
     private var content: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, minHeight: 300)
+            ListSkeleton()
         case .loaded(let events):
             VStack(alignment: .leading, spacing: 16) {
                 if model.actionFailure != nil {
                     Banner(message: failureMessage)
                 }
-                eventsCard(events)
+                if events.isEmpty {
+                    emptyCard
+                } else {
+                    let active = events.filter { $0.status != .closed }
+                    let closed = events.filter { $0.status == .closed }
+                    if !active.isEmpty {
+                        eventListCard(active, eyebrow: "Eventi")
+                    }
+                    if !closed.isEmpty {
+                        eventListCard(closed, eyebrow: "Chiusi")
+                    }
+                    PillButton(title: "Nuovo evento", action: { isPresentingCreateSheet = true })
+                }
             }
         case .failed:
             EmptyState(
@@ -98,18 +112,31 @@ struct EventsView: View {
         "Non è stato possibile completare l'operazione. Riprova."
     }
 
-    private func eventsCard(_ events: [EventResponse]) -> some View {
+    private var emptyCard: some View {
         Card {
             EyebrowLabel(text: "Eventi")
-            if events.isEmpty {
-                Text(
-                    "Non hai ancora nessun evento. Crea un evento per raggruppare i movimenti di un'occasione — un viaggio, una ristrutturazione — e vedere quanto è costata davvero."
-                )
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
-            } else {
+            Text(
+                "Non hai ancora nessun evento. Crea un evento per raggruppare i movimenti di un'occasione — un viaggio, una ristrutturazione — e vedere quanto è costata davvero."
+            )
+            .font(Typography.caption)
+            .foregroundStyle(Palette.inkSecondary)
+            Divider().overlay(Palette.separator)
+            PillButton(title: "Nuovo evento", action: { isPresentingCreateSheet = true })
+        }
+    }
+
+    /// One section of events as a single `.resting` card — the day-card idiom
+    /// from Movimenti (ADR 0008's tone revision): one border, one shadow,
+    /// hairline dividers between self-padded rows.
+    private func eventListCard(_ events: [EventResponse], eyebrow: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            EyebrowLabel(text: eyebrow)
+            Card(elevation: .resting, contentPadding: 0) {
                 VStack(spacing: 0) {
-                    ForEach(events) { event in
+                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                        if index > 0 {
+                            Divider().overlay(Palette.separatorSubtle).padding(.leading, 16)
+                        }
                         NavigationLink {
                             EventDetailView(
                                 event: event,
@@ -119,16 +146,13 @@ struct EventsView: View {
                             )
                         } label: {
                             EventRow(event: event)
+                                .padding(.horizontal, Spacing.cardPadding)
+                                .padding(.vertical, 6)
                         }
-                        .buttonStyle(.plain)
-                        if event.id != events.last?.id {
-                            Divider().overlay(Palette.separator)
-                        }
+                        .buttonStyle(.pressableRow)
                     }
                 }
             }
-            Divider().overlay(Palette.separator)
-            PillButton(title: "Nuovo evento", action: { isPresentingCreateSheet = true })
         }
     }
 }

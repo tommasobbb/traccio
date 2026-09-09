@@ -960,7 +960,7 @@ struct APIClientTests {
     private static let advancesEnvelope = """
         { "summary": {
             "by_person": [
-              { "name": "Marco", "currency": "EUR", "expected": 3600,
+              { "name": "Marco", "person_key": "marco", "currency": "EUR", "expected": 3600,
                 "reimbursed": 0, "outstanding": 3600, "advance_count": 1 }
             ],
             "totals": [
@@ -971,6 +971,9 @@ struct APIClientTests {
           {
             "id": "11111111-1111-1111-1111-111111111111",
             "transaction_id": "22222222-2222-2222-2222-222222222222",
+            "description": "TEST MERCHANT 01",
+            "display_description": null,
+            "booked_at": "2026-08-18T09:30:00+00:00",
             "own_share": 1800,
             "receivable": 3600,
             "reimbursed": 0,
@@ -1022,6 +1025,9 @@ struct APIClientTests {
             {
               "id": "\(advanceID.uuidString)",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": "2026-08-18T09:30:00+00:00",
               "own_share": 1800,
               "receivable": 3600,
               "reimbursed": 1800,
@@ -1065,6 +1071,9 @@ struct APIClientTests {
                 {
                   "id": "11111111-1111-1111-1111-111111111111",
                   "transaction_id": "\(transactionID.uuidString)",
+                  "description": "TEST MERCHANT 01",
+                  "display_description": null,
+                  "booked_at": "2026-08-18T09:30:00+00:00",
                   "own_share": 1800,
                   "receivable": 3600,
                   "reimbursed": 0,
@@ -1139,6 +1148,9 @@ struct APIClientTests {
             {
               "id": "\(advanceID.uuidString)",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": "2026-08-18T09:30:00+00:00",
               "own_share": 1800,
               "receivable": 3600,
               "reimbursed": 0,
@@ -1169,6 +1181,9 @@ struct APIClientTests {
             {
               "id": "\(advanceID.uuidString)",
               "transaction_id": "22222222-2222-2222-2222-222222222222",
+              "description": "TEST MERCHANT 01",
+              "display_description": null,
+              "booked_at": "2026-08-18T09:30:00+00:00",
               "own_share": 1800,
               "receivable": 3600,
               "reimbursed": 0,
@@ -1802,6 +1817,46 @@ struct APIClientTests {
             CreateEventRequest(name: "TEST TRIP 01", startDate: CalendarDate(year: 2026, month: 8, day: 1))
         )
         #expect(event.name == "TEST TRIP 01")
+    }
+
+    @Test func updateEventPostsTheRequestAndDecodesTheUpdatedEvent() async throws {
+        let eventID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/events/\(eventID.uuidString)")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            #expect(body?["name"] as? String == "TEST TRIP 02")
+            #expect(body?["emoji"] as? String == "🏠")
+            #expect(body?["color"] as? String == "teal")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                {
+                  "id": "\(eventID.uuidString)",
+                  "name": "TEST TRIP 02",
+                  "emoji": "🏠",
+                  "color": "teal",
+                  "start_date": null,
+                  "end_date": null,
+                  "status": "active",
+                  "member_count": 0,
+                  "total": 0,
+                  "currency": null,
+                  "created_at": "2026-08-18T21:40:00+00:00"
+                }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let event = try await client.updateEvent(
+            id: eventID,
+            UpdateEventRequest(name: "TEST TRIP 02", emoji: "🏠", color: .teal)
+        )
+        #expect(event.name == "TEST TRIP 02")
+        #expect(event.emoji == "🏠")
+        #expect(event.color == .teal)
     }
 
     @Test func deleteEventIssuesADeleteToTheEventEndpoint() async throws {

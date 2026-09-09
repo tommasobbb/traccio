@@ -57,6 +57,85 @@ struct EventDetailViewModelTests {
         #expect(model.members[0].id == Self.memberID)
     }
 
+    @Test func loadSummaryPublishesTheBreakdownAndSelectionTogglesToggle() async throws {
+        let client = FakeAPIClient()
+        let rootID = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+        await client.setEventSummary(
+            EventSummaryResponse(
+                spending: 5000, income: 0, net: -5000, currency: "EUR",
+                byCategory: [
+                    CategoryGroupSummaryResponse(
+                        categoryID: rootID, categoryName: "Trasporti", color: .blue, icon: nil,
+                        spending: 5000, income: 0, transactionCount: 1,
+                        directSpending: 5000, directIncome: 0, directTransactionCount: 1
+                    )
+                ]
+            )
+        )
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.loadSummary()
+        #expect(model.summary?.spending == 5000)
+
+        model.selectCategory(rootID)
+        #expect(model.selectedCategory == .category(rootID))
+        model.selectCategory(rootID)  // tapping again clears it
+        #expect(model.selectedCategory == .none)
+
+        model.toggleCategoryExpanded(rootID)
+        #expect(model.expandedCategoryRootIDs.contains(rootID))
+        model.toggleCategoryExpanded(rootID)
+        #expect(model.expandedCategoryRootIDs.isEmpty)
+    }
+
+    @Test func loadSummaryFailureLeavesSummaryNil() async throws {
+        let client = FakeAPIClient()
+        await client.setEventSummaryError(FakeAPIError())
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.loadSummary()
+
+        #expect(model.summary == nil)
+    }
+
+    @Test func loadSuggestionsPublishesTheDateRangeCandidates() async throws {
+        let client = FakeAPIClient()
+        let candidate = Self.makeTransaction(id: UUID(), amount: -2500)
+        await client.setEventSuggestions([candidate])
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.loadSuggestions()
+
+        #expect(model.suggestions.map(\.id) == [candidate.id])
+    }
+
+    @Test func loadSuggestionsFailureLeavesSuggestionsEmpty() async throws {
+        let client = FakeAPIClient()
+        await client.setEventSuggestionsError(FakeAPIError())
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.loadSuggestions()
+
+        #expect(model.suggestions.isEmpty)
+    }
+
+    @Test func assignAllSuggestionsAssignsEachOne() async throws {
+        let client = FakeAPIClient()
+        let a = Self.makeTransaction(id: UUID(), amount: -2500)
+        let b = Self.makeTransaction(id: UUID(), amount: -1500)
+        await client.setEventSuggestions([a, b])
+        await client.setEvent(Self.makeEvent(memberCount: 2))
+        await client.setEventTransactions([])
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+        await model.loadSuggestions()
+
+        await model.assignAllSuggestions()
+
+        #expect(model.actionFailure == nil)
+        let assigned = await client.assignedEventMembers.map(\.transactionID)
+        #expect(Set(assigned) == Set([a.id, b.id]))
+    }
+
     @Test func loadMembersFailureLeavesMembersEmpty() async throws {
         let client = FakeAPIClient()
         await client.setEventTransactionsError(FakeAPIError())
@@ -206,6 +285,46 @@ struct EventDetailViewModelTests {
 
         #expect(model.event.status == .closed)
         #expect(changedEvents.map(\.status) == [.closed])
+    }
+
+    @Test func updateEventPublishesTheRefreshedEventAndNotifiesOnEventChange() async throws {
+        let client = FakeAPIClient()
+        let edited = EventResponse(
+            id: Self.eventID, name: "TEST TRIP 02", emoji: "🏠", color: .teal,
+            startDate: nil, endDate: nil, status: .active,
+            memberCount: 0, total: 0, currency: nil,
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        await client.setUpdateEventResult(edited)
+        var changedEvents: [EventResponse] = []
+        let model = EventDetailViewModel(
+            event: Self.makeEvent(), client: client, onEventChange: { changedEvents.append($0) }
+        )
+
+        await model.updateEvent(
+            name: "TEST TRIP 02", emoji: "🏠", color: .teal, startDate: nil, endDate: nil
+        )
+
+        #expect(model.event.name == "TEST TRIP 02")
+        #expect(model.event.emoji == "🏠")
+        #expect(model.event.color == .teal)
+        #expect(changedEvents.map(\.name) == ["TEST TRIP 02"])
+        let sent = await client.updatedEventRequests
+        #expect(sent.first?.id == Self.eventID)
+        #expect(sent.first?.request.emoji == "🏠")
+    }
+
+    @Test func updateEventFailureSetsActionFailureAndLeavesTheEventUntouched() async throws {
+        let client = FakeAPIClient()
+        await client.setUpdateEventError(FakeAPIError())
+        let model = EventDetailViewModel(event: Self.makeEvent(), client: client)
+
+        await model.updateEvent(
+            name: "HIJACKED", emoji: nil, color: nil, startDate: nil, endDate: nil
+        )
+
+        #expect(model.actionFailure == .generic)
+        #expect(model.event.name == "TEST TRIP 01")
     }
 
     @Test func reopenEventPublishesTheUpdatedStatus() async throws {

@@ -8,29 +8,34 @@ import TraccioCore
 /// Orchestration only, no derivation (`client/CLAUDE.md`): every figure —
 /// per-advance `outstanding`, per-person roll-ups, per-currency totals — is
 /// computed server-side (`domain/advances.py`, ADR 0026). This view model
-/// calls `GET /advances`, resolves each advance's transaction and account so
-/// a row can say *what* the advance was for, and publishes the result.
-/// Nothing here logs an advance: participant names are user-typed
-/// (`.claude/rules/data-safety.md`).
+/// calls `GET /advances` and publishes the result; each row now carries its
+/// own transaction description and date (`AdvanceResponse`), so there is no
+/// per-advance fetch — a row navigates through `TransactionDetailLoader`,
+/// which resolves the transaction only when opened. Nothing here logs an
+/// advance: participant names are user-typed (`.claude/rules/data-safety.md`).
 @MainActor
 @Observable
 final class AdvancesViewModel {
     /// Everything a loaded screen renders.
     struct Loaded {
         /// The `GET /advances` envelope: rows (filtered by `statusFilter`)
-        /// plus the summary (always over every advance).
+        /// plus the summary (always over every in-window advance).
         var response: AdvancesResponse
-        /// Advance's `transactionID` → its transaction, best-effort. A row
-        /// whose transaction did not resolve still shows, just without a
-        /// description/date.
-        var transactionsByID: [UUID: TransactionResponse]
-        /// Account id → account, for the detail screen's header.
-        var accountsByID: [UUID: AccountResponse]
         /// `true` when some currency's per-person outstanding sum is below
         /// its per-currency total — i.e. reimbursements exist that are not
         /// attributed to any participant (ADR 0026). Precomputed here so the
         /// view stays a pure renderer.
         var hasUnattributedReimbursements: Bool
+
+        /// Every advance this person (`personKey` + `currency`) appears on,
+        /// in list order — the drill-down's row source, filtered here so the
+        /// view never re-folds a name (ADR 0026).
+        func advances(forPersonKey personKey: String, currency: String) -> [AdvanceResponse] {
+            response.advances.filter { advance in
+                advance.currency == currency
+                    && advance.participants.contains { $0.personKey == personKey }
+            }
+        }
     }
 
     /// What the view should show right now.
@@ -62,9 +67,9 @@ final class AdvancesViewModel {
         self.client = client
     }
 
-    /// Fetch the advances, their transactions/accounts, and publish the
-    /// outcome. Keeps the current screen visible while refetching (e.g.
-    /// after a filter change) rather than flashing a spinner.
+    /// Fetch the advances and publish the outcome. Keeps the current screen
+    /// visible while refetching (e.g. after a filter change) rather than
+    /// flashing a spinner.
     func load() async {
         switch state {
         case .idle, .failed:
@@ -73,30 +78,12 @@ final class AdvancesViewModel {
             break
         }
 
-        let client = self.client
         let filter = statusFilter
         do {
             let response = try await client.advances(status: filter)
-            async let accountsResult = client.accounts()
-
-            let transactionsByID = await withTaskGroup(of: TransactionResponse?.self) { group in
-                for advance in response.advances {
-                    let id = advance.transactionID
-                    group.addTask { try? await client.transaction(id: id) }
-                }
-                var resolved: [UUID: TransactionResponse] = [:]
-                for await transaction in group {
-                    if let transaction { resolved[transaction.id] = transaction }
-                }
-                return resolved
-            }
-
-            let accounts = (try? await accountsResult) ?? []
             state = .loaded(
                 Loaded(
                     response: response,
-                    transactionsByID: transactionsByID,
-                    accountsByID: Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0) }),
                     hasUnattributedReimbursements: Self.hasUnattributedReimbursements(response.summary)
                 )
             )

@@ -18,6 +18,12 @@ public struct ParticipantResponse: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     /// The participant's plain name.
     public let name: String
+    /// The cross-advance grouping key for `name` (server-computed,
+    /// `domain/advances.py::person_key`). Equal, character for character, to
+    /// the `personKey` of this person's `PersonSummaryResponse` row — the
+    /// client ties the two together on this string rather than re-folding
+    /// the name itself (ADR 0026).
+    public let personKey: String
     /// What this participant is expected to pay back, a positive magnitude
     /// in the advance's currency (cents). A reconciliation hint, never
     /// validated against reimbursements.
@@ -37,6 +43,7 @@ public struct ParticipantResponse: Codable, Sendable, Equatable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id
         case name
+        case personKey = "person_key"
         case expectedAmount = "expected_amount"
         case reimbursed
         case outstanding
@@ -47,6 +54,7 @@ public struct ParticipantResponse: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: UUID,
         name: String,
+        personKey: String,
         expectedAmount: Int,
         reimbursed: Int,
         outstanding: Int,
@@ -55,6 +63,7 @@ public struct ParticipantResponse: Codable, Sendable, Equatable, Identifiable {
     ) {
         self.id = id
         self.name = name
+        self.personKey = personKey
         self.expectedAmount = expectedAmount
         self.reimbursed = reimbursed
         self.outstanding = outstanding
