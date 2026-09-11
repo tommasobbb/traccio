@@ -215,6 +215,31 @@ struct AccountsResponseTests {
         #expect(response.accounts[0].displayName == "Contanti")
     }
 
+    @Test func decodesManualAccountWithVoucherKind() throws {
+        // A meal-voucher account (ADR 0029) — same manual shape as `.cash`.
+        let json = """
+            { "accounts": [ {
+              "id": "55555555-5555-5555-5555-555555555555",
+              "connection_id": null,
+              "source": "manual",
+              "kind": "voucher",
+              "currency": "EUR",
+              "name": null,
+              "alias": "Buoni Pasto",
+              "display_name": "Buoni Pasto",
+              "color": null,
+              "icon": null,
+              "created_at": "2026-08-27T12:00:00+00:00"
+            } ] }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            AccountsResponse.self,
+            from: Data(json.utf8)
+        )
+        #expect(response.accounts[0].kind == .voucher)
+        #expect(response.accounts[0].displayName == "Buoni Pasto")
+    }
+
     @Test func decodesAccountWithMissingConnectionIDKeyAsNil() throws {
         let json = """
             { "accounts": [ {

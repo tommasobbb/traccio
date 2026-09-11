@@ -297,6 +297,58 @@ struct DashboardSummaryResponseTests {
         #expect(response.converted == nil)
         #expect(response.conversionUnavailable == "rates_unavailable")
     }
+
+    // MARK: meal vouchers (ADR 0029)
+
+    @Test func decodesAMissingMealVouchersKeyAsEmpty() throws {
+        // `Self.envelope` predates this field — a fixture (or a cached
+        // response) without it must still decode, as if the setting were
+        // off.
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(Self.envelope.utf8)
+        )
+        #expect(response.mealVouchers.isEmpty)
+    }
+
+    @Test func decodesAMealVouchersBreakoutWithItsCategorySplit() throws {
+        let json = """
+            {
+              "currencies": [],
+              "meal_vouchers": [
+                {
+                  "currency": "EUR", "spending": 1200, "income": 0, "transaction_count": 1,
+                  "by_category": [
+                    {
+                      "category_id": "8f14e45f-ceea-467e-a63c-58ba7d6c1a9e",
+                      "category_name": "Groceries", "color": "green", "icon": null,
+                      "spending": 1200, "income": 0, "transaction_count": 1,
+                      "direct_spending": 1200, "direct_income": 0, "direct_transaction_count": 1,
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+            """
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.mealVouchers.count == 1)
+        let vouchers = response.mealVouchers[0]
+        #expect(vouchers.currency == "EUR")
+        #expect(vouchers.spending == 1200)
+        #expect(vouchers.transactionCount == 1)
+        #expect(vouchers.byCategory.count == 1)
+        #expect(vouchers.byCategory[0].categoryName == "Groceries")
+    }
+
+    @Test func decodesAnExplicitlyEmptyMealVouchersArray() throws {
+        let json = #"{ "currencies": [], "meal_vouchers": [] }"#
+        let response = try TraccioCore.jsonDecoder().decode(
+            DashboardSummaryResponse.self, from: Data(json.utf8)
+        )
+        #expect(response.mealVouchers.isEmpty)
+    }
 }
 
 /// Tests for `[CurrencySummaryResponse].primary()` — a presentation-only

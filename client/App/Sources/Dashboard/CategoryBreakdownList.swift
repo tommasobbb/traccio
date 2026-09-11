@@ -14,13 +14,21 @@ import TraccioCore
 /// silently includes more than the row shows, it stays a plain, non-tappable
 /// row (see `DashboardViewModel.drillThroughFilter(categoryID:)`'s own doc
 /// comment).
+///
+/// `onDrillThrough` itself is `nil`-able for the same reason, at the whole
+/// list's level: `MealVoucherCard` (ADR 0029) has no per-account filter on
+/// `GET /transactions` to drill through to, so every one of its rows must
+/// stay non-tappable, not just the remainder ones. Passing a real closure
+/// there would make `BreakdownRowView` wrap the row in a `Button` and add
+/// `.isButton` — a tappable affordance whose tap does nothing, which is
+/// worse than no affordance at all.
 struct CategoryBreakdownList: View {
     let rows: [CategoryBreakdownRow]
     let currency: String
     let totalSpending: Int
     let expandedRootIDs: Set<UUID>
     let onToggleExpanded: (UUID) -> Void
-    let onDrillThrough: (UUID?) -> Void
+    var onDrillThrough: ((UUID?) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,7 +43,8 @@ struct CategoryBreakdownList: View {
                             onToggleExpanded(categoryID)
                         }
                     },
-                    onDrillThrough: row.isDirectRemainder ? nil : { onDrillThrough(row.categoryID) }
+                    onDrillThrough: row.isDirectRemainder
+                        ? nil : onDrillThrough.map { drill in { drill(row.categoryID) } }
                 )
                 .padding(.vertical, 8)
                 if row.id != rows.last?.id {

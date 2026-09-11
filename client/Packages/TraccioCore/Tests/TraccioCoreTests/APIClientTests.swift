@@ -202,6 +202,50 @@ struct APIClientTests {
         #expect(account.icon == nil)
     }
 
+    @Test func setAccountKindPostsTheNewKindAndDecodesIt() async throws {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            #expect(request.httpMethod == "POST")
+            #expect(request.url?.path == "/accounts/\(accountID.uuidString)/kind")
+            let bodyData = request.httpBody ?? readAll(request.httpBodyStream)
+            let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: String]
+            #expect(body?["kind"] == "voucher")
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil
+            )!
+            let envelope = """
+                { "id": "\(accountID.uuidString)",
+                  "connection_id": null,
+                  "source": "manual",
+                  "kind": "voucher", "currency": "EUR", "name": null,
+                  "alias": "Buoni Pasto", "display_name": "Buoni Pasto",
+                  "color": null, "icon": null,
+                  "created_at": "2026-08-25T09:30:00+00:00" }
+                """
+            return (response, Data(envelope.utf8))
+        }
+
+        let account = try await client.setAccountKind(id: accountID, kind: .voucher)
+        #expect(account.kind == .voucher)
+    }
+
+    @Test func setAccountKindThrowsBadStatusOnASyncedAccount() async {
+        let accountID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let client = Self.makeClient { request in
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 409, httpVersion: nil, headerFields: nil
+            )!
+            return (response, Data(#"{"detail": "account_not_manual"}"#.utf8))
+        }
+
+        await #expect {
+            try await client.setAccountKind(id: accountID, kind: .voucher)
+        } throws: { error in
+            guard case APIError.badStatus(409) = error else { return false }
+            return true
+        }
+    }
+
     @Test func authorizationHeaderIsSentWhenAnApiTokenIsConfigured() async throws {
         let client = Self.makeClient(apiToken: "TEST-TOKEN-01") { request in
             #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer TEST-TOKEN-01")

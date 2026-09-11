@@ -193,6 +193,7 @@ struct DashboardView: View {
                 otherCurrenciesCard(summary.currencies, combined: true)
             }
             breakdownCards(converted.summary)
+            mealVoucherCards(summary.mealVouchers)
         } else if let primary = summary.currencies.primary() {
             heroCard(primary)
             heroFootnote(primary)
@@ -208,6 +209,7 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             breakdownCards(primary)
+            mealVoucherCards(summary.mealVouchers)
         } else {
             Card {
                 EyebrowLabel(text: "Speso questo periodo")
@@ -231,6 +233,17 @@ struct DashboardView: View {
         AccountBreakdownCard(
             accounts: summary.byAccount, currency: summary.currency, totalSpending: summary.spending
         )
+    }
+
+    /// One `MealVoucherCard` per currency with voucher spend (ADR 0029) —
+    /// independent of `breakdownCards`' primary/converted choice, since the
+    /// breakout is never FX-converted and a voucher account's currency need
+    /// not match whichever currency the hero figure happens to feature.
+    /// Empty (renders nothing) when the setting is off or there was no
+    /// voucher spend this period.
+    @ViewBuilder
+    private func mealVoucherCards(_ mealVouchers: [MealVoucherSummaryResponse]) -> some View {
+        ForEach(mealVouchers, id: \.currency) { MealVoucherCard(summary: $0) }
     }
 
     /// The "convertito in EUR ai tassi BCE · dd/MM" line under the converted

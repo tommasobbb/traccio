@@ -62,6 +62,28 @@ extension APIClient {
         )
     }
 
+    /// Reclassify a manual account's kind (ADR 0029) — e.g. converting an
+    /// existing "Buoni Pasto" account created `.cash` to `.voucher`.
+    ///
+    /// Mirrors `POST /accounts/{id}/kind`, `200` with the account under its
+    /// new kind. A `404` if the account is unknown or not the caller's; a
+    /// `409 account_not_manual` if it is a synced account — a synced
+    /// account's kind is provider-derived.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to reclassify.
+    /// kind:
+    ///     The new kind.
+    ///
+    /// Returns
+    /// -------
+    /// The account under its new kind.
+    public func setAccountKind(id: UUID, kind: AccountKind) async throws -> AccountResponse {
+        try await post("accounts/\(id.uuidString)/kind", body: SetAccountKindRequest(kind: kind))
+    }
+
     /// Create a manual account — one with no bank behind it (ADR 0020).
     ///
     /// Mirrors `POST /accounts`, `201` with the created account (its

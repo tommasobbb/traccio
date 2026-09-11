@@ -62,6 +62,11 @@ final class AccountsViewModel {
     /// a failure to fetch accounts still leaves the consent cards worth
     /// rendering — same reasoning as `TransactionsViewModel.categoryNames`.
     private(set) var accounts: [AccountResponse] = []
+    /// Whether the user's meal-vouchers setting is on (ADR 0029) — gates the
+    /// "Buoni pasto" kind in the manual-account create/edit pickers.
+    /// Best-effort, same posture as `accounts`: a failed fetch just leaves
+    /// this `false`, hiding the kind rather than failing the whole screen.
+    private(set) var mealVouchersEnabled = false
     /// Connection ids with a sync currently in flight, so a row can show a
     /// spinner. Unlike `TransactionsViewModel.isLoadingMore`, this must be
     /// observable — the view renders per-connection state from it.
@@ -126,6 +131,7 @@ final class AccountsViewModel {
     func load() async {
         state = .loading
         async let accountsResult = client.accounts()
+        async let settingsResult = client.settings()
 
         do {
             let connections = try await client.connections()
@@ -138,6 +144,9 @@ final class AccountsViewModel {
 
         if let fetchedAccounts = try? await accountsResult {
             accounts = fetchedAccounts
+        }
+        if let fetchedSettings = try? await settingsResult {
+            mealVouchersEnabled = fetchedSettings.mealVouchersEnabled
         }
     }
 
@@ -299,6 +308,23 @@ final class AccountsViewModel {
     func setAccountAppearance(id: UUID, color: PaletteColor?, icon: AccountIcon?) async {
         await performAccountUpdate { client in
             try await client.setAccountAppearance(id: id, color: color, icon: icon)
+        }
+    }
+
+    /// Reclassify a manual account's kind (ADR 0029) — e.g. Contanti →
+    /// Buoni pasto. A `409` (the editor only offers this for a manual
+    /// account, so in practice unreachable) collapses to `.generic`, same as
+    /// any other failure.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The account to reclassify.
+    /// kind:
+    ///     The new kind.
+    func setAccountKind(id: UUID, kind: AccountKind) async {
+        await performAccountUpdate { client in
+            try await client.setAccountKind(id: id, kind: kind)
         }
     }
 

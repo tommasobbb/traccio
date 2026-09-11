@@ -17,4 +17,10 @@ public enum AccountKind: String, Codable, Sendable, CaseIterable {
     /// A hand-tracked cash float (e.g. "Contanti"). Only ever a manual
     /// account — there is no bank feed for cash (ADR 0020).
     case cash
+    /// A meal-voucher / benefit balance (e.g. a Satispay "Buoni Pasto"
+    /// account, ADR 0023). Only ever a manual account, same reasoning as
+    /// `.cash`. When the user's meal-vouchers setting is on (ADR 0029), a
+    /// voucher-kind account's spending is broken out of the dashboard's
+    /// headline totals instead of being folded into them.
+    case voucher
 }

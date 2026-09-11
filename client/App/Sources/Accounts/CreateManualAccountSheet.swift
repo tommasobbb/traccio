@@ -11,6 +11,10 @@ struct CreateManualAccountSheet: View {
     var isSaving: Bool
     /// A message describing why the last attempt failed, or `nil`.
     var failureMessage: String?
+    /// Whether the user's meal-vouchers setting is on (ADR 0029) — gates
+    /// offering `.voucher` in the "Tipo" picker; off by default for most
+    /// users, so the kind stays hidden until they turn the feature on.
+    var mealVouchersEnabled: Bool = false
     /// Called with the trimmed alias, kind, uppercased currency, and the
     /// chosen colour/icon (`nil` when left on the neutral default) once the
     /// user submits.
@@ -28,6 +32,13 @@ struct CreateManualAccountSheet: View {
     /// or "card" is unusual enough not to clutter the picker's head.
     private static let offeredKinds: [AccountKind] = [.cash, .wallet, .savings, .current, .card]
 
+    /// `offeredKinds`, plus `.voucher` when the setting is on. A computed
+    /// property, not a stored one — `offeredKinds` stays a fixed list a
+    /// `Picker` binding can key off directly at rest.
+    private var kindOptions: [AccountKind] {
+        mealVouchersEnabled ? Self.offeredKinds + [.voucher] : Self.offeredKinds
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -44,12 +55,24 @@ struct CreateManualAccountSheet: View {
                     }
                     Card {
                         EyebrowLabel(text: "Tipo")
+                        // `.menu`, not `.segmented`: six candidates with the
+                        // meal-vouchers kind offered no longer fit a
+                        // segmented control on an iPhone-width sheet.
                         Picker("Tipo", selection: $kind) {
-                            ForEach(Self.offeredKinds, id: \.self) { candidate in
+                            ForEach(kindOptions, id: \.self) { candidate in
                                 Text(Self.label(for: candidate)).tag(candidate)
                             }
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.menu)
+                        .onChange(of: kind) { _, newKind in
+                            // A light nudge, not a hard rule: only replaces
+                            // the icon while it is still at the sheet's
+                            // neutral default, never a colour/icon the user
+                            // already customized.
+                            if newKind == .voucher, icon == Self.defaultIcon {
+                                icon = .voucher
+                            }
+                        }
                     }
                     Card {
                         EyebrowLabel(text: "Valuta")
@@ -95,6 +118,7 @@ struct CreateManualAccountSheet: View {
         case .savings: "Risparmio"
         case .current: "Corrente"
         case .card: "Carta"
+        case .voucher: "Buoni pasto"
         }
     }
 

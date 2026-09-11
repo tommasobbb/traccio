@@ -9,40 +9,68 @@ struct AccountEditorSheet: View {
     var isSaving: Bool
     /// A message describing why the last attempt failed, or `nil`.
     var failureMessage: String?
+    /// Whether the user's meal-vouchers setting is on (ADR 0029) — gates
+    /// offering `.voucher` in the "Tipo" picker, same as
+    /// `CreateManualAccountSheet`.
+    var mealVouchersEnabled: Bool = false
     /// Called with the trimmed alias (`nil` to clear it), the chosen colour,
-    /// and the chosen icon once the user submits.
-    let onSave: (String?, PaletteColor, AccountIcon) -> Void
+    /// the chosen icon, and the chosen kind once the user submits. `kind` is
+    /// `nil` when the account is synced (no "Tipo" picker shown at all) or
+    /// unchanged from `account.kind` — the caller only issues
+    /// `POST /accounts/{id}/kind` when it is non-`nil` (ADR 0029: a synced
+    /// account's kind is provider-derived, and a no-op write is pointless).
+    let onSave: (String?, PaletteColor, AccountIcon, AccountKind?) -> Void
     /// Called when the user confirms deleting the account. `nil` for a synced
     /// account — only a manual one (ADR 0020) can be deleted here — so the
-    /// affordance is simply absent otherwise.
+    /// affordance is simply absent otherwise. Also gates whether the "Tipo"
+    /// picker shows at all: a synced account's kind is provider-derived.
     let onDelete: (() -> Void)?
     let onCancel: () -> Void
 
     @State private var aliasText: String
     @State private var color: PaletteColor
     @State private var icon: AccountIcon
+    @State private var kind: AccountKind
     @State private var isConfirmingDelete = false
 
     private static let defaultColor = PaletteColor.slate
     private static let defaultIcon = AccountIcon.bank
+    /// The kinds worth offering, same curated head as
+    /// `CreateManualAccountSheet.offeredKinds` — kept in sync there rather
+    /// than shared, the same "overkill for two call sites" call this file's
+    /// colour/icon grids already make.
+    private static let offeredKinds: [AccountKind] = [.cash, .wallet, .savings, .current, .card]
 
     init(
         account: AccountResponse,
         isSaving: Bool,
         failureMessage: String?,
-        onSave: @escaping (String?, PaletteColor, AccountIcon) -> Void,
+        mealVouchersEnabled: Bool = false,
+        onSave: @escaping (String?, PaletteColor, AccountIcon, AccountKind?) -> Void,
         onDelete: (() -> Void)? = nil,
         onCancel: @escaping () -> Void
     ) {
         self.account = account
         self.isSaving = isSaving
         self.failureMessage = failureMessage
+        self.mealVouchersEnabled = mealVouchersEnabled
         self.onSave = onSave
         self.onDelete = onDelete
         self.onCancel = onCancel
         _aliasText = State(initialValue: account.alias ?? "")
         _color = State(initialValue: account.color ?? Self.defaultColor)
         _icon = State(initialValue: account.icon ?? Self.defaultIcon)
+        _kind = State(initialValue: account.kind)
+    }
+
+    /// `offeredKinds` plus the account's own current kind (so an unusual
+    /// existing kind, e.g. a manual "current", stays selectable) and
+    /// `.voucher` when the setting is on. Order-preserving, no duplicates.
+    private var kindOptions: [AccountKind] {
+        var options = Self.offeredKinds
+        if !options.contains(account.kind) { options.append(account.kind) }
+        if mealVouchersEnabled, !options.contains(.voucher) { options.append(.voucher) }
+        return options
     }
 
     var body: some View {
@@ -58,6 +86,25 @@ struct AccountEditorSheet: View {
                             .font(Typography.statFigure)
                             .foregroundStyle(Palette.ink)
                             .autocorrectionDisabled()
+                    }
+                    if onDelete != nil {
+                        Card {
+                            EyebrowLabel(text: "Tipo")
+                            Picker("Tipo", selection: $kind) {
+                                ForEach(kindOptions, id: \.self) { candidate in
+                                    Text(Self.label(for: candidate)).tag(candidate)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .onChange(of: kind) { _, newKind in
+                                // Same light nudge as `CreateManualAccountSheet`:
+                                // only replaces the icon while it is still at
+                                // the account's own starting icon.
+                                if newKind == .voucher, icon == (account.icon ?? Self.defaultIcon) {
+                                    icon = .voucher
+                                }
+                            }
+                        }
                     }
                     Card {
                         EyebrowLabel(text: "Colore")
@@ -158,7 +205,18 @@ struct AccountEditorSheet: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private static func label(for kind: AccountKind) -> String {
+        switch kind {
+        case .cash: "Contanti"
+        case .wallet: "Wallet"
+        case .savings: "Risparmio"
+        case .current: "Corrente"
+        case .card: "Carta"
+        case .voucher: "Buoni pasto"
+        }
+    }
+
     private func submit() {
-        onSave(trimmedAlias, color, icon)
+        onSave(trimmedAlias, color, icon, kind == account.kind ? nil : kind)
     }
 }

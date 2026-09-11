@@ -18,6 +18,7 @@ extension AccountResponse {
         case .savings: return .savings
         case .card: return .card
         case .current: return .bank
+        case .voucher: return .voucher
         }
     }
 

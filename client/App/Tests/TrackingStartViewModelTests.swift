@@ -21,7 +21,7 @@ struct TrackingStartViewModelTests {
     @Test func loadPublishesTheCurrentValueAndTheSuggestion() async {
         let client = FakeAPIClient()
         await client.setSettings(
-            TrackingStartResponse(trackingStartDate: CalendarDate(year: 2026, month: 6, day: 1))
+            SettingsResponse(trackingStartDate: CalendarDate(year: 2026, month: 6, day: 1), mealVouchersEnabled: false)
         )
         await client.setTrackingStartSuggestion(Self.suggestion())
         let model = TrackingStartViewModel(client: client)
@@ -48,7 +48,7 @@ struct TrackingStartViewModelTests {
 
     @Test func saveForwardsTheDateUpdatesCurrentAndNotifies() async {
         let client = FakeAPIClient()
-        await client.setSettings(TrackingStartResponse(trackingStartDate: nil))
+        await client.setSettings(SettingsResponse(trackingStartDate: nil, mealVouchersEnabled: false))
         await client.setTrackingStartSuggestion(Self.suggestion())
         var changed = 0
         let model = TrackingStartViewModel(client: client, onChanged: { changed += 1 })
@@ -69,7 +69,7 @@ struct TrackingStartViewModelTests {
     @Test func saveNilClearsTheFloor() async {
         let client = FakeAPIClient()
         await client.setSettings(
-            TrackingStartResponse(trackingStartDate: CalendarDate(year: 2026, month: 6, day: 1))
+            SettingsResponse(trackingStartDate: CalendarDate(year: 2026, month: 6, day: 1), mealVouchersEnabled: false)
         )
         await client.setTrackingStartSuggestion(Self.suggestion())
         let model = TrackingStartViewModel(client: client)
@@ -88,7 +88,7 @@ struct TrackingStartViewModelTests {
     @Test func aSaveFailureSetsSaveFailedWithoutChangingCurrent() async {
         let client = FakeAPIClient()
         let existing = CalendarDate(year: 2026, month: 6, day: 1)
-        await client.setSettings(TrackingStartResponse(trackingStartDate: existing))
+        await client.setSettings(SettingsResponse(trackingStartDate: existing, mealVouchersEnabled: false))
         await client.setTrackingStartSuggestion(Self.suggestion())
         let model = TrackingStartViewModel(client: client)
         await model.load()

@@ -40,11 +40,20 @@ struct AccountsView: View {
                 account: account,
                 isSaving: model.isSavingAccount,
                 failureMessage: model.accountActionFailure != nil ? accountFailureMessage : nil,
-                onSave: { alias, color, icon in
+                mealVouchersEnabled: model.mealVouchersEnabled,
+                onSave: { alias, color, icon, kind in
                     Task {
                         await model.renameAccount(id: account.id, alias: alias)
                         if model.accountActionFailure == nil {
                             await model.setAccountAppearance(id: account.id, color: color, icon: icon)
+                        }
+                        // A separate write (`POST /accounts/{id}/kind`,
+                        // ADR 0029): only issued when the picker actually
+                        // changed something, never for a synced account
+                        // (`AccountEditorSheet` only offers the picker when
+                        // `onDelete` is non-`nil`, i.e. manual).
+                        if model.accountActionFailure == nil, let kind {
+                            await model.setAccountKind(id: account.id, kind: kind)
                         }
                         if model.accountActionFailure == nil {
                             editingAccount = nil
@@ -70,6 +79,7 @@ struct AccountsView: View {
             CreateManualAccountSheet(
                 isSaving: model.isSavingAccount,
                 failureMessage: model.accountActionFailure != nil ? accountFailureMessage : nil,
+                mealVouchersEnabled: model.mealVouchersEnabled,
                 onCreate: { alias, kind, currency, color, icon in
                     Task {
                         if await model.createManualAccount(

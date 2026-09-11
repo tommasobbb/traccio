@@ -154,7 +154,7 @@ struct DashboardViewModelTests {
     @Test func canGoToPreviousFloorsAtTheEarliestMovementWhenNoTrackingStartIsSet() async throws {
         func modelAt(_ period: CalendarPeriod) async -> DashboardViewModel {
             let client = FakeAPIClient()
-            await client.setSettings(TrackingStartResponse(trackingStartDate: nil))
+            await client.setSettings(SettingsResponse(trackingStartDate: nil, mealVouchersEnabled: false))
             await client.setTrackingStartSuggestion(
                 TrackingStartSuggestionResponse(
                     suggestion: nil, constrainingAccountID: nil,

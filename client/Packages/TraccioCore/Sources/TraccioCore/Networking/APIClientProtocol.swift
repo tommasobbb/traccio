@@ -18,6 +18,7 @@ public protocol APIClientProtocol: Sendable {
     func setAccountAppearance(
         id: UUID, color: PaletteColor?, icon: AccountIcon?
     ) async throws -> AccountResponse
+    func setAccountKind(id: UUID, kind: AccountKind) async throws -> AccountResponse
     func createManualAccount(
         alias: String, kind: AccountKind, currency: String,
         color: PaletteColor?, icon: AccountIcon?
@@ -51,9 +52,10 @@ public protocol APIClientProtocol: Sendable {
     func importPreview(_ request: ImportPreviewRequest) async throws -> ImportPreviewResponse
     func importCommit(_ request: ImportPreviewRequest) async throws -> ImportCommitResponse
 
-    // MARK: - Settings / tracking start
-    func settings() async throws -> TrackingStartResponse
-    func setTrackingStart(_ date: CalendarDate?) async throws -> TrackingStartResponse
+    // MARK: - Settings / tracking start / meal vouchers
+    func settings() async throws -> SettingsResponse
+    func setTrackingStart(_ date: CalendarDate?) async throws -> SettingsResponse
+    func setMealVouchersEnabled(_ enabled: Bool) async throws -> SettingsResponse
     func trackingStartSuggestion() async throws -> TrackingStartSuggestionResponse
 
     // MARK: - Categories

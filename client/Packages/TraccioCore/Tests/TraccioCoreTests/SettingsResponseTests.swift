@@ -3,32 +3,53 @@ import Testing
 
 @testable import TraccioCore
 
-/// Decoding/encoding tests for the tracking-start payloads (ADR 0024).
+/// Decoding/encoding tests for the settings payloads (ADR 0024, ADR 0029).
 ///
 /// Fixtures are synthetic (`.claude/rules/data-safety.md`). They pin the wire
 /// contract, including the negative cases `client/CLAUDE.md` requires.
-struct TrackingStartResponseTests {
+struct SettingsResponseTests {
     @Test func decodesASetDate() throws {
         let response = try TraccioCore.jsonDecoder().decode(
-            TrackingStartResponse.self,
-            from: Data(#"{ "tracking_start_date": "2026-07-01" }"#.utf8)
+            SettingsResponse.self,
+            from: Data(#"{ "tracking_start_date": "2026-07-01", "meal_vouchers_enabled": false }"#.utf8)
         )
         #expect(response.trackingStartDate == CalendarDate(year: 2026, month: 7, day: 1))
+        #expect(response.mealVouchersEnabled == false)
     }
 
     @Test func decodesAnExplicitNullAsNoFloor() throws {
         let response = try TraccioCore.jsonDecoder().decode(
-            TrackingStartResponse.self, from: Data(#"{ "tracking_start_date": null }"#.utf8)
+            SettingsResponse.self,
+            from: Data(#"{ "tracking_start_date": null, "meal_vouchers_enabled": false }"#.utf8)
         )
         #expect(response.trackingStartDate == nil)
+    }
+
+    @Test func decodesMealVouchersEnabledTrue() throws {
+        let response = try TraccioCore.jsonDecoder().decode(
+            SettingsResponse.self,
+            from: Data(#"{ "tracking_start_date": null, "meal_vouchers_enabled": true }"#.utf8)
+        )
+        #expect(response.mealVouchersEnabled == true)
     }
 
     @Test func rejectsADateTimeStringInThatField() {
         // A calendar date must not silently accept a full timestamp.
         #expect(throws: DecodingError.self) {
             try TraccioCore.jsonDecoder().decode(
-                TrackingStartResponse.self,
-                from: Data(#"{ "tracking_start_date": "2026-07-01T00:00:00Z" }"#.utf8)
+                SettingsResponse.self,
+                from: Data(
+                    #"{ "tracking_start_date": "2026-07-01T00:00:00Z", "meal_vouchers_enabled": false }"#
+                        .utf8
+                )
+            )
+        }
+    }
+
+    @Test func rejectsAMissingMealVouchersEnabledKey() {
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(
+                SettingsResponse.self, from: Data(#"{ "tracking_start_date": null }"#.utf8)
             )
         }
     }
@@ -46,6 +67,12 @@ struct TrackingStartResponseTests {
         )
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         #expect(object?["tracking_start_date"] as? String == "2026-07-01")
+    }
+
+    @Test func setMealVouchersRequestEncodesTheBoolean() throws {
+        let data = try JSONEncoder().encode(SetMealVouchersRequest(enabled: true))
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        #expect(object?["enabled"] as? Bool == true)
     }
 
     @Test func decodesASuggestionWithEveryAccountAndTheConstrainingId() throws {

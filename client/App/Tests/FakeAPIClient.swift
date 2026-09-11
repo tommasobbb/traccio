@@ -38,8 +38,10 @@ actor FakeAPIClient: APIClientProtocol {
     var importPreviewError: Error?
     var importCommitToReturn: ImportCommitResponse?
     var importCommitError: Error?
-    var settingsToReturn = TrackingStartResponse(trackingStartDate: nil)
+    var settingsToReturn = SettingsResponse(trackingStartDate: nil, mealVouchersEnabled: false)
     var settingsError: Error?
+    var accountKindToReturn: AccountResponse?
+    var accountKindError: Error?
     var trackingStartSuggestionToReturn: TrackingStartSuggestionResponse?
     var trackingStartSuggestionError: Error?
     var healthToReturn = HealthResponse(status: "ok", version: "test")
@@ -193,6 +195,7 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var unassignedEventMembers: [RecordedEventMember] = []
     private(set) var renamedAccounts: [RecordedAccountRename] = []
     private(set) var accountAppearanceUpdates: [RecordedAccountAppearance] = []
+    private(set) var accountKindUpdates: [RecordedAccountKind] = []
     private(set) var createdManualAccounts: [RecordedManualAccountCreate] = []
     private(set) var deletedAccountIDs: [UUID] = []
     private(set) var createdManualTransactions: [RecordedManualTransactionCreate] = []
@@ -201,6 +204,7 @@ actor FakeAPIClient: APIClientProtocol {
     private(set) var importPreviewRequests: [ImportPreviewRequest] = []
     private(set) var importCommitRequests: [ImportPreviewRequest] = []
     private(set) var setTrackingStartValues: [CalendarDate?] = []
+    private(set) var setMealVouchersEnabledValues: [Bool] = []
     /// Every `country` passed to `institutions(country:)`, in call order.
     private(set) var receivedInstitutionsCountries: [String] = []
     /// Every `startConnection(institution:country:)` call, for asserting
@@ -253,6 +257,12 @@ actor FakeAPIClient: APIClientProtocol {
         let id: UUID
         let color: PaletteColor?
         let icon: AccountIcon?
+    }
+
+    /// A recorded `setAccountKind(id:kind:)` call (ADR 0029).
+    struct RecordedAccountKind: Equatable {
+        let id: UUID
+        let kind: AccountKind
     }
 
     /// A recorded `createManualAccount(...)` call (ADR 0020).
@@ -334,6 +344,14 @@ actor FakeAPIClient: APIClientProtocol {
 
     func setAccountAppearanceError(_ error: Error) {
         accountAppearanceError = error
+    }
+
+    func setAccountKindResult(_ account: AccountResponse) {
+        accountKindToReturn = account
+    }
+
+    func setAccountKindError(_ error: Error) {
+        accountKindError = error
     }
 
     func setCreateManualAccountResult(_ account: AccountResponse) {
@@ -523,7 +541,7 @@ actor FakeAPIClient: APIClientProtocol {
         importCommitError = error
     }
 
-    func setSettings(_ response: TrackingStartResponse) {
+    func setSettings(_ response: SettingsResponse) {
         settingsToReturn = response
     }
 
@@ -738,6 +756,13 @@ actor FakeAPIClient: APIClientProtocol {
         return accountAppearanceToReturn
     }
 
+    func setAccountKind(id: UUID, kind: AccountKind) async throws -> AccountResponse {
+        if let accountKindError { throw accountKindError }
+        accountKindUpdates.append(RecordedAccountKind(id: id, kind: kind))
+        guard let accountKindToReturn else { throw NotConfigured() }
+        return accountKindToReturn
+    }
+
     func createManualAccount(
         alias: String, kind: AccountKind, currency: String,
         color: PaletteColor?, icon: AccountIcon?
@@ -811,15 +836,26 @@ actor FakeAPIClient: APIClientProtocol {
         return importCommitToReturn
     }
 
-    func settings() async throws -> TrackingStartResponse {
+    func settings() async throws -> SettingsResponse {
         if let settingsError { throw settingsError }
         return settingsToReturn
     }
 
-    func setTrackingStart(_ date: CalendarDate?) async throws -> TrackingStartResponse {
+    func setTrackingStart(_ date: CalendarDate?) async throws -> SettingsResponse {
         if let settingsError { throw settingsError }
         setTrackingStartValues.append(date)
-        settingsToReturn = TrackingStartResponse(trackingStartDate: date)
+        settingsToReturn = SettingsResponse(
+            trackingStartDate: date, mealVouchersEnabled: settingsToReturn.mealVouchersEnabled
+        )
+        return settingsToReturn
+    }
+
+    func setMealVouchersEnabled(_ enabled: Bool) async throws -> SettingsResponse {
+        if let settingsError { throw settingsError }
+        setMealVouchersEnabledValues.append(enabled)
+        settingsToReturn = SettingsResponse(
+            trackingStartDate: settingsToReturn.trackingStartDate, mealVouchersEnabled: enabled
+        )
         return settingsToReturn
     }
 

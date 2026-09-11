@@ -95,21 +95,47 @@ public struct DashboardSummaryResponse: Codable, Sendable, Equatable {
     /// value-free reason (`"rates_unavailable"` / `"missing_rate"`). `nil`
     /// when the feature is off or conversion succeeded.
     public let conversionUnavailable: String?
+    /// Meal-voucher spending, broken out of `currencies`/`converted`
+    /// (ADR 0029). Empty when the user's meal-vouchers setting is off, they
+    /// have no voucher-kind account, or nothing was spent from one this
+    /// period. Never FX-converted.
+    public let mealVouchers: [MealVoucherSummaryResponse]
 
     private enum CodingKeys: String, CodingKey {
         case currencies
         case converted
         case conversionUnavailable = "conversion_unavailable"
+        case mealVouchers = "meal_vouchers"
     }
 
     public init(
         currencies: [CurrencySummaryResponse],
         converted: ConvertedSummaryResponse? = nil,
-        conversionUnavailable: String? = nil
+        conversionUnavailable: String? = nil,
+        mealVouchers: [MealVoucherSummaryResponse] = []
     ) {
         self.currencies = currencies
         self.converted = converted
         self.conversionUnavailable = conversionUnavailable
+        self.mealVouchers = mealVouchers
+    }
+
+    /// Hand-written so `meal_vouchers` tolerates a missing key — every other
+    /// field stays required, same posture as `CurrencySummaryResponse`.
+    /// `meal_vouchers` is newer than the rest of this envelope; decoding it
+    /// with a fallback to `[]` means an existing fixture or an older cached
+    /// response (`client/CLAUDE.md`'s local read cache) still decodes rather
+    /// than failing outright, exactly as if the setting were off.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        currencies = try container.decode([CurrencySummaryResponse].self, forKey: .currencies)
+        converted = try container.decodeIfPresent(ConvertedSummaryResponse.self, forKey: .converted)
+        conversionUnavailable = try container.decodeIfPresent(
+            String.self, forKey: .conversionUnavailable
+        )
+        mealVouchers =
+            try container.decodeIfPresent([MealVoucherSummaryResponse].self, forKey: .mealVouchers)
+            ?? []
     }
 }
 

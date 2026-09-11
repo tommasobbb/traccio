@@ -17,6 +17,7 @@ struct SettingsView: View {
     @Environment(DataFreshness.self) private var freshness
     @Environment(AppLock.self) private var lock
     @State private var serverSettings = ServerSettingsViewModel()
+    @State private var mealVouchers = MealVouchersViewModel()
 
     var body: some View {
         NavigationStack {
@@ -56,6 +57,8 @@ struct SettingsView: View {
                             settingsRow(title: "Inizio tracciamento", systemImage: "calendar.badge.clock")
                         }
                         .buttonStyle(.plain)
+                        Divider().overlay(Palette.separator)
+                        mealVouchersRow
                         #if os(iOS)
                         Divider().overlay(Palette.separator)
                         biometricLockRow
@@ -67,6 +70,40 @@ struct SettingsView: View {
             }
             .background(Palette.background)
             .navigationTitle("Impostazioni")
+            .task {
+                mealVouchers.onChanged = { freshness.markStale([.dashboard]) }
+                await mealVouchers.load()
+            }
+        }
+    }
+
+    /// "Buoni pasto" toggle (ADR 0029) — off by default, since most users
+    /// have no meal-voucher benefit. Disabled while a load or a flip is in
+    /// flight; the toggle stays at its last known value rather than
+    /// flickering if the initial load fails, and a caption explains the
+    /// failure so the user knows to retry.
+    private var mealVouchersRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(
+                isOn: Binding(
+                    get: { mealVouchers.isEnabled ?? false },
+                    set: { newValue in Task { await mealVouchers.setEnabled(newValue) } }
+                )
+            ) {
+                settingsRowLabel(title: "Buoni pasto", systemImage: "fork.knife")
+            }
+            .tint(Palette.accent)
+            .disabled(mealVouchers.isEnabled == nil || mealVouchers.isSaving)
+            .padding(.vertical, 4)
+            if mealVouchers.loadFailed {
+                Text("Impossibile aggiornare l'impostazione. Riprova.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.warning)
+            } else {
+                Text("Lo speso in buoni pasto è mostrato a parte ed escluso dal totale del periodo.")
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+            }
         }
     }
 
