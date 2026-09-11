@@ -169,10 +169,7 @@ struct EventDetailView: View {
 
     private var dateRangeLabel: String? {
         guard let start = model.event.startDate else { return nil }
-        guard let end = model.event.endDate, end != start else {
-            return TraccioCore.formatCalendarDate(start)
-        }
-        return "\(TraccioCore.formatCalendarDate(start)) – \(TraccioCore.formatCalendarDate(end))"
+        return TraccioCore.formatCalendarDateRange(from: start, to: model.event.endDate)
     }
 
     private var failureMessage: String {

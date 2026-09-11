@@ -4,6 +4,12 @@ import TraccioCore
 /// One event row on `EventsView`: name, member count, date range, and the
 /// derived net total — following the same row idiom as `RuleRow`/
 /// `categoryRow`, wrapped in a `NavigationLink` by the caller.
+///
+/// The subtitle follows `TransactionRow`'s pattern (`subtitle`/
+/// `captionPieces`/`captionText`): every flexible piece collapses into one
+/// `Text` with `.lineLimit(1)` rather than several `Text`s sharing an
+/// `HStack` with none — the latter was the row's actual bug, not just the
+/// date formatter (`docs/design/tokens.md`'s "Text never wraps").
 struct EventRow: View {
     let event: EventResponse
 
@@ -17,14 +23,15 @@ struct EventRow: View {
                     .lineLimit(1)
                 subtitle
             }
+            .layoutPriority(0)
             Spacer(minLength: 8)
             amountColumn
+                .layoutPriority(1)
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Palette.inkQuaternary)
                 .accessibilityHidden(true)
         }
-        .padding(.vertical, 6)
     }
 
     @ViewBuilder
@@ -33,13 +40,11 @@ struct EventRow: View {
             if event.status == .closed {
                 Badge(text: "Chiuso", style: .neutral)
             }
-            Text(memberCountLabel)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-            if let dateRangeLabel {
-                Text(dateRangeLabel)
+            if !captionText.isEmpty {
+                Text(captionText)
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkTertiary)
+                    .lineLimit(1)
             }
         }
     }
@@ -48,14 +53,20 @@ struct EventRow: View {
         event.memberCount == 1 ? "1 movimento" : "\(event.memberCount) movimenti"
     }
 
-    /// The date range, formatted for display — `nil` when neither bound is
-    /// set, since the range is only ever a hint (`docs/domain.md` §Event).
+    /// The date range, formatted compactly (e.g. `"10 – 12 set 2026"`) — `nil`
+    /// when neither bound is set, since the range is only ever a hint
+    /// (`docs/domain.md` §Event).
     private var dateRangeLabel: String? {
         guard let start = event.startDate else { return nil }
-        guard let end = event.endDate, end != start else {
-            return TraccioCore.formatCalendarDate(start)
-        }
-        return "\(TraccioCore.formatCalendarDate(start)) – \(TraccioCore.formatCalendarDate(end))"
+        return TraccioCore.formatCalendarDateRange(from: start, to: event.endDate)
+    }
+
+    private var captionPieces: [String] {
+        [memberCountLabel, dateRangeLabel].compactMap { $0 }
+    }
+
+    private var captionText: String {
+        captionPieces.joined(separator: " · ")
     }
 
     @ViewBuilder
