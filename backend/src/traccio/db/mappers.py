@@ -47,6 +47,7 @@ def user_to_row(user: User) -> UserRow:
         id=user.id,
         created_at=user.created_at,
         tracking_start_date=user.tracking_start_date,
+        meal_vouchers_enabled=user.meal_vouchers_enabled,
     )
 
 
@@ -56,6 +57,7 @@ def row_to_user(row: UserRow) -> User:
         id=row.id,
         created_at=row.created_at,
         tracking_start_date=row.tracking_start_date,
+        meal_vouchers_enabled=row.meal_vouchers_enabled,
     )
 
 

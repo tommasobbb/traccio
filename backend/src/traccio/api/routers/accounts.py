@@ -2,9 +2,11 @@
 
 Action-style endpoints, no PATCH (same as the categories router): ``rename``
 sets or clears the user-chosen alias, ``appearance`` sets the colour and icon
-together. ``POST /accounts`` creates a **manual** account (ADR 0020) — one
-with no bank connection — and ``DELETE /accounts/{id}`` removes an empty one;
-a synced account is created and removed only by the sync/connection flow.
+together, ``kind`` reclassifies a manual account (e.g. Contanti → Buoni
+pasto, ADR 0029). ``POST /accounts`` creates a **manual** account (ADR 0020)
+— one with no bank connection — and ``DELETE /accounts/{id}`` removes an
+empty one; a synced account is created, removed, and has its ``kind`` set
+only by the sync/connection flow.
 Data safety (``.claude/rules/data-safety.md``): these handlers log only ids
 and counts — never an alias, which is user-typed text.
 """
@@ -22,6 +24,7 @@ from traccio.api.schemas.accounts import (
     CreateManualAccountRequest,
     RenameAccountRequest,
     SetAccountAppearanceRequest,
+    SetAccountKindRequest,
 )
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
@@ -32,6 +35,7 @@ from traccio.db.repositories import (
     list_accounts,
     set_account_alias,
     set_account_appearance,
+    set_account_kind,
 )
 from traccio.db.session import get_session
 from traccio.domain.accounts import (
@@ -213,6 +217,51 @@ def set_account_appearance_endpoint(
     )
     session.commit()
     logger.info("accounts.appearance", account_id=str(account_id))
+    updated = _load_account(session, user_id=user_id, account_id=account_id)
+    return AccountResponse.from_domain(updated)
+
+
+@router.post("/accounts/{account_id}/kind", response_model=AccountResponse)
+def set_account_kind_endpoint(
+    account_id: UUID,
+    body: SetAccountKindRequest,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> AccountResponse:
+    """Reclassify a manual account's ``kind`` (ADR 0029).
+
+    The only way to turn an existing account into a meal-voucher one — e.g.
+    a "Buoni Pasto" account created ``cash`` before the feature existed, or
+    by the Satispay import (ADR 0023) — without deleting and recreating it
+    (which ``DELETE /accounts/{id}`` refuses once it holds movements, ``409
+    account_not_empty``). A ``404`` if the account is unknown or not the
+    caller's. A ``409 account_not_manual`` if it is a synced account — a
+    synced account's ``kind`` is provider-derived and only a sync may write
+    it (``upsert_account``).
+
+    Parameters
+    ----------
+    account_id : UUID
+        The account to reclassify.
+    body : SetAccountKindRequest
+        The new kind.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user the account belongs to.
+
+    Returns
+    -------
+    AccountResponse
+        The account under its new kind.
+    """
+    account = _load_account(session, user_id=user_id, account_id=account_id)
+    if account_source(account) is not AccountSource.MANUAL:
+        raise HTTPException(status_code=409, detail="account_not_manual")
+
+    set_account_kind(session, user_id=user_id, account_id=account_id, kind=body.kind)
+    session.commit()
+    logger.info("accounts.set_kind", account_id=str(account_id))
     updated = _load_account(session, user_id=user_id, account_id=account_id)
     return AccountResponse.from_domain(updated)
 

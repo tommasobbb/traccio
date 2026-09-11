@@ -19,6 +19,7 @@ from traccio.db.models import (
 )
 from traccio.domain.enums import (
     AccountIcon,
+    AccountKind,
     PaletteColor,
 )
 from traccio.domain.models import (
@@ -129,6 +130,35 @@ def set_account_alias(
         update(AccountRow)
         .where(AccountRow.id == account_id, AccountRow.user_id == user_id)
         .values(alias=alias)
+    )
+
+
+def set_account_kind(
+    session: Session, *, user_id: UUID, account_id: UUID, kind: AccountKind
+) -> None:
+    """Set a manual account's ``kind`` (e.g. converting Contanti to Buoni pasto).
+
+    Scoped by ``user_id``; a no-op if no row matches. The caller has already
+    verified the account is manual (``409 account_not_manual`` otherwise,
+    same gate as :func:`delete_manual_account`) — a synced account's ``kind``
+    is provider-derived and only :func:`upsert_account` may write it. The
+    caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner of the account; the update is scoped to it.
+    account_id : UUID
+        The account to reclassify.
+    kind : AccountKind
+        The new kind.
+    """
+    session.execute(
+        update(AccountRow)
+        .where(AccountRow.id == account_id, AccountRow.user_id == user_id)
+        .values(kind=kind)
     )
 
 

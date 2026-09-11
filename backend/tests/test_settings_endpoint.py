@@ -89,7 +89,7 @@ def _tx(engine: Engine, *, user_id: UUID, account_id: UUID, when: datetime, key:
 def test_get_settings_is_null_before_anything_is_set() -> None:
     response = _client(_sqlite_engine()).get("/settings")
     assert response.status_code == 200
-    assert response.json() == {"tracking_start_date": None}
+    assert response.json() == {"tracking_start_date": None, "meal_vouchers_enabled": False}
 
 
 def test_set_then_get_round_trips_and_a_null_clears_it() -> None:
@@ -97,19 +97,56 @@ def test_set_then_get_round_trips_and_a_null_clears_it() -> None:
 
     set_response = client.post("/settings", json={"tracking_start_date": "2026-07-01"})
     assert set_response.status_code == 200
-    assert set_response.json() == {"tracking_start_date": "2026-07-01"}
-    assert client.get("/settings").json() == {"tracking_start_date": "2026-07-01"}
+    assert set_response.json() == {
+        "tracking_start_date": "2026-07-01",
+        "meal_vouchers_enabled": False,
+    }
+    assert client.get("/settings").json() == {
+        "tracking_start_date": "2026-07-01",
+        "meal_vouchers_enabled": False,
+    }
 
     clear_response = client.post("/settings", json={"tracking_start_date": None})
     assert clear_response.status_code == 200
-    assert clear_response.json() == {"tracking_start_date": None}
-    assert client.get("/settings").json() == {"tracking_start_date": None}
+    assert clear_response.json() == {"tracking_start_date": None, "meal_vouchers_enabled": False}
+    assert client.get("/settings").json() == {
+        "tracking_start_date": None,
+        "meal_vouchers_enabled": False,
+    }
 
 
 def test_set_requires_the_key_to_be_present() -> None:
     # Mandatory-but-nullable: an empty body is a 422, not "leave it alone".
     response = _client(_sqlite_engine()).post("/settings", json={})
     assert response.status_code == 422
+
+
+def test_meal_vouchers_is_off_before_anything_is_set() -> None:
+    response = _client(_sqlite_engine()).get("/settings")
+    assert response.status_code == 200
+    assert response.json()["meal_vouchers_enabled"] is False
+
+
+def test_set_meal_vouchers_round_trips_and_a_second_call_reverses_it() -> None:
+    """Reversible (ADR 0029): turning it on, then off again, returns exactly
+    to the starting state — no other setting is disturbed either way."""
+    client = _client(_sqlite_engine())
+    client.post("/settings", json={"tracking_start_date": "2026-07-01"})
+
+    on_response = client.post("/settings/meal-vouchers", json={"enabled": True})
+    assert on_response.status_code == 200
+    assert on_response.json() == {
+        "tracking_start_date": "2026-07-01",
+        "meal_vouchers_enabled": True,
+    }
+    assert client.get("/settings").json()["meal_vouchers_enabled"] is True
+
+    off_response = client.post("/settings/meal-vouchers", json={"enabled": False})
+    assert off_response.status_code == 200
+    assert off_response.json() == {
+        "tracking_start_date": "2026-07-01",
+        "meal_vouchers_enabled": False,
+    }
 
 
 def test_suggestion_is_the_month_after_the_latest_starting_account() -> None:

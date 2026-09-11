@@ -1,17 +1,22 @@
-"""Per-user settings endpoints (ADR 0024).
+"""Per-user settings endpoints (ADR 0024, ADR 0029).
 
-The first per-user setting in Traccio: ``tracking_start_date``, the day the
-dashboard and the Movimenti list begin from. Months before it show only the
-accounts that happened to be connected earliest, so their totals mislead —
-this lets the user start clean from a month every account covers.
+Two per-user settings so far: ``tracking_start_date``, the day the dashboard
+and the Movimenti list begin from — months before it show only the accounts
+that happened to be connected earliest, so their totals mislead, and this
+lets the user start clean from a month every account covers — and
+``meal_vouchers_enabled``, whether the dashboard breaks meal-voucher spending
+out of its headline totals.
 
-- ``GET /settings`` returns the current value.
-- ``POST /settings`` sets or clears it (mandatory-but-nullable body).
-- ``GET /settings/tracking-start/suggestion`` computes a suggested value from
-  each account's first movement, and names the account that constrains it.
+- ``GET /settings`` returns both current values.
+- ``POST /settings`` sets or clears ``tracking_start_date``
+  (mandatory-but-nullable body).
+- ``POST /settings/meal-vouchers`` sets ``meal_vouchers_enabled``.
+- ``GET /settings/tracking-start/suggestion`` computes a suggested tracking
+  start from each account's first movement, and names the account that
+  constrains it.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only dates
-and counts — never an amount or a description.
+Data safety (``.claude/rules/data-safety.md``): these handlers log only dates,
+booleans, and counts — never an amount or a description.
 """
 
 from datetime import date
@@ -24,15 +29,18 @@ from sqlalchemy.orm import Session
 from traccio.api.deps import current_user_id
 from traccio.api.schemas.settings import (
     AccountEarliestResponse,
+    SetMealVouchersRequest,
+    SettingsResponse,
     SetTrackingStartRequest,
-    TrackingStartResponse,
     TrackingStartSuggestionResponse,
 )
 from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     earliest_transaction_dates_by_account,
+    get_meal_vouchers_enabled,
     get_tracking_start_date,
     list_accounts,
+    set_meal_vouchers_enabled,
     set_tracking_start_date,
 )
 from traccio.db.session import get_session
@@ -44,11 +52,19 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-@router.get("/settings", response_model=TrackingStartResponse)
+def _current_settings(session: Session, *, user_id: UUID) -> SettingsResponse:
+    """Read both current settings into one response."""
+    return SettingsResponse(
+        tracking_start_date=get_tracking_start_date(session, user_id=user_id),
+        meal_vouchers_enabled=get_meal_vouchers_enabled(session, user_id=user_id),
+    )
+
+
+@router.get("/settings", response_model=SettingsResponse)
 def get_settings_endpoint(
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
-) -> TrackingStartResponse:
+) -> SettingsResponse:
     """Return the current user's settings.
 
     Parameters
@@ -60,20 +76,19 @@ def get_settings_endpoint(
 
     Returns
     -------
-    TrackingStartResponse
-        The stored ``tracking_start_date``, or ``null``.
+    SettingsResponse
+        The stored ``tracking_start_date`` (or ``null``) and
+        ``meal_vouchers_enabled``.
     """
-    return TrackingStartResponse(
-        tracking_start_date=get_tracking_start_date(session, user_id=user_id)
-    )
+    return _current_settings(session, user_id=user_id)
 
 
-@router.post("/settings", response_model=TrackingStartResponse)
+@router.post("/settings", response_model=SettingsResponse)
 def set_settings_endpoint(
     body: SetTrackingStartRequest,
     session: Annotated[Session, Depends(get_session)],
     user_id: Annotated[UUID, Depends(current_user_id)],
-) -> TrackingStartResponse:
+) -> SettingsResponse:
     """Set or clear the current user's tracking start date.
 
     Reversible: raising or clearing the date never deletes a movement, it only
@@ -91,13 +106,45 @@ def set_settings_endpoint(
 
     Returns
     -------
-    TrackingStartResponse
-        The value now stored.
+    SettingsResponse
+        Both settings, ``tracking_start_date`` now updated.
     """
     set_tracking_start_date(session, user_id=user_id, value=body.tracking_start_date)
     session.commit()
     logger.info("settings.set_tracking_start", cleared=body.tracking_start_date is None)
-    return TrackingStartResponse(tracking_start_date=body.tracking_start_date)
+    return _current_settings(session, user_id=user_id)
+
+
+@router.post("/settings/meal-vouchers", response_model=SettingsResponse)
+def set_meal_vouchers_endpoint(
+    body: SetMealVouchersRequest,
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> SettingsResponse:
+    """Turn the meal-vouchers dashboard breakout on or off (ADR 0029).
+
+    Reversible: with the setting off, a voucher-kind account behaves like any
+    other account again — counted in the headline totals, listed in "Per
+    conto". Scoped to the current user.
+
+    Parameters
+    ----------
+    body : SetMealVouchersRequest
+        The new state.
+    session : Session
+        Request-scoped database session.
+    user_id : UUID
+        The user whose settings to write.
+
+    Returns
+    -------
+    SettingsResponse
+        Both settings, ``meal_vouchers_enabled`` now updated.
+    """
+    set_meal_vouchers_enabled(session, user_id=user_id, value=body.enabled)
+    session.commit()
+    logger.info("settings.set_meal_vouchers", enabled=body.enabled)
+    return _current_settings(session, user_id=user_id)
 
 
 @router.get(

@@ -395,6 +395,56 @@ class CurrencySummaryResponse(BaseModel):
         )
 
 
+class MealVoucherSummaryResponse(BaseModel):
+    """Meal-voucher spending for one currency, broken out of the headline
+    totals (ADR 0029).
+
+    Built from the same :func:`~traccio.domain.dashboard.summarize` as
+    :class:`CurrencySummaryResponse`, run once over the transactions on the
+    user's voucher-kind accounts instead of everything else — a scoping
+    split, not a second derivation. Omitted (empty ``meal_vouchers`` on
+    :class:`DashboardSummaryResponse`) when the setting is off, there is no
+    voucher account, or nothing was spent from one this period.
+
+    Attributes
+    ----------
+    currency : str
+        ISO 4217 code this entry is expressed in.
+    spending : int
+        Total voucher spending in minor units (cents), a positive magnitude.
+    income : int
+        Total voucher income in minor units (cents) — a refund onto a
+        voucher account, a positive magnitude. Rare, but not excluded.
+    transaction_count : int
+        How many voucher transactions were considered for this currency.
+    by_category : list[CategoryGroupSummaryResponse]
+        This currency's voucher spending partitioned by category root, same
+        shape as :attr:`CurrencySummaryResponse.by_category`.
+    """
+
+    currency: str
+    spending: int
+    income: int
+    transaction_count: int
+    by_category: list[CategoryGroupSummaryResponse]
+
+    @classmethod
+    def from_domain(
+        cls, summary: CurrencySummary, *, category_display: Mapping[UUID, CategoryDisplay]
+    ) -> "MealVoucherSummaryResponse":
+        """Project a domain :class:`~traccio.domain.dashboard.CurrencySummary`."""
+        return cls(
+            currency=summary.currency,
+            spending=summary.spending.amount,
+            income=summary.income.amount,
+            transaction_count=summary.transaction_count,
+            by_category=[
+                CategoryGroupSummaryResponse.from_domain(group, display=category_display)
+                for group in summary.by_category
+            ],
+        )
+
+
 class FxRateResponse(BaseModel):
     """One ECB reference rate used to build the converted total (ADR 0021).
 
@@ -463,8 +513,15 @@ class DashboardSummaryResponse(BaseModel):
         When ``TRACCIO_FX_ENABLED`` is set but ``converted`` is still ``null``,
         a stable value-free reason (``"rates_unavailable"`` / ``"missing_rate"``).
         ``null`` when the feature is off or conversion succeeded.
+    meal_vouchers : list[MealVoucherSummaryResponse]
+        Meal-voucher spending, broken out of ``currencies``/``converted``
+        (ADR 0029). Empty when the user's ``meal_vouchers_enabled`` setting
+        is off, they have no voucher-kind account, or nothing was spent from
+        one this period. Never FX-converted — a per-currency breakout,
+        additive, like ``currencies`` itself.
     """
 
     currencies: list[CurrencySummaryResponse]
     converted: ConvertedSummaryResponse | None = None
+    meal_vouchers: list[MealVoucherSummaryResponse] = []
     conversion_unavailable: str | None = None

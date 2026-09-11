@@ -56,6 +56,18 @@ all of which must keep working on an old movement. `GET/POST /settings` read
 and write it; `GET /settings/tracking-start/suggestion` derives a suggested
 value from each account's first movement.
 
+**`meal_vouchers_enabled`** (ADR 0029) is the second per-user setting: whether
+the dashboard's "Buoni pasto" card is on. `false` by default — most users have
+no meal-voucher benefit. When on, every transaction on a `voucher`-kind
+`Account` (see below) is excluded from the dashboard's headline totals
+(`spending`/`income`/`by_account`/`converted`) and reported separately
+instead, via `domain.dashboard.split_meal_voucher_transactions` — a scoping
+filter, the same category of thing as `tracking_start_date` above, not a
+second derivation alongside `effective_amount`. `GET/POST /settings` read and
+write it; `POST /settings/meal-vouchers` is the dedicated write endpoint (kept
+separate from `tracking_start_date`'s mandatory-but-nullable body, which a
+plain boolean would make ambiguous).
+
 ---
 
 ## Connection
@@ -120,7 +132,7 @@ account's movements are hand-entered, or brought in by **importing a file**
 (ADR 0023) — a Satispay export, a CSV — onto it; a synced account never
 accepts either.
 
-`kind`: `current` | `savings` | `card` | `wallet` | `cash`
+`kind`: `current` | `savings` | `card` | `wallet` | `cash` | `voucher`
 
 `source`: `synced` | `manual` — **derived, never stored**
 (`domain/accounts.py::account_source`). A synced account is backed by a
@@ -130,6 +142,17 @@ with one set and not the other. `kind` is a separate axis — a manual account
 still has a real kind (`cash` for "Contanti", `wallet` or `current` for an
 "Investimenti" pass-through; there is deliberately no `investment` kind, as
 Traccio does not do portfolio tracking — see `ROADMAP.md`).
+
+**`voucher`** (ADR 0029) marks a meal-voucher / benefit balance — e.g. the
+"Buoni Pasto" account ADR 0023's Satispay import creates, or one the user
+sets up by hand. Only ever manual, same reasoning as `cash`. `POST
+/accounts/{id}/kind` reclassifies an existing manual account (the only way to
+turn a pre-existing "Buoni Pasto" account into `voucher` without deleting and
+recreating it); it refuses a synced account (`409 account_not_manual`), whose
+`kind` only a sync may write. When the user's `meal_vouchers_enabled` setting
+(see `User` above) is on, every transaction on a `voucher`-kind account is
+excluded from the dashboard's headline totals and reported in its own
+"Buoni pasto" card instead.
 
 **A sync can never touch a manual account.** `upsert_account` matches on
 `(user_id, identification_hash)`, and `NULL != NULL` in SQL; `services/sync.py`

@@ -17,6 +17,7 @@ from traccio.db.repositories.accounts import (
     list_accounts,
     set_account_alias,
     set_account_appearance,
+    set_account_kind,
     upsert_account,
 )
 from traccio.db.repositories.advances import (
@@ -91,7 +92,9 @@ from traccio.db.repositories.rules import (
 )
 from traccio.db.repositories.settings import (
     earliest_transaction_dates_by_account,
+    get_meal_vouchers_enabled,
     get_tracking_start_date,
+    set_meal_vouchers_enabled,
     set_tracking_start_date,
 )
 from traccio.db.repositories.sync_runs import (
@@ -163,6 +166,7 @@ __all__ = [
     "get_connection_credentials",
     "get_event",
     "get_fx_rates",
+    "get_meal_vouchers_enabled",
     "get_rule",
     "get_tracking_start_date",
     "get_transaction",
@@ -196,12 +200,14 @@ __all__ = [
     "seed_default_categories",
     "set_account_alias",
     "set_account_appearance",
+    "set_account_kind",
     "set_advance_status",
     "set_category_appearance",
     "set_confirmed_category",
     "set_connection_auth_state",
     "set_connection_logo",
     "set_event_status",
+    "set_meal_vouchers_enabled",
     "set_suggested_categories",
     "set_tracking_start_date",
     "set_transaction_role",

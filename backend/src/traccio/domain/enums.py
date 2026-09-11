@@ -53,6 +53,13 @@ class AccountKind(StrEnum):
         account — there is no bank feed for cash (ADR 0020). ``kind`` is a
         separate axis from whether the account is synced or manual; see
         :class:`AccountSource`.
+    VOUCHER : str
+        A meal-voucher / benefit balance (e.g. a Satispay "Buoni Pasto"
+        account created for a file import, ADR 0023). Only ever a manual
+        account, same reasoning as ``CASH``. When the user's
+        ``meal_vouchers_enabled`` setting is on (ADR 0029), spending from a
+        voucher-kind account is broken out of the dashboard's headline totals
+        instead of being folded into them.
     """
 
     CURRENT = "current"
@@ -60,6 +67,7 @@ class AccountKind(StrEnum):
     CARD = "card"
     WALLET = "wallet"
     CASH = "cash"
+    VOUCHER = "voucher"
 
 
 class AccountSource(StrEnum):

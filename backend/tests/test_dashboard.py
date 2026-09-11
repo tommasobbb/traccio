@@ -23,6 +23,7 @@ from traccio.domain import (
     TransactionRole,
     TransactionStatus,
     compare,
+    split_meal_voucher_transactions,
     summarize,
     summarize_comparisons,
 )
@@ -696,3 +697,36 @@ def test_summarize_comparisons_uses_a_zero_baseline_for_a_currency_absent_from_p
     assert comparisons["CHF"].spending == Money(amount=0, currency="CHF")
     assert comparisons["CHF"].spending_delta == Money(amount=5000, currency="CHF")
     assert comparisons["CHF"].spending_delta_pct is None
+
+
+# --- split_meal_voucher_transactions (ADR 0029) -----------------------------
+
+
+def test_split_meal_vouchers_with_empty_account_set_keeps_everything_in_main() -> None:
+    """The setting-off case: an empty ``voucher_account_ids`` is a no-op split."""
+    txns = [_tx(account_id=_ACCOUNT_A), _tx(account_id=_ACCOUNT_B)]
+    main, vouchers = split_meal_voucher_transactions(txns, voucher_account_ids=set())
+    assert main == txns
+    assert vouchers == []
+
+
+def test_split_meal_vouchers_separates_by_account_id() -> None:
+    on_a = _tx(account_id=_ACCOUNT_A)
+    on_b = _tx(account_id=_ACCOUNT_B)
+    main, vouchers = split_meal_voucher_transactions(
+        [on_a, on_b], voucher_account_ids={_ACCOUNT_B}
+    )
+    assert main == [on_a]
+    assert vouchers == [on_b]
+
+
+def test_split_meal_vouchers_preserves_order_within_each_half() -> None:
+    first = _tx(account_id=_ACCOUNT_A)
+    second = _tx(account_id=_ACCOUNT_B)
+    third = _tx(account_id=_ACCOUNT_A)
+    fourth = _tx(account_id=_ACCOUNT_B)
+    main, vouchers = split_meal_voucher_transactions(
+        [first, second, third, fourth], voucher_account_ids={_ACCOUNT_B}
+    )
+    assert main == [first, third]
+    assert vouchers == [second, fourth]

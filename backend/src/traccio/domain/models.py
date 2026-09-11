@@ -57,6 +57,9 @@ class User(BaseModel):
         Movimenti list (ADR 0024). ``None`` means no floor — show everything.
         A whole-day calendar boundary, reversible: raising or clearing it
         never deletes a row, only hides it.
+    meal_vouchers_enabled : bool
+        Whether the dashboard's "Buoni pasto" breakout is on (ADR 0029).
+        ``False`` by default — most users have no meal-voucher benefit.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -64,6 +67,7 @@ class User(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     created_at: datetime = Field(default_factory=_now)
     tracking_start_date: date | None = None
+    meal_vouchers_enabled: bool = False
 
 
 class Connection(BaseModel):

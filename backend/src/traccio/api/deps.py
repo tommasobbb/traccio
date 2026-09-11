@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from traccio.core.config import Settings, get_settings
 from traccio.core.crypto import TokenCipher, get_token_cipher
-from traccio.db.repositories import get_tracking_start_date
+from traccio.db.repositories import get_meal_vouchers_enabled, get_tracking_start_date
 from traccio.db.session import get_session
 from traccio.providers.enable_banking.auth import load_private_key_pem
 from traccio.providers.enable_banking.client import EnableBankingClient
@@ -58,6 +58,23 @@ def current_tracking_start(
         The floor, or ``None``.
     """
     return get_tracking_start_date(session, user_id=user_id)
+
+
+def current_meal_vouchers_enabled(
+    session: Annotated[Session, Depends(get_session)],
+    user_id: Annotated[UUID, Depends(current_user_id)],
+) -> bool:
+    """Return whether the current user's meal-vouchers breakout is on (ADR 0029).
+
+    A single place the value is read, so ``GET /dashboard/summary`` cannot
+    forget to apply it. Reads/writes go through the ``/settings`` endpoints.
+
+    Returns
+    -------
+    bool
+        Whether the breakout is enabled. ``False`` for a user with no row yet.
+    """
+    return get_meal_vouchers_enabled(session, user_id=user_id)
 
 
 def require_api_token(

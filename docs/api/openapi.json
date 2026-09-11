@@ -57,19 +57,20 @@
         "type": "string"
       },
       "AccountKind": {
-        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.\nCASH : str\n    A hand-tracked cash float (e.g. \"Contanti\"). Only ever a manual\n    account \u2014 there is no bank feed for cash (ADR 0020). ``kind`` is a\n    separate axis from whether the account is synced or manual; see\n    :class:`AccountSource`.",
+        "description": "Kind of balance-bearing account exposed by a bank.\n\nAttributes\n----------\nCURRENT : str\n    A current (checking) account.\nSAVINGS : str\n    A savings account.\nCARD : str\n    A card account. Many banks invert the sign convention here; the\n    provider adapter normalizes it (see ``docs/domain.md``).\nWALLET : str\n    A currency-agnostic wallet (e.g. PayPal). It has no single account\n    currency \u2014 the account may report ``XXX`` (ISO 4217 \"no currency\") \u2014\n    so the per-transaction currency is authoritative, not the account's.\nCASH : str\n    A hand-tracked cash float (e.g. \"Contanti\"). Only ever a manual\n    account \u2014 there is no bank feed for cash (ADR 0020). ``kind`` is a\n    separate axis from whether the account is synced or manual; see\n    :class:`AccountSource`.\nVOUCHER : str\n    A meal-voucher / benefit balance (e.g. a Satispay \"Buoni Pasto\"\n    account created for a file import, ADR 0023). Only ever a manual\n    account, same reasoning as ``CASH``. When the user's\n    ``meal_vouchers_enabled`` setting is on (ADR 0029), spending from a\n    voucher-kind account is broken out of the dashboard's headline totals\n    instead of being folded into them.",
         "enum": [
           "current",
           "savings",
           "card",
           "wallet",
-          "cash"
+          "cash",
+          "voucher"
         ],
         "title": "AccountKind",
         "type": "string"
       },
       "AccountResponse": {
-        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID or None\n    Connection currently exposing this account, or ``None`` for a manual\n    account (ADR 0020).\nsource : AccountSource\n    ``synced`` if the account is backed by a bank connection, ``manual`` if\n    the user created and maintains it. Derived from ``connection_id`` (see\n    :func:`~traccio.domain.accounts.account_source`), never stored \u2014 sent so\n    the client does not infer it from a null.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, ``wallet``, or ``cash``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Provider-supplied display name (overwritten on every sync).\nalias : str or None\n    User-chosen display name (ADR 0017), or ``None`` if unset.\ndisplay_name : str or None\n    The one name the client should actually show \u2014 ``alias`` if set, else\n    ``name``, else ``None`` \u2014 resolved once by\n    :func:`~traccio.domain.accounts.display_name` so the client does not\n    reimplement the fallback (it previously did, inconsistently, in three\n    different places).\ncolor : PaletteColor or None\n    User-chosen colour, or ``None`` if unset.\nicon : AccountIcon or None\n    User-chosen icon, or ``None`` if unset.\ncreated_at : datetime\n    When the account was first recorded.",
+        "description": "One account as returned to the client.\n\nA deliberately narrow projection of :class:`~traccio.domain.models.Account`:\n``user_id`` (implied by the caller) and ``identification_hash`` (an internal\nmatching detail) are intentionally omitted.\n\nAttributes\n----------\nid : UUID\n    Stable account identifier.\nconnection_id : UUID or None\n    Connection currently exposing this account, or ``None`` for a manual\n    account (ADR 0020).\nsource : AccountSource\n    ``synced`` if the account is backed by a bank connection, ``manual`` if\n    the user created and maintains it. Derived from ``connection_id`` (see\n    :func:`~traccio.domain.accounts.account_source`), never stored \u2014 sent so\n    the client does not infer it from a null.\nkind : AccountKind\n    ``current``, ``savings``, ``card``, ``wallet``, ``cash``, or\n    ``voucher``.\ncurrency : str\n    The account's ISO 4217 currency.\nname : str or None\n    Provider-supplied display name (overwritten on every sync).\nalias : str or None\n    User-chosen display name (ADR 0017), or ``None`` if unset.\ndisplay_name : str or None\n    The one name the client should actually show \u2014 ``alias`` if set, else\n    ``name``, else ``None`` \u2014 resolved once by\n    :func:`~traccio.domain.accounts.display_name` so the client does not\n    reimplement the fallback (it previously did, inconsistently, in three\n    different places).\ncolor : PaletteColor or None\n    User-chosen colour, or ``None`` if unset.\nicon : AccountIcon or None\n    User-chosen icon, or ``None`` if unset.\ncreated_at : datetime\n    When the account was first recorded.",
         "properties": {
           "alias": {
             "anyOf": [
@@ -1455,7 +1456,7 @@
         "type": "object"
       },
       "DashboardSummaryResponse": {
-        "description": "Envelope for the dashboard summary.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncurrencies : list[CurrencySummaryResponse]\n    One entry per currency present in the period, sorted by currency code.\n    Empty if no transactions fall within the period.\nconverted : ConvertedSummaryResponse or None\n    The opt-in combined total in the base currency (ADR 0021), or ``null``\n    when the feature is off or a rate was missing. Additive \u2014 never a\n    replacement for ``currencies``.\nconversion_unavailable : str or None\n    When ``TRACCIO_FX_ENABLED`` is set but ``converted`` is still ``null``,\n    a stable value-free reason (``\"rates_unavailable\"`` / ``\"missing_rate\"``).\n    ``null`` when the feature is off or conversion succeeded.",
+        "description": "Envelope for the dashboard summary.\n\nA wrapper object rather than a bare array leaves room for metadata later\nwithout breaking the generated Swift client.\n\nAttributes\n----------\ncurrencies : list[CurrencySummaryResponse]\n    One entry per currency present in the period, sorted by currency code.\n    Empty if no transactions fall within the period.\nconverted : ConvertedSummaryResponse or None\n    The opt-in combined total in the base currency (ADR 0021), or ``null``\n    when the feature is off or a rate was missing. Additive \u2014 never a\n    replacement for ``currencies``.\nconversion_unavailable : str or None\n    When ``TRACCIO_FX_ENABLED`` is set but ``converted`` is still ``null``,\n    a stable value-free reason (``\"rates_unavailable\"`` / ``\"missing_rate\"``).\n    ``null`` when the feature is off or conversion succeeded.\nmeal_vouchers : list[MealVoucherSummaryResponse]\n    Meal-voucher spending, broken out of ``currencies``/``converted``\n    (ADR 0029). Empty when the user's ``meal_vouchers_enabled`` setting\n    is off, they have no voucher-kind account, or nothing was spent from\n    one this period. Never FX-converted \u2014 a per-currency breakout,\n    additive, like ``currencies`` itself.",
         "properties": {
           "conversion_unavailable": {
             "anyOf": [
@@ -1483,6 +1484,14 @@
               "$ref": "#/components/schemas/CurrencySummaryResponse"
             },
             "title": "Currencies",
+            "type": "array"
+          },
+          "meal_vouchers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MealVoucherSummaryResponse"
+            },
+            "title": "Meal Vouchers",
             "type": "array"
           }
         },
@@ -2008,6 +2017,43 @@
         "title": "InstitutionsResponse",
         "type": "object"
       },
+      "MealVoucherSummaryResponse": {
+        "description": "Meal-voucher spending for one currency, broken out of the headline\ntotals (ADR 0029).\n\nBuilt from the same :func:`~traccio.domain.dashboard.summarize` as\n:class:`CurrencySummaryResponse`, run once over the transactions on the\nuser's voucher-kind accounts instead of everything else \u2014 a scoping\nsplit, not a second derivation. Omitted (empty ``meal_vouchers`` on\n:class:`DashboardSummaryResponse`) when the setting is off, there is no\nvoucher account, or nothing was spent from one this period.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code this entry is expressed in.\nspending : int\n    Total voucher spending in minor units (cents), a positive magnitude.\nincome : int\n    Total voucher income in minor units (cents) \u2014 a refund onto a\n    voucher account, a positive magnitude. Rare, but not excluded.\ntransaction_count : int\n    How many voucher transactions were considered for this currency.\nby_category : list[CategoryGroupSummaryResponse]\n    This currency's voucher spending partitioned by category root, same\n    shape as :attr:`CurrencySummaryResponse.by_category`.",
+        "properties": {
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryGroupSummaryResponse"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "income": {
+            "title": "Income",
+            "type": "integer"
+          },
+          "spending": {
+            "title": "Spending",
+            "type": "integer"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "spending",
+          "income",
+          "transaction_count",
+          "by_category"
+        ],
+        "title": "MealVoucherSummaryResponse",
+        "type": "object"
+      },
       "MoveCategoryRequest": {
         "description": "Body for reparenting a category.\n\nAttributes\n----------\nparent_id : UUID or None\n    The new parent, or ``None`` to make this category a root.",
         "properties": {
@@ -2448,6 +2494,19 @@
         "title": "SetAccountAppearanceRequest",
         "type": "object"
       },
+      "SetAccountKindRequest": {
+        "description": "Body for reclassifying a manual account's ``kind``.\n\nThe only way to turn an existing manual account into a meal-voucher\naccount (ADR 0029) \u2014 e.g. a \"Buoni Pasto\" account created ``cash`` before\nthe feature existed, or by the Satispay import (ADR 0023). Manual only;\na synced account's ``kind`` is provider-derived (``409\naccount_not_manual``).\n\nAttributes\n----------\nkind : AccountKind\n    The new kind.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SetAccountKindRequest",
+        "type": "object"
+      },
       "SetCategoryAppearanceRequest": {
         "description": "Body for setting a category's colour and icon.\n\nA full replace, not a partial update \u2014 mirrors\n``SetAccountAppearanceRequest``. Unlike an account's colour, ``color`` is\nmandatory and never ``null``: every category always has one.\n\nAttributes\n----------\ncolor : PaletteColor\n    The new colour.\nicon : CategoryIcon or None\n    The new icon, or ``None`` to clear it.",
         "properties": {
@@ -2472,6 +2531,20 @@
         "title": "SetCategoryAppearanceRequest",
         "type": "object"
       },
+      "SetMealVouchersRequest": {
+        "description": "Body for ``POST /settings/meal-vouchers``.\n\nA separate endpoint from ``POST /settings`` rather than a second field on\n:class:`SetTrackingStartRequest`: that body is deliberately\nmandatory-but-nullable so \"clear the date\" is never ambiguous with \"leave\nit alone\", and a plain optional boolean would reintroduce exactly that\nambiguity for this setting.\n\nAttributes\n----------\nenabled : bool\n    The new state.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetMealVouchersRequest",
+        "type": "object"
+      },
       "SetTrackingStartRequest": {
         "description": "Body for ``POST /settings``.\n\n``tracking_start_date`` is **mandatory but nullable**: the key must be\npresent so \"clear it\" (``null``) is never ambiguous with \"leave it alone\"\n(key omitted). Same posture as ``POST /accounts/{id}/rename`` (ADR 0017).\n\nAttributes\n----------\ntracking_start_date : date or None\n    The new floor, or ``null`` to clear it.",
         "properties": {
@@ -2492,6 +2565,33 @@
           "tracking_start_date"
         ],
         "title": "SetTrackingStartRequest",
+        "type": "object"
+      },
+      "SettingsResponse": {
+        "description": "The user's current settings.\n\nAttributes\n----------\ntracking_start_date : date or None\n    The stored floor, or ``None`` for \"no floor \u2014 show everything\".\nmeal_vouchers_enabled : bool\n    Whether the dashboard's \"Buoni pasto\" breakout is on.",
+        "properties": {
+          "meal_vouchers_enabled": {
+            "title": "Meal Vouchers Enabled",
+            "type": "boolean"
+          },
+          "tracking_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Start Date"
+          }
+        },
+        "required": [
+          "tracking_start_date",
+          "meal_vouchers_enabled"
+        ],
+        "title": "SettingsResponse",
         "type": "object"
       },
       "StartConnectionRequest": {
@@ -2561,28 +2661,6 @@
           "transactions_synced"
         ],
         "title": "SyncResponse",
-        "type": "object"
-      },
-      "TrackingStartResponse": {
-        "description": "The user's current tracking start date.\n\nAttributes\n----------\ntracking_start_date : date or None\n    The stored floor, or ``None`` for \"no floor \u2014 show everything\".",
-        "properties": {
-          "tracking_start_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tracking Start Date"
-          }
-        },
-        "required": [
-          "tracking_start_date"
-        ],
-        "title": "TrackingStartResponse",
         "type": "object"
       },
       "TrackingStartSuggestionResponse": {
@@ -3267,6 +3345,73 @@
           }
         },
         "summary": "Set Account Appearance Endpoint"
+      }
+    },
+    "/accounts/{account_id}/kind": {
+      "post": {
+        "description": "Reclassify a manual account's ``kind`` (ADR 0029).\n\nThe only way to turn an existing account into a meal-voucher one \u2014 e.g.\na \"Buoni Pasto\" account created ``cash`` before the feature existed, or\nby the Satispay import (ADR 0023) \u2014 without deleting and recreating it\n(which ``DELETE /accounts/{id}`` refuses once it holds movements, ``409\naccount_not_empty``). A ``404`` if the account is unknown or not the\ncaller's. A ``409 account_not_manual`` if it is a synced account \u2014 a\nsynced account's ``kind`` is provider-derived and only a sync may write\nit (``upsert_account``).\n\nParameters\n----------\naccount_id : UUID\n    The account to reclassify.\nbody : SetAccountKindRequest\n    The new kind.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user the account belongs to.\n\nReturns\n-------\nAccountResponse\n    The account under its new kind.",
+        "operationId": "set_account_kind_endpoint_accounts__account_id__kind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAccountKindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Account Kind Endpoint"
       }
     },
     "/accounts/{account_id}/rename": {
@@ -4672,7 +4817,7 @@
     },
     "/dashboard/summary": {
       "get": {
-        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. A period spanning multiple currencies returns one entry per\ncurrency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,\n``converted`` additionally carries a single combined total in the base\ncurrency, each movement converted at the ECB rate for its own date\n(ADR 0021) \u2014 best-effort, ``null`` with a ``conversion_unavailable``\nreason if a rate is missing. Scoped to the current user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\ntracking_start : date or None\n    Not a query param \u2014 the user's stored ``tracking_start_date`` floor\n    (ADR 0024), injected via\n    :func:`~traccio.api.deps.current_tracking_start`. Raised into both the\n    main and the comparison period before anything is fetched or bucketed,\n    so no total, bucket, or average counts a day the user excluded.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
+        "description": "Summarize real spending and income over a period, per currency.\n\nUses only ``effective_amount`` (see :func:`~traccio.domain.dashboard.summarize`):\na transfer between the user's own accounts does not inflate spending, an\nadvance counts only the user's declared share, and a reimbursement is not\nincome. A period spanning multiple currencies returns one entry per\ncurrency in ``currencies``; when ``TRACCIO_FX_ENABLED`` is set,\n``converted`` additionally carries a single combined total in the base\ncurrency, each movement converted at the ECB rate for its own date\n(ADR 0021) \u2014 best-effort, ``null`` with a ``conversion_unavailable``\nreason if a rate is missing. Scoped to the current user.\n\nWhen ``start``/``end`` are both given, ``by_bucket`` is gap-filled across\nthe whole period (zero-value buckets included); otherwise only buckets\nwith a transaction are returned, same as the pre-gap-fill behavior.\n``compare_start``/``compare_end`` must both be given or both omitted \u2014 the\nclient names *which* period to compare against, not a boolean, since\n\"same length, shifted back\" is not well-defined across calendar\nboundaries (a fixed-length shift lands on an arbitrary date, not \"last\nmonth\").\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose transactions to summarize.\nstart : datetime or None, optional\n    Inclusive start of the period. Open-ended when omitted.\nend : datetime or None, optional\n    Exclusive end of the period. Open-ended when omitted.\ngranularity : BucketGranularity, optional\n    How ``by_bucket`` groups time \u2014 day, week, or month. Defaults to day.\ntz : str, optional\n    IANA timezone name bucketing happens in. Defaults to ``\"UTC\"``.\ncompare_start : datetime or None, optional\n    Inclusive start of the comparison period.\ncompare_end : datetime or None, optional\n    Exclusive end of the comparison period.\ntracking_start : date or None\n    Not a query param \u2014 the user's stored ``tracking_start_date`` floor\n    (ADR 0024), injected via\n    :func:`~traccio.api.deps.current_tracking_start`. Raised into both the\n    main and the comparison period before anything is fetched or bucketed,\n    so no total, bucket, or average counts a day the user excluded.\nmeal_vouchers_enabled : bool\n    Not a query param \u2014 the user's stored ``meal_vouchers_enabled``\n    setting (ADR 0029), injected via\n    :func:`~traccio.api.deps.current_meal_vouchers_enabled`. When set,\n    every voucher-kind account's spending is excluded from ``currencies``/\n    ``converted`` and reported separately in ``meal_vouchers`` instead.\n\nReturns\n-------\nDashboardSummaryResponse\n    One summary per currency present in the period, plus the meal-voucher\n    breakout when the setting is on and there is voucher spend.\n\nRaises\n------\nHTTPException\n    422 ``unknown_timezone`` if ``tz`` is not a recognized IANA name; 422\n    ``incomplete_comparison_period`` if exactly one of\n    ``compare_start``/``compare_end`` is given.",
         "operationId": "dashboard_summary_dashboard_summary_get",
         "parameters": [
           {
@@ -5813,7 +5958,7 @@
     },
     "/settings": {
       "get": {
-        "description": "Return the current user's settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to read.\n\nReturns\n-------\nTrackingStartResponse\n    The stored ``tracking_start_date``, or ``null``.",
+        "description": "Return the current user's settings.\n\nParameters\n----------\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to read.\n\nReturns\n-------\nSettingsResponse\n    The stored ``tracking_start_date`` (or ``null``) and\n    ``meal_vouchers_enabled``.",
         "operationId": "get_settings_endpoint_settings_get",
         "parameters": [
           {
@@ -5838,7 +5983,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TrackingStartResponse"
+                  "$ref": "#/components/schemas/SettingsResponse"
                 }
               }
             },
@@ -5858,7 +6003,7 @@
         "summary": "Get Settings Endpoint"
       },
       "post": {
-        "description": "Set or clear the current user's tracking start date.\n\nReversible: raising or clearing the date never deletes a movement, it only\nchanges which ones the dashboard and Movimenti show. Scoped to the current\nuser.\n\nParameters\n----------\nbody : SetTrackingStartRequest\n    The new ``tracking_start_date`` (``null`` to clear).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to write.\n\nReturns\n-------\nTrackingStartResponse\n    The value now stored.",
+        "description": "Set or clear the current user's tracking start date.\n\nReversible: raising or clearing the date never deletes a movement, it only\nchanges which ones the dashboard and Movimenti show. Scoped to the current\nuser.\n\nParameters\n----------\nbody : SetTrackingStartRequest\n    The new ``tracking_start_date`` (``null`` to clear).\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to write.\n\nReturns\n-------\nSettingsResponse\n    Both settings, ``tracking_start_date`` now updated.",
         "operationId": "set_settings_endpoint_settings_post",
         "parameters": [
           {
@@ -5893,7 +6038,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TrackingStartResponse"
+                  "$ref": "#/components/schemas/SettingsResponse"
                 }
               }
             },
@@ -5911,6 +6056,63 @@
           }
         },
         "summary": "Set Settings Endpoint"
+      }
+    },
+    "/settings/meal-vouchers": {
+      "post": {
+        "description": "Turn the meal-vouchers dashboard breakout on or off (ADR 0029).\n\nReversible: with the setting off, a voucher-kind account behaves like any\nother account again \u2014 counted in the headline totals, listed in \"Per\nconto\". Scoped to the current user.\n\nParameters\n----------\nbody : SetMealVouchersRequest\n    The new state.\nsession : Session\n    Request-scoped database session.\nuser_id : UUID\n    The user whose settings to write.\n\nReturns\n-------\nSettingsResponse\n    Both settings, ``meal_vouchers_enabled`` now updated.",
+        "operationId": "set_meal_vouchers_endpoint_settings_meal_vouchers_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetMealVouchersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Meal Vouchers Endpoint"
       }
     },
     "/settings/tracking-start/suggestion": {

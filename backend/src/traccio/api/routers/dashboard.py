@@ -19,7 +19,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_tracking_start, current_user_id, get_fx_client
+from traccio.api.deps import (
+    current_meal_vouchers_enabled,
+    current_tracking_start,
+    current_user_id,
+    get_fx_client,
+)
 from traccio.api.schemas.dashboard import (
     AccountDisplay,
     CategoryDisplay,
@@ -27,6 +32,7 @@ from traccio.api.schemas.dashboard import (
     CurrencySummaryResponse,
     DashboardSummaryResponse,
     FxRateResponse,
+    MealVoucherSummaryResponse,
 )
 from traccio.core.config import get_settings
 from traccio.core.logging import get_logger
@@ -40,8 +46,13 @@ from traccio.db.repositories import (
 )
 from traccio.db.session import get_session
 from traccio.domain.accounts import display_name
-from traccio.domain.dashboard import CurrencySummary, summarize, summarize_comparisons
-from traccio.domain.enums import BucketGranularity
+from traccio.domain.dashboard import (
+    CurrencySummary,
+    split_meal_voucher_transactions,
+    summarize,
+    summarize_comparisons,
+)
+from traccio.domain.enums import AccountKind, BucketGranularity
 from traccio.domain.fx import MissingRate, to_base_currency
 from traccio.domain.models import Advance, Transaction
 from traccio.domain.money import Money
@@ -155,6 +166,7 @@ def dashboard_summary(
     compare_end: Annotated[datetime | None, Query()] = None,
     tracking_start: Annotated[date | None, Depends(current_tracking_start)] = None,
     fx_client: Annotated[FrankfurterClient | None, Depends(get_fx_client)] = None,
+    meal_vouchers_enabled: Annotated[bool, Depends(current_meal_vouchers_enabled)] = False,
 ) -> DashboardSummaryResponse:
     """Summarize real spending and income over a period, per currency.
 
@@ -201,11 +213,18 @@ def dashboard_summary(
         :func:`~traccio.api.deps.current_tracking_start`. Raised into both the
         main and the comparison period before anything is fetched or bucketed,
         so no total, bucket, or average counts a day the user excluded.
+    meal_vouchers_enabled : bool
+        Not a query param — the user's stored ``meal_vouchers_enabled``
+        setting (ADR 0029), injected via
+        :func:`~traccio.api.deps.current_meal_vouchers_enabled`. When set,
+        every voucher-kind account's spending is excluded from ``currencies``/
+        ``converted`` and reported separately in ``meal_vouchers`` instead.
 
     Returns
     -------
     DashboardSummaryResponse
-        One summary per currency present in the period.
+        One summary per currency present in the period, plus the meal-voucher
+        breakout when the setting is on and there is voucher spend.
 
     Raises
     ------
@@ -259,6 +278,20 @@ def dashboard_summary(
         for account in accounts
     }
 
+    # A scoping filter, not a second derivation from ``effective_amount`` —
+    # same class of thing as the tracking-start floor above: voucher
+    # transactions are removed before anything downstream (totals, FX
+    # conversion, the comparison) ever sees them, and reported separately
+    # from their own ``summarize`` call instead (ADR 0029).
+    voucher_account_ids = (
+        {account.id for account in accounts if account.kind is AccountKind.VOUCHER}
+        if meal_vouchers_enabled
+        else set()
+    )
+    found, voucher_found = split_meal_voucher_transactions(
+        found, voucher_account_ids=voucher_account_ids
+    )
+
     now = datetime.now(UTC)
 
     comparing = compare_start is not None and compare_end is not None
@@ -267,6 +300,9 @@ def dashboard_summary(
     if comparing:
         compare_found = list_transactions_in_period(
             session, user_id, start=compare_start, end=compare_end
+        )
+        compare_found, _ = split_meal_voucher_transactions(
+            compare_found, voucher_account_ids=voucher_account_ids
         )
         compare_shares = spending_shares(
             compare_found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance
@@ -319,6 +355,24 @@ def dashboard_summary(
         now=now,
     )
 
+    # The voucher breakout: one more (uncompared) ``summarize`` call over the
+    # transactions the split above set aside, never FX-converted (ADR 0029
+    # keeps it a per-currency breakout, additive like ``currencies``).
+    voucher_summaries = (
+        summarize(
+            voucher_found,
+            advance_shares=shares,
+            parents=parents,
+            granularity=granularity,
+            tz=zone,
+            period_start=start,
+            period_end=end,
+            now=now,
+        )
+        if voucher_found
+        else []
+    )
+
     # Log currencies, a count, and the requested shape — never amounts (see
     # data-safety rules).
     logger.info(
@@ -329,6 +383,7 @@ def dashboard_summary(
         has_comparison=comparing,
         converted=converted is not None,
         conversion_unavailable=conversion_unavailable,
+        meal_voucher_count=len(voucher_found),
     )
     return DashboardSummaryResponse(
         currencies=[
@@ -339,4 +394,8 @@ def dashboard_summary(
         ],
         converted=converted,
         conversion_unavailable=conversion_unavailable,
+        meal_vouchers=[
+            MealVoucherSummaryResponse.from_domain(s, category_display=category_display)
+            for s in voucher_summaries
+        ],
     )

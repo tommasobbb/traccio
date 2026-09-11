@@ -79,6 +79,24 @@ class CreateManualAccountRequest(BaseModel):
     icon: AccountIcon | None = None
 
 
+class SetAccountKindRequest(BaseModel):
+    """Body for reclassifying a manual account's ``kind``.
+
+    The only way to turn an existing manual account into a meal-voucher
+    account (ADR 0029) — e.g. a "Buoni Pasto" account created ``cash`` before
+    the feature existed, or by the Satispay import (ADR 0023). Manual only;
+    a synced account's ``kind`` is provider-derived (``409
+    account_not_manual``).
+
+    Attributes
+    ----------
+    kind : AccountKind
+        The new kind.
+    """
+
+    kind: AccountKind
+
+
 class AccountResponse(BaseModel):
     """One account as returned to the client.
 
@@ -99,7 +117,8 @@ class AccountResponse(BaseModel):
         :func:`~traccio.domain.accounts.account_source`), never stored — sent so
         the client does not infer it from a null.
     kind : AccountKind
-        ``current``, ``savings``, ``card``, ``wallet``, or ``cash``.
+        ``current``, ``savings``, ``card``, ``wallet``, ``cash``, or
+        ``voucher``.
     currency : str
         The account's ISO 4217 currency.
     name : str or None

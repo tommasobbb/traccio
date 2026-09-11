@@ -297,6 +297,7 @@ def test_summary_with_no_transactions_returns_no_currencies() -> None:
         "currencies": [],
         "converted": None,
         "conversion_unavailable": None,
+        "meal_vouchers": [],
     }
 
 
@@ -313,6 +314,7 @@ def test_summary_is_user_scoped() -> None:
         "currencies": [],
         "converted": None,
         "conversion_unavailable": None,
+        "meal_vouchers": [],
     }
 
 
@@ -752,3 +754,126 @@ def test_summary_tracking_start_clamps_totals_and_the_bucket_grid() -> None:
     assert summary["transaction_count"] == 1
     # The gap-filled grid begins at the floor, not at 2026-06-01.
     assert [b["start"] for b in summary["by_bucket"]] == ["2026-07-01", "2026-07-02", "2026-07-03"]
+
+
+# --- Meal vouchers (ADR 0029) ------------------------------------------------
+
+
+def test_summary_counts_a_voucher_account_normally_when_the_setting_is_off() -> None:
+    """The default (and reversible) state: a voucher-kind account is just
+    another account, in ``spending`` and ``by_account``, with no breakout."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    voucher_account_id = _seed_account(
+        engine, user_id=dev_user_id, kind=AccountKind.VOUCHER, alias="Buoni Pasto"
+    )
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-1200,
+        stable_key="MENSA",
+        account_id=UUID(voucher_account_id),
+    )
+    _seed_tx(engine, user_id=dev_user_id, amount=-500, stable_key="CARD")
+    client = _client(engine)
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["meal_vouchers"] == []
+    [summary] = body["currencies"]
+    assert summary["spending"] == 1700
+    assert summary["transaction_count"] == 2
+    assert voucher_account_id in {row["account_id"] for row in summary["by_account"]}
+
+
+def test_summary_excludes_and_breaks_out_voucher_spend_when_the_setting_is_on() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    groceries_id = _seed_category(engine, user_id=dev_user_id, name="Groceries")
+    voucher_account_id = _seed_account(
+        engine, user_id=dev_user_id, kind=AccountKind.VOUCHER, alias="Buoni Pasto"
+    )
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-1200,
+        stable_key="MENSA",
+        account_id=UUID(voucher_account_id),
+        confirmed_category_id=UUID(groceries_id),
+    )
+    _seed_tx(engine, user_id=dev_user_id, amount=-500, stable_key="CARD")
+    client = _client(engine)
+    assert client.post("/settings/meal-vouchers", json={"enabled": True}).status_code == 200
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    # The headline total no longer includes the voucher leg.
+    [summary] = body["currencies"]
+    assert summary["spending"] == 500
+    assert summary["transaction_count"] == 1
+    assert voucher_account_id not in {row["account_id"] for row in summary["by_account"]}
+    # The voucher leg shows up in its own breakout instead.
+    [vouchers] = body["meal_vouchers"]
+    assert vouchers["currency"] == "EUR"
+    assert vouchers["spending"] == 1200
+    assert vouchers["transaction_count"] == 1
+    [group] = vouchers["by_category"]
+    assert group["category_id"] == groceries_id
+    assert group["spending"] == 1200
+
+
+def test_summary_meal_vouchers_is_empty_with_no_voucher_spend() -> None:
+    """The setting is on, but there is nothing to report — the user's
+    "se sono stati spesi" case."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-500, stable_key="CARD")
+    client = _client(engine)
+    assert client.post("/settings/meal-vouchers", json={"enabled": True}).status_code == 200
+
+    response = client.get("/dashboard/summary")
+
+    assert response.status_code == 200
+    assert response.json()["meal_vouchers"] == []
+
+
+def test_summary_meal_vouchers_comparison_also_excludes_the_voucher_leg() -> None:
+    """The comparison delta must be filtered the same way as the main period,
+    or it would compare an unfiltered past to a filtered present."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    voucher_account_id = _seed_account(engine, user_id=dev_user_id, kind=AccountKind.VOUCHER)
+    _seed_tx(
+        engine,
+        user_id=dev_user_id,
+        amount=-1000,
+        stable_key="VOUCHER-PAST",
+        account_id=UUID(voucher_account_id),
+        booked_at=_BEFORE_PERIOD,
+    )
+    _seed_tx(
+        engine, user_id=dev_user_id, amount=-500, stable_key="CARD-PAST", booked_at=_BEFORE_PERIOD
+    )
+    _seed_tx(engine, user_id=dev_user_id, amount=-700, stable_key="CARD-NOW")
+    client = _client(engine)
+    assert client.post("/settings/meal-vouchers", json={"enabled": True}).status_code == 200
+
+    response = client.get(
+        "/dashboard/summary",
+        params={
+            "start": "2026-08-01T00:00:00Z",
+            "end": "2026-09-01T00:00:00Z",
+            "compare_start": "2026-07-01T00:00:00Z",
+            "compare_end": "2026-08-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    [summary] = response.json()["currencies"]
+    # The comparison period's voucher leg is excluded too — only CARD-PAST's
+    # 500 counts, not the voucher account's 1000.
+    assert summary["comparison"]["spending"] == 500

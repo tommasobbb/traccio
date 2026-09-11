@@ -11,6 +11,7 @@ from traccio.domain.dashboard import (
     ComparisonSummary,
     CurrencySummary,
     compare,
+    split_meal_voucher_transactions,
     summarize,
     summarize_comparisons,
 )
@@ -103,6 +104,7 @@ __all__ = [
     "event_total",
     "next_sync_eligible_at",
     "rule_matches",
+    "split_meal_voucher_transactions",
     "suggest_tracking_start",
     "summarize",
     "summarize_comparisons",

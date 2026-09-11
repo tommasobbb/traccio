@@ -18,6 +18,14 @@ requested period when both bounds are known (``by_bucket``); and by account
 via :func:`compare`/:func:`summarize_comparisons` — a second, independent call
 to :func:`summarize`, not a parameter of the first.
 
+:func:`split_meal_voucher_transactions` (ADR 0029) is a *scoping* filter, the
+same class of thing as the tracking-start floor (ADR 0024): it removes rows
+before ``summarize`` ever sees them, rather than adding a second derivation
+alongside ``effective_amount``. The router runs ``summarize`` twice — once on
+the remaining transactions for the headline totals, once on the voucher
+transactions for the "Buoni pasto" breakout — so both come from the one
+aggregation function with no separate code path.
+
 This module imports nothing outside ``domain/``.
 """
 
@@ -32,6 +40,42 @@ from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import BucketGranularity
 from traccio.domain.models import Transaction
 from traccio.domain.money import CurrencyCode, Money
+
+
+def split_meal_voucher_transactions(
+    transactions: Sequence[Transaction], *, voucher_account_ids: set[UUID]
+) -> tuple[list[Transaction], list[Transaction]]:
+    """Partition ``transactions`` into (everything else, meal-voucher spend).
+
+    A meal-voucher transaction is one whose ``account_id`` is a
+    voucher-kind account (ADR 0029) — the caller resolves that set from
+    ``AccountKind.VOUCHER`` accounts before calling this, since ``domain/``
+    has no account lookup of its own. Order is preserved within each half.
+    Pure and total: with an empty ``voucher_account_ids`` (the setting is
+    off, or the user has no voucher account), every transaction lands in the
+    first list and the second is empty.
+
+    Parameters
+    ----------
+    transactions : Sequence[Transaction]
+        The transactions to partition.
+    voucher_account_ids : set[UUID]
+        Ids of the user's voucher-kind accounts.
+
+    Returns
+    -------
+    tuple[list[Transaction], list[Transaction]]
+        ``(main, vouchers)`` — ``main`` excludes every voucher transaction,
+        ``vouchers`` holds only them.
+    """
+    main: list[Transaction] = []
+    vouchers: list[Transaction] = []
+    for transaction in transactions:
+        if transaction.account_id in voucher_account_ids:
+            vouchers.append(transaction)
+        else:
+            main.append(transaction)
+    return main, vouchers
 
 
 def _bucket_of(

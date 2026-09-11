@@ -1,9 +1,12 @@
-"""Request and response schemas for the per-user settings endpoints (ADR 0024).
+"""Request and response schemas for the per-user settings endpoints
+(ADR 0024, ADR 0029).
 
-The only setting so far is ``tracking_start_date`` — the first day the user
-wants counted on the dashboard and in the Movimenti list. It is a whole-day
-calendar boundary, and clearing or raising it never deletes a row, only hides
-it (bank history is not re-fetchable, so a delete would be unrecoverable).
+Two settings so far: ``tracking_start_date`` — the first day the user wants
+counted on the dashboard and in the Movimenti list, a whole-day calendar
+boundary that clearing or raising never deletes a row, only hides it (bank
+history is not re-fetchable, so a delete would be unrecoverable) — and
+``meal_vouchers_enabled`` — whether the dashboard breaks meal-voucher
+spending out of its headline totals (ADR 0029).
 """
 
 from datetime import date
@@ -12,16 +15,37 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
-class TrackingStartResponse(BaseModel):
-    """The user's current tracking start date.
+class SettingsResponse(BaseModel):
+    """The user's current settings.
 
     Attributes
     ----------
     tracking_start_date : date or None
         The stored floor, or ``None`` for "no floor — show everything".
+    meal_vouchers_enabled : bool
+        Whether the dashboard's "Buoni pasto" breakout is on.
     """
 
     tracking_start_date: date | None
+    meal_vouchers_enabled: bool
+
+
+class SetMealVouchersRequest(BaseModel):
+    """Body for ``POST /settings/meal-vouchers``.
+
+    A separate endpoint from ``POST /settings`` rather than a second field on
+    :class:`SetTrackingStartRequest`: that body is deliberately
+    mandatory-but-nullable so "clear the date" is never ambiguous with "leave
+    it alone", and a plain optional boolean would reintroduce exactly that
+    ambiguity for this setting.
+
+    Attributes
+    ----------
+    enabled : bool
+        The new state.
+    """
+
+    enabled: bool
 
 
 class SetTrackingStartRequest(BaseModel):

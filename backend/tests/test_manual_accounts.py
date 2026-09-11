@@ -450,3 +450,44 @@ def test_stranger_cannot_delete_a_manual_account_via_scoping() -> None:
     _create_manual_account(client)
 
     assert client.delete(f"/accounts/{uuid4()}").status_code == 404
+
+
+# --- reclassifying a manual account's kind (ADR 0029) -----------------------
+
+
+def test_set_account_kind_reclassifies_a_manual_account() -> None:
+    """The migration path for an existing "Buoni Pasto" account created
+    ``cash`` (or by the Satispay import) before the feature existed."""
+    client = _client(_engine())
+    account_id = _create_manual_account(client, alias="Buoni Pasto")["id"]
+
+    response = client.post(f"/accounts/{account_id}/kind", json={"kind": "voucher"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["kind"] == "voucher"
+    assert body["alias"] == "Buoni Pasto"  # untouched
+
+
+def test_set_account_kind_on_a_synced_account_is_refused() -> None:
+    engine = _engine()
+    account_id = _seed_synced_account(engine, get_settings().dev_user_id)
+
+    response = _client(engine).post(f"/accounts/{account_id}/kind", json={"kind": "voucher"})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "account_not_manual"
+
+
+def test_set_account_kind_unknown_account_is_404() -> None:
+    response = _client(_engine()).post(f"/accounts/{uuid4()}/kind", json={"kind": "voucher"})
+    assert response.status_code == 404
+
+
+def test_set_account_kind_rejects_an_unrecognized_value() -> None:
+    client = _client(_engine())
+    account_id = _create_manual_account(client)["id"]
+
+    response = client.post(f"/accounts/{account_id}/kind", json={"kind": "not-a-real-kind"})
+
+    assert response.status_code == 422

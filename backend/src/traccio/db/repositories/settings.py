@@ -64,6 +64,51 @@ def set_tracking_start_date(session: Session, *, user_id: UUID, value: date | No
         row.tracking_start_date = value
 
 
+def get_meal_vouchers_enabled(session: Session, *, user_id: UUID) -> bool:
+    """Return whether the user's meal-vouchers dashboard breakout is on (ADR 0029).
+
+    ``False`` for a user with no row yet — the same "no row means the
+    default" posture as :func:`get_tracking_start_date`. Scoped by
+    ``user_id``.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose setting to read.
+
+    Returns
+    -------
+    bool
+        Whether the breakout is enabled.
+    """
+    row = session.get(UserRow, user_id)
+    return row.meal_vouchers_enabled if row is not None else False
+
+
+def set_meal_vouchers_enabled(session: Session, *, user_id: UUID, value: bool) -> None:
+    """Set the user's meal-vouchers dashboard breakout on or off.
+
+    Upserts the ``users`` row, same as :func:`set_tracking_start_date`. The
+    caller owns the transaction boundary and commits.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        The user whose setting to write.
+    value : bool
+        The new state.
+    """
+    row = session.get(UserRow, user_id)
+    if row is None:
+        session.add(UserRow(id=user_id, created_at=datetime.now(UTC), meal_vouchers_enabled=value))
+    else:
+        row.meal_vouchers_enabled = value
+
+
 def earliest_transaction_dates_by_account(session: Session, *, user_id: UUID) -> dict[UUID, date]:
     """Return each account's earliest dated movement (ADR 0024).
 
