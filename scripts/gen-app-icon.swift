@@ -15,6 +15,8 @@
 //
 // Output (overwrites in place):
 //   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-ios-1024.png
+//   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-ios-1024-dark.png
+//   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-ios-1024-tinted.png
 //   client/App/Resources/Assets.xcassets/AppIcon.appiconset/icon-macos-{16,32,64,128,256,512,1024}.png
 //   client/App/Resources/Assets.xcassets/LaunchMark.imageset/launch-mark@{1,2,3}x.png
 //
@@ -25,6 +27,17 @@
 // since macOS does not mask third-party icons — at every size in the classic
 // ten-slot set. The launch mark is the bars alone in `launchBar` (the accent)
 // on a transparent ground — white bars would vanish on the app's background.
+//
+// iOS 26's dark and tinted Home Screen appearances (`docs/decisions/
+// 0030-liquid-glass-chrome.md`) are two more fully-opaque 1024×1024 PNGs,
+// declared in `AppIcon.appiconset/Contents.json` via each image's own
+// `appearances` array (`luminosity` = `dark` / `tinted`) — the classic
+// flat-PNG appiconset extension from iOS 18, not the newer layered Icon
+// Composer format: `make icon` stays the one source of truth and no new
+// tool enters the pipeline. Dark keeps the same cyan→azure hue family, only
+// darker, so the icon still reads as *this app* next to itself in light
+// mode. Tinted is fully grayscale per Apple's own requirement — the system
+// applies its own colour multiply on top, so any hue here would fight it.
 
 import CoreGraphics
 import Foundation
@@ -39,6 +52,16 @@ import UniformTypeIdentifiers
 /// which was the darkest icon on the home screen.
 let iconTop = (r: 0x22 / 255.0, g: 0xC7 / 255.0, b: 0xE8 / 255.0)
 let iconBottom = (r: 0x0A / 255.0, g: 0x84 / 255.0, b: 0xFF / 255.0)
+/// The dark-appearance icon (iOS 26 Home Screen): the same cyan→azure hue
+/// family, pulled down in luminosity so it sits naturally among the other
+/// dark icons on the Home Screen instead of glowing next to them.
+let iconTopDark = (r: 0x11 / 255.0, g: 0x4E / 255.0, b: 0x73 / 255.0)
+let iconBottomDark = (r: 0x04 / 255.0, g: 0x20 / 255.0, b: 0x3D / 255.0)
+/// The tinted-appearance icon: fully grayscale, per Apple's own requirement
+/// — the system multiplies its own colour on top, so any hue here would
+/// fight it rather than combine with it.
+let iconTopTinted = (r: 0x8C / 255.0, g: 0x8C / 255.0, b: 0x8C / 255.0)
+let iconBottomTinted = (r: 0x3A / 255.0, g: 0x3A / 255.0, b: 0x3A / 255.0)
 /// `Palette.accent` (light) — the launch mark's bar colour, shown alone on
 /// the app's own background where white bars would not read.
 let launchBar = (r: 0x08 / 255.0, g: 0x7E / 255.0, b: 0xD7 / 255.0)
@@ -67,27 +90,37 @@ func drawBars(in ctx: CGContext, rect: CGRect, color: CGColor) {
     ctx.fillPath()
 }
 
-/// Vertical gradient from `iconTop` to `iconBottom`. The call sites pass
-/// `start` at the visual top and `end` at the visual bottom.
-func iconGradient() -> CGGradient {
+/// Vertical gradient between two colours. The call sites pass `start` at the
+/// visual top and `end` at the visual bottom.
+func iconGradient(
+    top: (r: Double, g: Double, b: Double) = iconTop,
+    bottom: (r: Double, g: Double, b: Double) = iconBottom
+) -> CGGradient {
     let colors = [
-        CGColor(colorSpace: sRGB, components: [iconTop.r, iconTop.g, iconTop.b, 1])!,
-        CGColor(colorSpace: sRGB, components: [iconBottom.r, iconBottom.g, iconBottom.b, 1])!,
+        CGColor(colorSpace: sRGB, components: [top.r, top.g, top.b, 1])!,
+        CGColor(colorSpace: sRGB, components: [bottom.r, bottom.g, bottom.b, 1])!,
     ]
     return CGGradient(colorsSpace: sRGB, colors: colors as CFArray, locations: [0, 1])!
 }
 
 // MARK: Renderers
 
-/// The iOS icon: opaque, edge-to-edge, no alpha.
-func renderIOSIcon(size px: Int) -> CGImage {
+/// The iOS icon: opaque, edge-to-edge, no alpha. `top`/`bottom` pick the
+/// appearance (light/dark/tinted all share this one renderer); the bars stay
+/// white in every appearance — the tinted variant is grayscale precisely so
+/// white-on-grayscale still contrasts once the system applies its tint.
+func renderIOSIcon(
+    size px: Int,
+    top: (r: Double, g: Double, b: Double) = iconTop,
+    bottom: (r: Double, g: Double, b: Double) = iconBottom
+) -> CGImage {
     let ctx = CGContext(
         data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
         space: sRGB, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
     )!
     let full = CGRect(x: 0, y: 0, width: px, height: px)
     ctx.drawLinearGradient(
-        iconGradient(),
+        iconGradient(top: top, bottom: bottom),
         start: CGPoint(x: 0, y: full.maxY), end: CGPoint(x: 0, y: 0), options: []
     )
     drawBars(
@@ -171,6 +204,14 @@ let launchDir = repoRoot
     .appendingPathComponent("client/App/Resources/Assets.xcassets/LaunchMark.imageset")
 
 write(renderIOSIcon(size: 1024), to: appIconDir.appendingPathComponent("icon-ios-1024.png").path)
+write(
+    renderIOSIcon(size: 1024, top: iconTopDark, bottom: iconBottomDark),
+    to: appIconDir.appendingPathComponent("icon-ios-1024-dark.png").path
+)
+write(
+    renderIOSIcon(size: 1024, top: iconTopTinted, bottom: iconBottomTinted),
+    to: appIconDir.appendingPathComponent("icon-ios-1024-tinted.png").path
+)
 for size in [16, 32, 64, 128, 256, 512, 1024] {
     write(
         renderMacIcon(size: size),

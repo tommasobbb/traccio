@@ -281,6 +281,15 @@ A `GlassEffectContainer` around the Movimenti toolbar's "•••"/filtri/"+"
 cluster was considered and dropped: native `ToolbarItem`s already merge and
 separate their own glass on iOS 26, so wrapping them again would be inert.
 
+**App icon**: `scripts/gen-app-icon.swift` (`make icon`) now renders three
+iOS variants — light (unchanged, cyan→azure), dark (same hue family, pulled
+down in luminosity so it doesn't glow next to the other dark Home Screen
+icons), and tinted (fully grayscale, per Apple's own requirement — the
+system multiplies its own colour on top). Declared in
+`AppIcon.appiconset/Contents.json` via the classic flat-PNG `appearances`
+extension (iOS 18+), not the newer layered Icon Composer format — `make icon`
+stays the one source of truth.
+
 **Picking a picker.** Two shapes, chosen by what the options are:
 
 - **Data-backed options that carry their own icon and colour** (accounts,
