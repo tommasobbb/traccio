@@ -82,7 +82,7 @@ struct BreakdownRowView: View {
                     Text(percentageText)
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkTertiary)
-                        .fixedSize()
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }

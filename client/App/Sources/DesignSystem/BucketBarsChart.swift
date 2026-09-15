@@ -89,10 +89,19 @@ struct BucketBarsChart: View {
     private var tooltip: some View {
         if let selectedIndex, bars.indices.contains(selectedIndex) {
             let bar = bars[selectedIndex]
+            // `lineLimit(1)` on the two variable-length runs: without it,
+            // neither has any way to shrink below its unwrapped width, so
+            // once something upstream (`DashboardView`'s `containerRelativeFrame`
+            // guard) proposes this badge less width than it wants, it needs
+            // to be able to truncate instead of wrapping or reporting back
+            // an oversized ideal size — a Spacer is deliberately not added
+            // here, since this badge is meant to hug its own content, not
+            // stretch to fill its row (`tasks/backlog.md`).
             HStack(spacing: 8) {
                 Text(TraccioCore.formatCalendarDate(bar.start))
                     .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.ink)
+                    .lineLimit(1)
                 AmountText(
                     amount: bar.spending, currencyCode: currency, kind: .spending,
                     font: Typography.caption.weight(.bold)
@@ -100,6 +109,7 @@ struct BucketBarsChart: View {
                 Text("· \(bar.transactionCount) movimenti")
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkTertiary)
+                    .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)

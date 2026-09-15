@@ -66,7 +66,7 @@ struct AccountBreakdownCard: View {
                     Text(percentageText(for: account))
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkTertiary)
-                        .fixedSize()
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
