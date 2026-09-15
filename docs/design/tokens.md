@@ -247,6 +247,36 @@ was raised from pure `#000000` to `#0B0B0C` in the 2026-09-08 "dose, non
 tinta" revision — a hair off black so a `#1C1C1E` card still has an edge
 against it. Revert to `#000000` if cards read flat on device.
 
+## Glass
+
+Liquid Glass (`docs/decisions/0030-liquid-glass-chrome.md`), adopted since the
+deployment target moved to iOS 26 / macOS 26. The rule is the same discipline
+as "Accent dosage" above, restated for material instead of hue: **glass is
+chrome, never a content surface.**
+
+| Carries glass | Stays opaque |
+| -------------- | ------------- |
+| Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at every elevation |
+| Toolbars (native, automatic on iOS 26) | The Panoramica hero card |
+| Sheet bottom action bars (`.glassEffect`, replacing `.regularMaterial`) | Any surface that carries a figure |
+| `PillButton` (`.buttonStyle(.glassProminent)`, tinted `Palette.accent`) | Movimenti day-group rows |
+| `IconButton` (`.buttonStyle(.glass)`) | |
+| `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
+| `FilterChip` active state keeps `Palette.accent.opacity(0.12)` + accent border — the allowed dose, not a new exception | |
+| `SelectionSheet`'s closed control (glass capsule showing the current selection's icon) | |
+
+If a screen reads flat, the fix is still hierarchy — elevation, type scale,
+whitespace — never a translucent surface behind a number. `Card.swift` does
+not change for this revision.
+
+`Palette.backgroundElevated`: a barely-there neutral gradient over
+`Palette.background` (light `#F2F5F3 → #FAFBFA`, dark `#0B0B0C → #151517`),
+applied via `View.screenBackground()`. It exists only so the chrome's glass
+has something to refract — it carries no hue, so it is not a reprise of the
+accent-band rejections above. `Palette.background` itself is unchanged and
+still used wherever a flat fill is wanted (behind a sheet's content, the
+launch screen).
+
 ## Loading and press feedback
 
 - **Skeletons, not spinners.** A screen that is still loading draws a rough
