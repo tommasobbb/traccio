@@ -153,6 +153,7 @@ struct AdvanceSections: View {
                 .foregroundStyle(Palette.ink)
                 .monospacedDigit()
         }
+        .rowScrollTransition()
     }
 
     /// Renders `docs/design/canvas/TransactionDetail.dc.html`'s
@@ -285,6 +286,7 @@ struct AdvanceSections: View {
             .disabled(isUpdating)
         }
         .padding(.vertical, 2)
+        .rowScrollTransition()
     }
 
     /// Date · participant name · "collegato a un movimento" · note, each

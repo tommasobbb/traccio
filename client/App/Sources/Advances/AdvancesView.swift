@@ -42,10 +42,9 @@ struct AdvancesView: View {
     var body: some View {
         ScrollView {
             content
-                .padding(20)
+                .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle("Anticipi")
+        .screenChrome("Anticipi")
         .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
@@ -88,7 +87,7 @@ struct AdvancesView: View {
         {
             emptyCard
         } else {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if !summary.totals.isEmpty {
                     totalsCard(summary.totals)
                 }
@@ -204,10 +203,7 @@ struct AdvancesView: View {
                     kind: .income
                 )
             }
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Palette.inkQuaternary)
-                .accessibilityHidden(true)
+            DisclosureChevron()
         }
         .padding(.vertical, 9)
         .contentShape(Rectangle())

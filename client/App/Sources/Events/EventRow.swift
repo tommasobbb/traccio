@@ -27,11 +27,9 @@ struct EventRow: View {
             Spacer(minLength: 8)
             amountColumn
                 .layoutPriority(1)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Palette.inkQuaternary)
-                .accessibilityHidden(true)
+            DisclosureChevron()
         }
+        .rowScrollTransition()
     }
 
     @ViewBuilder

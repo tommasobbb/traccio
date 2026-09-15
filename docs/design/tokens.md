@@ -263,7 +263,9 @@ chrome, never a content surface.**
 | `IconButton` (`.glassEffect(.regular.tint(background).interactive(), in: Circle())`) | |
 | `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
 | `FilterChip` active state tints the same glass with `Palette.accent` — the allowed dose, not a new exception | |
-| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | |
+| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | `OptionListCard` |
+| Every sheet's action bar and toolbar, via `.sheetChrome(_:detents:)` (`SheetChrome.swift`) — no sheet is left with a flat full-height presentation since the 2026-09-15 coherence pass | `DisclosureChevron` — chrome-coloured (`inkQuaternary`) but opaque, no glass |
+| `TrackingStartView`'s primary/secondary buttons (`.glassProminent`/`.glass`, same idiom as the Filtri sheet's "Applica" bar) | |
 
 If a screen reads flat, the fix is still hierarchy — elevation, type scale,
 whitespace — never a translucent surface behind a number. `Card.swift` does
@@ -326,6 +328,70 @@ has something to refract — it carries no hue, so it is not a reprise of the
 accent-band rejections above. `Palette.background` itself is unchanged and
 still used wherever a flat fill is wanted (behind a sheet's content, the
 launch screen).
+
+**Coherence pass (2026-09-15, `docs/decisions/0031-visual-coherence-pass.md`)**:
+the Liquid Glass batch above had only touched Movimenti's own toolbar and
+filter sheet; this pass applies the same chrome uniformly to every screen
+and sheet, closing the gap that made Panoramica in particular read flat
+(zero glass, a stock `.segmented` `Picker`) next to Movimenti. Nothing in
+the "carries glass / stays opaque" table above changed rule — only reach.
+
+## Screen chrome
+
+`View.screenChrome(_ title:, style:)` (`ScreenChrome.swift`) is the one
+place a screen's background, nav title, and display mode are decided —
+replacing 33 call sites that each wired `.screenBackground()` +
+`.navigationTitle(_:)` separately, with the four tabs' display modes
+disagreeing (Panoramica alone `.inline`).
+
+- `.tabRoot` — Panoramica, Movimenti, Conti, Impostazioni: a large title
+  that collapses to inline on scroll, plus `.scrollEdgeEffectStyle(.soft,
+  for: .all)` so the chrome's glass has an edge effect to react to at the
+  screen's own top/bottom, not just the tab bar and toolbar. Matches every
+  stock Apple top-level list (Impostazioni, Mail, Musica).
+- `.pushed` (the default) — every screen reached by a push (Eventi,
+  Anticipi, Categorie e regole, Inizio tracciamento, any detail screen):
+  inline throughout, same as a stock app's own drill-down. **Deliberately
+  not large everywhere** — a large title on a pushed detail screen would
+  fight its content for protagonist billing and break the convention
+  `PersonDetailView` already followed.
+
+Panoramica moved from `.inline` (the 2026-09-08 "dose, non tinta" call, so
+the hero figure alone carried the top) to `.tabRoot`'s large/collapsing
+title, for consistency with the other three tabs. Owed on-device judgment
+(`tasks/backlog.md` item 13): if the title fights the hero figure, this
+reverts to `.pushed` and every tab follows, recorded in ADR 0031 rather
+than left to drift again.
+
+## Sheet chrome
+
+`View.sheetChrome(_ title:, detents:)` (`SheetChrome.swift`): the
+background gradient, an inline title (a sheet is a focused task, not a
+place worth a large one), `.medium`/`.large` presentation detents, and a
+visible drag indicator — applied to the content inside a sheet's own
+`NavigationStack`, next to `.toolbar`. Before the 2026-09-15 coherence pass
+only `SelectionSheet` and `TransactionFiltersSheet` had detents or a drag
+indicator; the other 15 sheets were full-height with no resize affordance.
+All 17 now share this.
+
+Four picker-shaped sheets that hand-rolled `Card` + `Divider` rows moved to
+`OptionListCard`/`OptionRow` (`EventPickerSheet`, `CreateRuleSheet`'s
+category list, `AddReimbursementSheet`'s participant list), the same
+component "Picking a picker" above already names for
+`TransactionFiltersSheet`/`SelectionSheet`. `EventPickerSheet` needed a
+leading `EventTile` (an emoji wash, ADR 0027) rather than `OptionRow`'s
+`IconTile`/swatch pair, so the shared row skeleton — title, trailing
+checkmark, `.pressableRow` — was factored out as `OptionRowLayout`, generic
+over its leading glyph. `AddEventMembersSheet`'s candidate list stays
+custom: it is a tap-to-add-immediately list with a trailing amount, not a
+single-selection picker, so `OptionRow`'s checkmark semantics don't fit.
+
+`LabeledField` (`EyebrowLabel` + `TextField`/`SecureField`, `LabeledField.swift`)
+replaces the hand-rolled version of the same three lines
+(`.font`/`.foregroundStyle(Palette.ink)`/`.autocorrectionDisabled()`) at
+~10 call sites — a name, an amount, a currency code, each in its own
+`Card`. Not for a dense multi-field card (Settings' Server card keeps its
+own smaller caption-label layout).
 
 ## Loading and press feedback
 
@@ -423,6 +489,16 @@ ADR 0017) — same adoption posture as `Radius` above.
 | Gap between cards    | 16    | `Spacing.cardGap`     |
 | Card internal padding| 20    | `Spacing.cardPadding` |
 | Row internal padding | 9     | `Spacing.rowPadding`  |
+
+**2026-09-15 sweep** (ADR 0031): 27 bare `.padding(20)` call sites moved to
+`.padding(Spacing.gutter)` and 24 `VStack(spacing: 16)` stacks-of-cards moved
+to `Spacing.cardGap`, closing the rest of `tasks/backlog.md` item 14. Left as
+literals, deliberately: values with no matching token, rather than forced
+into the wrong one or given a one-off token for a single call site — a
+colour swatch's 3pt corner, `Card`'s own `contentPadding` overrides (14, an
+explicit per-call override, not a missing token), and the two literals
+`tasks/backlog.md` already named (the hero's `HStack(spacing: 16)`, the FX
+tile's `cornerRadius: 14`).
 
 ## History
 

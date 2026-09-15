@@ -24,16 +24,15 @@ struct EventPickerSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     eventsCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Scegli un evento")
+            .sheetChrome("Scegli un evento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -43,19 +42,19 @@ struct EventPickerSheet: View {
     }
 
     private var eventsCard: some View {
-        Card {
+        VStack(alignment: .leading, spacing: 8) {
             EyebrowLabel(text: "Eventi")
             if events.isEmpty {
                 Text("Non hai ancora nessun evento. Puoi crearne uno da Impostazioni → Eventi.")
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkSecondary)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(events) { event in
-                        eventRow(event)
-                        if event.id != events.last?.id {
+                OptionListCard {
+                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                        if index > 0 {
                             Divider().overlay(Palette.separator)
                         }
+                        eventRow(event)
                     }
                 }
             }
@@ -64,27 +63,11 @@ struct EventPickerSheet: View {
 
     private func eventRow(_ event: EventResponse) -> some View {
         let isSelected = event.id == selectedEventID
-        return Button {
-            onSelect(event.id)
-        } label: {
-            HStack(spacing: 12) {
-                EventTile(emoji: event.emoji, color: event.color, diameter: 32)
-                Text(event.name)
-                    .font(Typography.body)
-                    .foregroundStyle(Palette.ink)
-                    .lineLimit(1)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Palette.accent)
-                        .accessibilityHidden(true)
-                }
-            }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        return OptionRowLayout(
+            title: event.name, isSelected: isSelected,
+            action: { onSelect(event.id) },
+            leading: { EventTile(emoji: event.emoji, color: event.color, diameter: 28) }
+        )
         .disabled(isUpdating || isSelected)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

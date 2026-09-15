@@ -76,37 +76,40 @@ struct TransactionRow: View {
     }
 
     var body: some View {
-        if let selection {
-            Button(action: selection.onToggle) {
-                rowContent
+        Group {
+            if let selection {
+                Button(action: selection.onToggle) {
+                    rowContent
+                }
+                .buttonStyle(.plain)
+                .disabled(!selection.isSelectable && !selection.isSelected)
+            } else {
+                NavigationLink {
+                    TransactionDetailView(
+                        transaction: transaction,
+                        categories: categories,
+                        advance: advance,
+                        transfer: transfersByTransactionID[transaction.id],
+                        account: accountsByID[transaction.accountID],
+                        events: events,
+                        client: client,
+                        onUpdate: onUpdate,
+                        onAdvanceChange: onAdvanceUpdate,
+                        onDashboardStale: onDashboardStale,
+                        onRulesApplied: onRulesApplied,
+                        onDelete: onDelete
+                    )
+                    #if os(iOS)
+                    .navigationTransition(.zoom(sourceID: transaction.id, in: namespace))
+                    #endif
+                } label: {
+                    rowContent
+                }
+                .buttonStyle(.pressableRow)
+                .matchedTransitionSource(id: transaction.id, in: namespace)
             }
-            .buttonStyle(.plain)
-            .disabled(!selection.isSelectable && !selection.isSelected)
-        } else {
-            NavigationLink {
-                TransactionDetailView(
-                    transaction: transaction,
-                    categories: categories,
-                    advance: advance,
-                    transfer: transfersByTransactionID[transaction.id],
-                    account: accountsByID[transaction.accountID],
-                    events: events,
-                    client: client,
-                    onUpdate: onUpdate,
-                    onAdvanceChange: onAdvanceUpdate,
-                    onDashboardStale: onDashboardStale,
-                    onRulesApplied: onRulesApplied,
-                    onDelete: onDelete
-                )
-                #if os(iOS)
-                .navigationTransition(.zoom(sourceID: transaction.id, in: namespace))
-                #endif
-            } label: {
-                rowContent
-            }
-            .buttonStyle(.pressableRow)
-            .matchedTransitionSource(id: transaction.id, in: namespace)
         }
+        .rowScrollTransition()
     }
 
     /// The row is a plain padded line — no card of its own. Its day group

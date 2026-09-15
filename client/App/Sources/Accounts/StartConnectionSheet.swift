@@ -22,8 +22,7 @@ struct StartConnectionSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .screenBackground()
-                .navigationTitle("Collega un nuovo conto")
+                .sheetChrome("Collega un nuovo conto")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Annulla", action: onCancel)
@@ -50,7 +49,7 @@ struct StartConnectionSheet: View {
             EmptyState(systemImage: "building.columns", title: "Nessuna banca disponibile")
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if startFailed {
                         Banner(message: "Non è stato possibile avviare il collegamento. Riprova.")
                     }
@@ -85,9 +84,7 @@ struct StartConnectionSheet: View {
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
                 Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Palette.inkQuaternary)
+                DisclosureChevron()
             }
             .padding(.vertical, Spacing.rowPadding)
             .contentShape(Rectangle())

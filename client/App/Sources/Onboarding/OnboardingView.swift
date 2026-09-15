@@ -41,7 +41,7 @@ struct OnboardingView: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
             .frame(maxWidth: .infinity)
         }
         .screenBackground()

@@ -656,3 +656,15 @@ and every figure-bearing surface stay exactly as the 2026-09-08 revision left
 them: this is the same "dose, non tinta" discipline restated for material
 instead of hue. `docs/design/tokens.md` gains a **Glass** section recording
 which components carry it.
+
+## 2026-09-15 revision: visual coherence pass
+
+Full decision in `0031-visual-coherence-pass.md`. The Liquid Glass revision
+above had only touched Movimenti's own toolbar and filter sheet; this
+revision applies the same chrome — glass rule unchanged, only its reach —
+to every screen and sheet: a shared `screenChrome`/`sheetChrome` modifier
+pair, detents and a drag indicator on all 17 sheets, a large collapsing
+title on the four tabs (Panoramica included, reversing its `.inline` call
+from the 2026-09-08 revision — owed on-device judgment), and a single
+`DisclosureChevron` in place of one that had drifted to four sizes and two
+colours across seven files.

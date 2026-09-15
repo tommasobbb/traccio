@@ -22,7 +22,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: Spacing.cardGap) {
                     Card {
                         NavigationLink {
                             CategorizationView(
@@ -66,10 +66,9 @@ struct SettingsView: View {
                     }
                     serverCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Impostazioni")
+            .screenChrome("Impostazioni", style: .tabRoot)
             .task {
                 mealVouchers.onChanged = { freshness.markStale([.dashboard]) }
                 await mealVouchers.load()
@@ -166,10 +165,7 @@ struct SettingsView: View {
         HStack(spacing: 12) {
             settingsRowLabel(title: title, systemImage: systemImage)
             Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Palette.inkQuaternary)
-                .accessibilityHidden(true)
+            DisclosureChevron()
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

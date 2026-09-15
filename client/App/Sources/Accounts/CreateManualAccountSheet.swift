@@ -42,16 +42,12 @@ struct CreateManualAccountSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     Card {
-                        EyebrowLabel(text: "Nome")
-                        TextField("Contanti", text: $aliasText)
-                            .font(Typography.statFigure)
-                            .foregroundStyle(Palette.ink)
-                            .autocorrectionDisabled()
+                        LabeledField(eyebrow: "Nome", placeholder: "Contanti", text: $aliasText)
                     }
                     Card {
                         EyebrowLabel(text: "Tipo")
@@ -79,17 +75,20 @@ struct CreateManualAccountSheet: View {
                         }
                     }
                     Card {
-                        EyebrowLabel(text: "Valuta")
-                        TextField("EUR", text: $currencyText)
-                            .font(Typography.statFigure)
-                            .foregroundStyle(Palette.ink)
-                            .autocorrectionDisabled()
-                            #if os(iOS)
-                                .textInputAutocapitalization(.characters)
-                            #endif
+                        #if os(iOS)
+                            LabeledField(
+                                eyebrow: "Valuta", placeholder: "EUR", text: $currencyText,
+                                autocapitalization: .characters
+                            )
                             .onChange(of: currencyText) { _, newValue in
                                 currencyText = String(newValue.uppercased().prefix(3))
                             }
+                        #else
+                            LabeledField(eyebrow: "Valuta", placeholder: "EUR", text: $currencyText)
+                                .onChange(of: currencyText) { _, newValue in
+                                    currencyText = String(newValue.uppercased().prefix(3))
+                                }
+                        #endif
                     }
                     Card {
                         EyebrowLabel(text: "Colore")
@@ -100,10 +99,9 @@ struct CreateManualAccountSheet: View {
                         iconGrid
                     }
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Nuovo conto manuale")
+            .sheetChrome("Nuovo conto manuale")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)

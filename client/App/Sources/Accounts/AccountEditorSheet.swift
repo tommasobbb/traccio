@@ -76,16 +76,12 @@ struct AccountEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     Card {
-                        EyebrowLabel(text: "Nome")
-                        TextField(account.name ?? "Conto", text: $aliasText)
-                            .font(Typography.statFigure)
-                            .foregroundStyle(Palette.ink)
-                            .autocorrectionDisabled()
+                        LabeledField(eyebrow: "Nome", placeholder: account.name ?? "Conto", text: $aliasText)
                     }
                     if onDelete != nil {
                         Card {
@@ -132,10 +128,9 @@ struct AccountEditorSheet: View {
                         .disabled(isSaving)
                     }
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Modifica conto")
+            .sheetChrome("Modifica conto")
             .confirmationDialog(
                 "Eliminare \(account.displayName ?? "questo conto")?",
                 isPresented: $isConfirmingDelete,

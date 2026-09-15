@@ -34,7 +34,7 @@ struct FundedPaymentOrientationSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
@@ -46,10 +46,9 @@ struct FundedPaymentOrientationSheet: View {
                     legOption(a)
                     legOption(b)
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Doppia uscita")
+            .sheetChrome("Doppia uscita")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)

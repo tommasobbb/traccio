@@ -39,10 +39,9 @@ struct EventsView: View {
     var body: some View {
         ScrollView {
             content
-                .padding(20)
+                .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle("Eventi")
+        .screenChrome("Eventi")
         .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }
         .task { await model.load() }
@@ -82,7 +81,7 @@ struct EventsView: View {
         case .idle, .loading:
             ListSkeleton()
         case .loaded(let events):
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if model.actionFailure != nil {
                     Banner(message: failureMessage)
                 }

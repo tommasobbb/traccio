@@ -58,11 +58,7 @@ struct TransactionFiltersSheet: View {
                 }
                 .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Filtri")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .sheetChrome("Filtri")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Azzera") {
@@ -91,8 +87,6 @@ struct TransactionFiltersSheet: View {
                 .glassEffect(.regular, in: Rectangle())
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 
     private var isAnyFilterActive: Bool {

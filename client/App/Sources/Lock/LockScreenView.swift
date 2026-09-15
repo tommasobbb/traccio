@@ -38,6 +38,12 @@ struct LockScreenView: View {
             Image(systemName: iconName)
                 .font(.system(size: 32, weight: .regular))
                 .foregroundStyle(Palette.accent)
+                // A quiet pulse while waiting on Face ID/Touch ID — the same
+                // ambient cue the system's own biometric prompt gives
+                // (`docs/decisions/0031-visual-coherence-pass.md`). Backs off
+                // under Reduce Motion automatically, like every other
+                // `symbolEffect` in `docs/design/tokens.md`.
+                .symbolEffect(.pulse, isActive: lock.state == .authenticating)
         }
         .frame(width: 84, height: 84)
         .accessibilityHidden(true)

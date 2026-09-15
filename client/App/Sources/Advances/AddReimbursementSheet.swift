@@ -52,7 +52,7 @@ struct AddReimbursementSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
@@ -65,10 +65,9 @@ struct AddReimbursementSheet: View {
                     }
                     noteCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Aggiungi rimborso")
+            .sheetChrome("Aggiungi rimborso")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -178,13 +177,14 @@ struct AddReimbursementSheet: View {
 
     private var amountCard: some View {
         Card {
-            EyebrowLabel(text: "Importo ricevuto")
-            TextField("0,00", text: $amountText)
-                #if os(iOS)
-                    .keyboardType(.decimalPad)
-                #endif
-                .font(Typography.statFigure)
-                .foregroundStyle(Palette.ink)
+            #if os(iOS)
+                LabeledField(
+                    eyebrow: "Importo ricevuto", placeholder: "0,00", text: $amountText,
+                    keyboardType: .decimalPad
+                )
+            #else
+                LabeledField(eyebrow: "Importo ricevuto", placeholder: "0,00", text: $amountText)
+            #endif
             if let mismatchNote {
                 Text(mismatchNote)
                     .font(Typography.caption)
@@ -211,45 +211,24 @@ struct AddReimbursementSheet: View {
     // MARK: Participant
 
     private var participantCard: some View {
-        Card {
+        VStack(alignment: .leading, spacing: 8) {
             EyebrowLabel(text: "Partecipante")
-            Button {
-                selectedParticipantID = nil
-            } label: {
-                candidateRow(title: "Non specificato", isSelected: selectedParticipantID == nil)
-            }
-            .buttonStyle(.plain)
-            ForEach(participants) { participant in
-                Divider().overlay(Palette.separator)
-                Button {
-                    selectedParticipantID = participant.id
-                } label: {
-                    candidateRow(
+            OptionListCard {
+                OptionRow(
+                    title: "Non specificato",
+                    isSelected: selectedParticipantID == nil,
+                    action: { selectedParticipantID = nil }
+                )
+                ForEach(participants) { participant in
+                    Divider().overlay(Palette.separator)
+                    OptionRow(
                         title: participant.name,
-                        isSelected: selectedParticipantID == participant.id
+                        isSelected: selectedParticipantID == participant.id,
+                        action: { selectedParticipantID = participant.id }
                     )
                 }
-                .buttonStyle(.plain)
             }
         }
-    }
-
-    private func candidateRow(title: String, isSelected: Bool) -> some View {
-        HStack {
-            Text(title)
-                .font(Typography.body)
-                .foregroundStyle(Palette.ink)
-                .lineLimit(1)
-            Spacer()
-            if isSelected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(Palette.accent)
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.vertical, 8)
-        .contentShape(Rectangle())
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     // MARK: Note

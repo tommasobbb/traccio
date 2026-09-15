@@ -123,7 +123,7 @@ struct TransactionDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 header
                 if let bannerMessage {
                     Banner(message: bannerMessage)
@@ -161,10 +161,9 @@ struct TransactionDetailView: View {
                     manualActionsCard
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle("Dettaglio movimento")
+        .screenChrome("Dettaglio movimento")
         .sensoryFeedback(.success, trigger: model.successTick)
         .sensoryFeedback(.error, trigger: model.actionFailure)
         .task {
@@ -581,10 +580,7 @@ struct TransactionDetailView: View {
                 .lineLimit(1)
             Spacer()
             if isNavigable {
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-                    .accessibilityHidden(true)
+                DisclosureChevron()
             }
         }
         .contentShape(Rectangle())

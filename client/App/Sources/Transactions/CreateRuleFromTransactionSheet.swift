@@ -61,16 +61,15 @@ struct CreateRuleFromTransactionSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     patternCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Categorizza sempre così")
+            .sheetChrome("Categorizza sempre così")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -92,6 +91,7 @@ struct CreateRuleFromTransactionSheet: View {
                 Text("È esattamente").tag(RuleMatchKind.equals)
             }
             .pickerStyle(.segmented)
+            .segmentedPickerTint()
             TextField("Es. TEST MERCHANT 01", text: $patternText)
                 .font(Typography.body)
                 .autocorrectionDisabled()

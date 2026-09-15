@@ -44,10 +44,9 @@ struct CategorizationView: View {
     var body: some View {
         ScrollView {
             content
-                .padding(20)
+                .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle("Categorie e regole")
+        .screenChrome("Categorie e regole")
         .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }
         .task { await model.load() }
@@ -129,7 +128,7 @@ struct CategorizationView: View {
             ProgressView()
                 .frame(maxWidth: .infinity, minHeight: 300)
         case .loaded(let data):
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if model.actionFailure != nil {
                     Banner(message: failureMessage)
                 }

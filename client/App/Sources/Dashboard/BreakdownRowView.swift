@@ -35,9 +35,7 @@ struct BreakdownRowView: View {
             }
             if row.hasChildren {
                 Button(action: onToggleExpanded) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(Palette.inkTertiary)
+                    DisclosureChevron(isExpanded: isExpanded)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
@@ -52,6 +50,7 @@ struct BreakdownRowView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(onDrillThrough != nil ? [.isButton] : [])
+        .rowScrollTransition()
     }
 
     private var rowContent: some View {

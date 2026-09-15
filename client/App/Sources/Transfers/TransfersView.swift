@@ -43,8 +43,7 @@ struct TransfersView: View {
 
     var body: some View {
         content
-            .screenBackground()
-            .navigationTitle("Trasferimenti")
+            .screenChrome("Trasferimenti")
             .sensoryFeedback(.success, trigger: model.successTick)
             .sensoryFeedback(.error, trigger: model.actionFailure)
             .animation(.easeInOut(duration: 0.2), value: stateTag)
@@ -102,7 +101,7 @@ struct TransfersView: View {
                     )
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
     }
 }

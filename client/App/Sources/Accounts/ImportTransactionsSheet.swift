@@ -66,8 +66,7 @@ struct ImportTransactionsSheet: View {
                     form
                 }
             }
-            .screenBackground()
-            .navigationTitle("Importa movimenti")
+            .sheetChrome("Importa movimenti")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -89,7 +88,7 @@ struct ImportTransactionsSheet: View {
 
     private var form: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if let fileError {
                     Banner(message: fileError)
                 }
@@ -103,6 +102,7 @@ struct ImportTransactionsSheet: View {
                         ForEach(Profile.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    .segmentedPickerTint()
                     .onChange(of: profile) { _, _ in resetPreview() }
                 }
 
@@ -145,7 +145,7 @@ struct ImportTransactionsSheet: View {
 
                 actions
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
     }
 

@@ -56,13 +56,9 @@ struct PersonDetailView: View {
     var body: some View {
         ScrollView {
             content
-                .padding(20)
+                .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle(title)
-        #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-        #endif
+        .screenChrome(title)
         .task { await model.refresh() }
     }
 
@@ -75,7 +71,7 @@ struct PersonDetailView: View {
     private var content: some View {
         switch model.state {
         case .loaded(let loaded):
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 summaryCard(loaded.person)
                 advancesCard(loaded.advances)
             }

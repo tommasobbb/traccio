@@ -41,8 +41,7 @@ struct TrackingStartView: View {
             }
             .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle("Inizio tracciamento")
+        .screenChrome("Inizio tracciamento")
         .task { await model.load() }
     }
 
@@ -116,23 +115,20 @@ struct TrackingStartView: View {
             }
 
             if isPickingDate {
-                VStack(spacing: 10) {
-                    DatePicker(
-                        "Inizio tracciamento", selection: $pickedDate, displayedComponents: .date
-                    )
-                    .labelsHidden()
-                    .frame(maxWidth: .infinity, alignment: .center)
+                OptionListCard {
+                    VStack(spacing: 10) {
+                        DatePicker(
+                            "Inizio tracciamento", selection: $pickedDate, displayedComponents: .date
+                        )
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity, alignment: .center)
 
-                    primaryButton("Salva questa data") {
-                        Task { await model.save(CalendarDate(date: pickedDate)) }
+                        primaryButton("Salva questa data") {
+                            Task { await model.save(CalendarDate(date: pickedDate)) }
+                        }
                     }
+                    .padding(14)
                 }
-                .padding(14)
-                .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                        .strokeBorder(Palette.separatorSubtle)
-                )
             }
 
             if current != nil {
@@ -157,6 +153,13 @@ struct TrackingStartView: View {
         }
     }
 
+    // Full-width glass buttons, same idiom as the Filtri sheet's "Applica"
+    // bar (`glassProminent`/`glass` + accent tint + a rounded-rectangle
+    // border shape) — before the 2026-09-15 coherence pass
+    // (`docs/decisions/0031-visual-coherence-pass.md`) these were the one
+    // accent CTA pair in the app still painted with a flat `Palette.accent`
+    // fill instead of Liquid Glass. Not `PillButton`: that component is a
+    // compact capsule for an inline CTA, not a full-width settings action.
     private func primaryButton(
         _ title: String, disabled: Bool = false, action: @escaping () -> Void
     ) -> some View {
@@ -170,13 +173,10 @@ struct TrackingStartView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 15)
-            .background(
-                (disabled || model.isSaving) ? Palette.accentPressed : Palette.accent,
-                in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-            )
-            .opacity(disabled ? 0.5 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .tint(Palette.accent)
+        .buttonBorderShape(.roundedRectangle(radius: Radius.row))
         .disabled(disabled || model.isSaving)
     }
 
@@ -184,19 +184,12 @@ struct TrackingStartView: View {
         Button(action: action) {
             Text(title)
                 .font(Typography.body.weight(.semibold))
-                .foregroundStyle(Palette.accent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(
-                    Palette.card,
-                    in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                        .strokeBorder(Palette.accent.opacity(0.3))
-                )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .tint(Palette.accent)
+        .buttonBorderShape(.roundedRectangle(radius: Radius.row))
         .disabled(model.isSaving)
     }
 

@@ -43,7 +43,7 @@ struct CreateAdvanceSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
@@ -51,10 +51,9 @@ struct CreateAdvanceSheet: View {
                     ownShareCard
                     participantsCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Segna come anticipo")
+            .sheetChrome("Segna come anticipo")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -83,13 +82,14 @@ struct CreateAdvanceSheet: View {
 
     private var ownShareCard: some View {
         Card {
-            EyebrowLabel(text: "La tua quota")
-            TextField("0,00", text: $ownShareText)
-                #if os(iOS)
-                    .keyboardType(.decimalPad)
-                #endif
-                .font(Typography.statFigure)
-                .foregroundStyle(Palette.ink)
+            #if os(iOS)
+                LabeledField(
+                    eyebrow: "La tua quota", placeholder: "0,00", text: $ownShareText,
+                    keyboardType: .decimalPad
+                )
+            #else
+                LabeledField(eyebrow: "La tua quota", placeholder: "0,00", text: $ownShareText)
+            #endif
             if !participants.isEmpty {
                 PillButton(title: "Dividi in parti uguali", action: applyEqualSplit)
             }

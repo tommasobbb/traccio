@@ -25,16 +25,15 @@ struct AddEventMembersSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     candidatesCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Aggiungi movimenti")
+            .sheetChrome("Aggiungi movimenti")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Fatto", action: onDone)

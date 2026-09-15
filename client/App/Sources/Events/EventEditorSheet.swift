@@ -65,7 +65,7 @@ struct EventEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
@@ -74,10 +74,9 @@ struct EventEditorSheet: View {
                     colorCard
                     dateRangeCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle(existing == nil ? "Nuovo evento" : "Modifica evento")
+            .sheetChrome(existing == nil ? "Nuovo evento" : "Modifica evento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -193,8 +192,16 @@ struct EventEditorSheet: View {
             }
             .tint(Palette.accent)
             if includesDateRange {
-                DatePicker("Inizio", selection: $startDate, displayedComponents: .date)
-                DatePicker("Fine", selection: $endDate, in: startDate..., displayedComponents: .date)
+                VStack(alignment: .leading, spacing: 4) {
+                    EyebrowLabel(text: "Inizio")
+                    DatePicker("Inizio", selection: $startDate, displayedComponents: .date)
+                        .labelsHidden()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    EyebrowLabel(text: "Fine")
+                    DatePicker("Fine", selection: $endDate, in: startDate..., displayedComponents: .date)
+                        .labelsHidden()
+                }
             }
         }
     }

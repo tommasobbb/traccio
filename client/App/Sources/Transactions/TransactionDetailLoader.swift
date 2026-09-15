@@ -73,7 +73,7 @@ struct TransactionDetailLoader: View {
                     }
                     ListSkeleton(count: 3)
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
         case .loaded(let transaction, let account):
             TransactionDetailView(

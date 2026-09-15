@@ -39,6 +39,7 @@ struct RuleRow: View {
             )
         }
         .padding(.vertical, 6)
+        .rowScrollTransition()
     }
 
     private var matchKindLabel: String {

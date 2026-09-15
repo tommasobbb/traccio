@@ -61,8 +61,7 @@ struct TransactionsView: View {
                 filterRow
                 content
             }
-            .screenBackground()
-            .navigationTitle("Movimenti")
+            .screenChrome("Movimenti", style: .tabRoot)
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
             .animation(.easeInOut(duration: 0.2), value: stateTag)
@@ -168,8 +167,17 @@ struct TransactionsView: View {
                             ? "line.3.horizontal.decrease.circle.fill"
                             : "line.3.horizontal.decrease.circle"
                     )
+                    // A symbol morph instead of a snap when a filter is
+                    // applied/cleared (`docs/decisions/0031-visual-coherence-pass.md`).
+                    .contentTransition(.symbolEffect(.replace))
                 }
+                .animation(.easeInOut(duration: 0.2), value: hasActiveFilters)
             }
+            // A fixed spacer splits "Altro"/"Filtri" from "+" into two glass
+            // capsules instead of one merged group — "+" is the primary
+            // creation action and reads as such on its own
+            // (`docs/decisions/0031-visual-coherence-pass.md`).
+            ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
                 Button { isCreatingTransaction = true } label: {
                     Label("Nuovo movimento", systemImage: "plus")
@@ -191,43 +199,34 @@ struct TransactionsView: View {
                 onDashboardStale: { freshness.markStale([.dashboard]) }
             )
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Palette.accent)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Palette.accent.opacity(0.14),
-                        in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(transferSuggestionCardTitle)
-                        .font(Typography.body.weight(.semibold))
-                        .foregroundStyle(Palette.ink)
-                        .lineLimit(1)
-                    Text("Movimenti collegati tra i tuoi conti")
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                        .lineLimit(1)
+            // A plain `.flush` card, not an accent-tinted slab: the accent is
+            // carried by the one leading tile, the chevron is chrome, and the
+            // surface is card-white like every other row
+            // (`docs/design/tokens.md`'s "Accent dosage").
+            Card(elevation: .flush, contentPadding: 14) {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Palette.accent)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Palette.accent.opacity(0.14),
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(transferSuggestionCardTitle)
+                            .font(Typography.body.weight(.semibold))
+                            .foregroundStyle(Palette.ink)
+                            .lineLimit(1)
+                        Text("Movimenti collegati tra i tuoi conti")
+                            .font(Typography.caption)
+                            .foregroundStyle(Palette.inkSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    DisclosureChevron()
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.inkTertiary)
             }
-            .padding(14)
-            // A plain card, not an accent-tinted slab: the accent is carried
-            // by the one leading tile, the chevron is chrome, and the surface
-            // is card-white like every other row (`docs/design/tokens.md`'s
-            // "Accent dosage").
-            .background(
-                Palette.card,
-                in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                    .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
-            )
         }
         .buttonStyle(.pressable)
     }
@@ -507,7 +506,7 @@ struct TransactionsView: View {
     private func list(_ transactions: [TransactionResponse]) -> some View {
         let groups = TraccioCore.groupByDay(transactions)
         return ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if model.transferSuggestionCount > 0 {
                     transferSuggestionCard
                 }
@@ -517,7 +516,7 @@ struct TransactionsView: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
     }
 

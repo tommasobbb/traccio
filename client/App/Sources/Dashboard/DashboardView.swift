@@ -36,15 +36,14 @@ struct DashboardView: View {
                 content
                     .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Panoramica")
-            // With the hero band gone, a `.large` title would be the first
-            // heavy thing on the screen and would compete with the spend
-            // figure for "protagonist". Inline keeps the figure the anchor
-            // (2026-09-08 "dose, non tinta" revision).
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .screenChrome("Panoramica", style: .tabRoot)
+            // Large, collapsing on scroll, like the other three tabs
+            // (`docs/decisions/0031-visual-coherence-pass.md`) — a revision
+            // of the 2026-09-08 "dose, non tinta" call to keep this screen
+            // `.inline` so the hero figure alone carried the top. On-device
+            // judgment call: if the title fights the figure for
+            // "protagonist", this reverts and every tab goes `.pushed`
+            // instead (`tasks/backlog.md`'s on-device pass).
             .animation(.easeInOut(duration: 0.2), value: stateTag)
         }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
@@ -129,7 +128,7 @@ struct DashboardView: View {
                 Text("Anno").tag(CalendarPeriod.Unit.year)
             }
             .pickerStyle(.segmented)
-            .tint(Palette.accent)
+            .segmentedPickerTint()
         }
         // A quiet flush card, not the old accent-tint block — the period
         // strip is navigation, not a headline, and the accent no longer wants

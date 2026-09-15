@@ -71,14 +71,8 @@ struct SelectionSheet<Option: Identifiable>: View {
                     }
                     .padding(Spacing.gutter)
                 }
-                .screenBackground()
-                .navigationTitle(title)
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
+                .sheetChrome(title)
             }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
         }
     }
 }

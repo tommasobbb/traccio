@@ -28,17 +28,16 @@ struct CreateRuleSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     patternCard
                     categoryCard
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Nuova regola")
+            .sheetChrome("Nuova regola")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
@@ -67,6 +66,7 @@ struct CreateRuleSheet: View {
                 Text("È esattamente").tag(RuleMatchKind.equals)
             }
             .pickerStyle(.segmented)
+            .segmentedPickerTint()
             TextField("Es. TEST MERCHANT 01", text: $patternText)
                 .font(Typography.body)
                 .autocorrectionDisabled()
@@ -76,46 +76,27 @@ struct CreateRuleSheet: View {
     // MARK: Category
 
     private var categoryCard: some View {
-        Card {
+        VStack(alignment: .leading, spacing: 8) {
             EyebrowLabel(text: "Assegna la categoria")
             if categories.isEmpty {
                 Text("Crea prima una categoria.")
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkSecondary)
             } else {
-                VStack(spacing: 0) {
-                    ForEach(categories) { category in
-                        categoryRow(category)
-                        if category.id != categories.last?.id {
+                OptionListCard {
+                    ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
+                        if index > 0 {
                             Divider().overlay(Palette.separator)
                         }
+                        OptionRow(
+                            title: category.name,
+                            isSelected: category.id == selectedCategoryID,
+                            action: { selectedCategoryID = category.id }
+                        )
                     }
                 }
             }
         }
-    }
-
-    private func categoryRow(_ category: CategoryResponse) -> some View {
-        let isSelected = category.id == selectedCategoryID
-        return Button {
-            selectedCategoryID = category.id
-        } label: {
-            HStack {
-                Text(category.name)
-                    .font(Typography.body)
-                    .foregroundStyle(Palette.ink)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Palette.accent)
-                        .accessibilityHidden(true)
-                }
-            }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     // MARK: Submit

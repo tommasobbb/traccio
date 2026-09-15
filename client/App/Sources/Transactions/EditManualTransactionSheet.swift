@@ -48,7 +48,7 @@ struct EditManualTransactionSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
@@ -59,15 +59,20 @@ struct EditManualTransactionSheet: View {
                             Text("Entrata").tag(Direction.in)
                         }
                         .pickerStyle(.segmented)
+                        .segmentedPickerTint()
                     }
                     Card {
-                        EyebrowLabel(text: "Importo (\(transaction.currency))")
-                        TextField("0,00", text: $amountText)
-                            .font(Typography.statFigure)
-                            .foregroundStyle(Palette.ink)
-                            #if os(iOS)
-                                .keyboardType(.decimalPad)
-                            #endif
+                        #if os(iOS)
+                            LabeledField(
+                                eyebrow: "Importo (\(transaction.currency))", placeholder: "0,00",
+                                text: $amountText, keyboardType: .decimalPad
+                            )
+                        #else
+                            LabeledField(
+                                eyebrow: "Importo (\(transaction.currency))", placeholder: "0,00",
+                                text: $amountText
+                            )
+                        #endif
                     }
                     Card {
                         EyebrowLabel(text: "Data")
@@ -75,17 +80,15 @@ struct EditManualTransactionSheet: View {
                             .labelsHidden()
                     }
                     Card {
-                        EyebrowLabel(text: "Descrizione")
-                        TextField("Descrizione", text: $descriptionText)
-                            .font(Typography.body)
-                            .foregroundStyle(Palette.ink)
-                            .autocorrectionDisabled()
+                        LabeledField(
+                            eyebrow: "Descrizione", placeholder: "Descrizione", text: $descriptionText,
+                            font: Typography.body
+                        )
                     }
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle("Modifica movimento")
+            .sheetChrome("Modifica movimento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)

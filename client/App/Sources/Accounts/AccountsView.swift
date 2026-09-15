@@ -19,8 +19,7 @@ struct AccountsView: View {
     var body: some View {
         NavigationStack {
             content
-                .screenBackground()
-                .navigationTitle("Conti")
+                .screenChrome("Conti", style: .tabRoot)
                 .sensoryFeedback(.success, trigger: model.successTick)
                 .sensoryFeedback(.error, trigger: model.actionFailure)
                 .animation(.easeInOut(duration: 0.2), value: stateTag)
@@ -208,7 +207,7 @@ struct AccountsView: View {
                     importTransactionsCard
                 }
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
     }
 
@@ -445,9 +444,7 @@ struct AccountsView: View {
                 Text(account.currency)
                     .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.inkTertiary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Palette.inkQuaternary)
+                DisclosureChevron()
             }
             .padding(.vertical, Spacing.rowPadding)
         }

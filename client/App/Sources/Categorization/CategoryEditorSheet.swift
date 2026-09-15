@@ -32,16 +32,12 @@ struct CategoryEditorSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: Spacing.cardGap) {
                     if let failureMessage {
                         Banner(message: failureMessage)
                     }
                     Card {
-                        EyebrowLabel(text: "Nome")
-                        TextField("Es. Alimentari", text: $nameText)
-                            .font(Typography.statFigure)
-                            .foregroundStyle(Palette.ink)
-                            .autocorrectionDisabled()
+                        LabeledField(eyebrow: "Nome", placeholder: "Es. Alimentari", text: $nameText)
                     }
                     Card {
                         EyebrowLabel(text: "Colore")
@@ -52,10 +48,9 @@ struct CategoryEditorSheet: View {
                         iconGrid
                     }
                 }
-                .padding(20)
+                .padding(Spacing.gutter)
             }
-            .screenBackground()
-            .navigationTitle(title)
+            .sheetChrome(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)

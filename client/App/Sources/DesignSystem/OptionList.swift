@@ -37,15 +37,36 @@ struct OptionRow: View {
     let action: () -> Void
 
     var body: some View {
+        OptionRowLayout(title: title, isSelected: isSelected, indented: indented, action: action) {
+            if let icon {
+                IconTile(systemImage: icon.systemImage, color: icon.color, diameter: 24)
+            } else if let swatch {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(swatch)
+                    .frame(width: 10, height: 10)
+            }
+        }
+    }
+}
+
+/// The shared skeleton behind `OptionRow` — title, spacer, trailing
+/// checkmark, `.pressableRow` feedback — with the leading glyph left open as
+/// a generic `@ViewBuilder` so a caller whose option carries something
+/// `OptionRow`'s `icon`/`swatch` pair can't express (an event's `EventTile`
+/// emoji wash, ADR 0027) still gets the same row DNA instead of
+/// reimplementing it. `EventPickerSheet` is the one call site so far that
+/// needs this directly; everything else goes through `OptionRow`.
+struct OptionRowLayout<Leading: View>: View {
+    let title: String
+    var isSelected: Bool
+    var indented: Bool = false
+    let action: () -> Void
+    @ViewBuilder let leading: Leading
+
+    var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                if let icon {
-                    IconTile(systemImage: icon.systemImage, color: icon.color, diameter: 24)
-                } else if let swatch {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(swatch)
-                        .frame(width: 10, height: 10)
-                }
+                leading
                 Text(title)
                     .font(Typography.body)
                     .foregroundStyle(isSelected ? Palette.accent : Palette.ink)

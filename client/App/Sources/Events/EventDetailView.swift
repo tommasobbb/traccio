@@ -49,7 +49,7 @@ struct EventDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 header
                 if model.actionFailure != nil {
                     Banner(message: failureMessage)
@@ -70,10 +70,9 @@ struct EventDetailView: View {
                     suggestionsCard: suggestionsCard
                 )
             }
-            .padding(20)
+            .padding(Spacing.gutter)
         }
-        .screenBackground()
-        .navigationTitle(model.event.name)
+        .screenChrome(model.event.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Modifica") { isPresentingEditSheet = true }
