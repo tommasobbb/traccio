@@ -34,25 +34,6 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 content
-                    // Pins this content to the scroll view's own width
-                    // regardless of what a descendant's *ideal* size asks
-                    // for — the bug this guards against: an unconstrained
-                    // `Text`/`HStack` somewhere below (no `lineLimit`, no
-                    // `Spacer`) reports a width wider than the screen, that
-                    // width propagates up through the plain `VStack`s in
-                    // between (none of them clamp a child down, only expand
-                    // to fill), and the `ScrollView`'s measured content ends
-                    // up wider than its viewport — which lets `UIScrollView`
-                    // pan horizontally too, even though only `.vertical` was
-                    // ever requested. `BucketBarsChart`'s scrub tooltip was
-                    // exactly this (fixed below); this is the backstop so a
-                    // future one truncates instead of turning the screen
-                    // into a two-axis pan. Every other screen already
-                    // behaves like this implicitly (their content happens to
-                    // fit); this is Panoramica-only rather than added to
-                    // `screenChrome` since the fix has to sit on the scroll
-                    // content itself, not on the `ScrollView` from outside.
-                    .containerRelativeFrame(.horizontal)
                     .padding(Spacing.gutter)
             }
             .screenChrome("Panoramica", style: .tabRoot)
