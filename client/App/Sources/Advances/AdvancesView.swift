@@ -19,6 +19,12 @@ struct AdvancesView: View {
     @Environment(DataFreshness.self) private var freshness
     @State private var model: AdvancesViewModel
     private let client: any APIClientProtocol
+    /// Shared between a person/advance row and its pushed detail screen so
+    /// the push zooms from the row's own frame instead of sliding in
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`). One namespace for
+    /// both lists — a person id and an advance id never collide (both real
+    /// UUIDs from unrelated sequences).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -38,7 +44,7 @@ struct AdvancesView: View {
             content
                 .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle("Anticipi")
         .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }
@@ -154,10 +160,14 @@ struct AdvancesView: View {
                             onNeedsReload: { Task { await model.load() } },
                             onDashboardStale: { freshness.markStale([.dashboard, .transactions]) }
                         )
+                        #if os(iOS)
+                        .navigationTransition(.zoom(sourceID: person.id, in: transitionNamespace))
+                        #endif
                     } label: {
                         personRow(person)
                     }
                     .buttonStyle(.pressableRow)
+                    .matchedTransitionSource(id: person.id, in: transitionNamespace)
                     if person.id != people.last?.id {
                         Divider().overlay(Palette.separator)
                     }
@@ -259,10 +269,14 @@ struct AdvancesView: View {
                 onDashboardStale: { freshness.markStale([.dashboard, .transactions]) },
                 onDelete: { _ in Task { await model.load() } }
             )
+            #if os(iOS)
+            .navigationTransition(.zoom(sourceID: advance.id, in: transitionNamespace))
+            #endif
         } label: {
             advanceRow(advance)
         }
         .buttonStyle(.pressableRow)
+        .matchedTransitionSource(id: advance.id, in: transitionNamespace)
     }
 
     private func advanceRow(_ advance: AdvanceResponse) -> some View {

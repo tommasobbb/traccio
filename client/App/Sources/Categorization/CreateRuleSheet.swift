@@ -37,7 +37,7 @@ struct CreateRuleSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Nuova regola")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

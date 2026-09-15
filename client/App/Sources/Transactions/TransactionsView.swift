@@ -37,6 +37,10 @@ struct TransactionsView: View {
     /// ready to link — sign alone doesn't say which leg funds which, unlike
     /// a two-sided transfer, so the user picks explicitly (ADR 0022).
     @State private var isChoosingFundedPaymentOrientation = false
+    /// Shared between a row and its pushed `TransactionDetailView` so the
+    /// push can zoom from the row's own frame (`TransactionRow`, iOS only —
+    /// `ZoomNavigationTransition` is unavailable on macOS).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -57,7 +61,7 @@ struct TransactionsView: View {
                 filterRow
                 content
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Movimenti")
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
@@ -271,7 +275,7 @@ struct TransactionsView: View {
             }
         }
         .padding(16)
-        .background(.regularMaterial)
+        .glassEffect(.regular, in: Rectangle())
         .overlay(alignment: .top) { Divider() }
     }
 
@@ -331,42 +335,47 @@ struct TransactionsView: View {
     /// (`docs/design/tokens.md`: never wrap). Tapping a token clears that one
     /// dimension.
     private var activeFilterTokens: some View {
-        HStack(spacing: 8) {
-            if model.filter.accountID != nil {
-                Button {
-                    applyFilters(
-                        accountID: nil,
-                        category: model.filter.category,
-                        period: selectedPeriodPreset
-                    )
-                } label: {
-                    FilterChip(title: accountFilterTitle, isActive: true)
+        // `GlassEffectContainer` so the (up to three) glass chips blend and
+        // separate correctly as tokens appear/disappear, instead of each
+        // rendering its refraction independently.
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                if model.filter.accountID != nil {
+                    Button {
+                        applyFilters(
+                            accountID: nil,
+                            category: model.filter.category,
+                            period: selectedPeriodPreset
+                        )
+                    } label: {
+                        FilterChip(title: accountFilterTitle, isActive: true)
+                    }
+                }
+                if model.filter.category != .any {
+                    Button {
+                        applyFilters(
+                            accountID: model.filter.accountID,
+                            category: .any,
+                            period: selectedPeriodPreset
+                        )
+                    } label: {
+                        FilterChip(title: categoryFilterTitle, isActive: true)
+                    }
+                }
+                if selectedPeriodPreset != .all {
+                    Button {
+                        applyFilters(
+                            accountID: model.filter.accountID,
+                            category: model.filter.category,
+                            period: .all
+                        )
+                    } label: {
+                        FilterChip(title: periodFilterTitle, isActive: true)
+                    }
                 }
             }
-            if model.filter.category != .any {
-                Button {
-                    applyFilters(
-                        accountID: model.filter.accountID,
-                        category: .any,
-                        period: selectedPeriodPreset
-                    )
-                } label: {
-                    FilterChip(title: categoryFilterTitle, isActive: true)
-                }
-            }
-            if selectedPeriodPreset != .all {
-                Button {
-                    applyFilters(
-                        accountID: model.filter.accountID,
-                        category: model.filter.category,
-                        period: .all
-                    )
-                } label: {
-                    FilterChip(title: periodFilterTitle, isActive: true)
-                }
-            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
     /// Whether any of the three dimensions is set — drives the toolbar
@@ -540,7 +549,8 @@ struct TransactionsView: View {
                             onDashboardStale: { freshness.markStale([.dashboard]) },
                             onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
                             onDelete: { model.remove(id: $0) },
-                            selection: rowSelection(for: transaction)
+                            selection: rowSelection(for: transaction),
+                            namespace: transitionNamespace
                         )
                         .onAppear {
                             if isLastGroup, transaction.id == group.transactions.last?.id {

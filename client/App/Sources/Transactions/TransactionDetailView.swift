@@ -49,6 +49,10 @@ struct TransactionDetailView: View {
     /// navigating to it shares this screen's connection rather than
     /// defaulting a second one.
     private let client: any APIClientProtocol
+    /// Shared with the event chip's `NavigationLink` so the push zooms from
+    /// the chip's own frame instead of sliding in
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -159,7 +163,7 @@ struct TransactionDetailView: View {
             }
             .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle("Dettaglio movimento")
         .sensoryFeedback(.success, trigger: model.successTick)
         .sensoryFeedback(.error, trigger: model.actionFailure)
@@ -531,10 +535,14 @@ struct TransactionDetailView: View {
                 if let event = events.first(where: { $0.id == eventID }) {
                     NavigationLink {
                         EventDetailView(event: event, client: client)
+                        #if os(iOS)
+                        .navigationTransition(.zoom(sourceID: event.id, in: transitionNamespace))
+                        #endif
                     } label: {
                         eventRow(event: event, isNavigable: true)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressableRow)
+                    .matchedTransitionSource(id: event.id, in: transitionNamespace)
                 } else {
                     eventRow(event: nil, isNavigable: false)
                 }

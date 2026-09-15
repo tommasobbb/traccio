@@ -247,6 +247,86 @@ was raised from pure `#000000` to `#0B0B0C` in the 2026-09-08 "dose, non
 tinta" revision — a hair off black so a `#1C1C1E` card still has an edge
 against it. Revert to `#000000` if cards read flat on device.
 
+## Glass
+
+Liquid Glass (`docs/decisions/0030-liquid-glass-chrome.md`), adopted since the
+deployment target moved to iOS 26 / macOS 26. The rule is the same discipline
+as "Accent dosage" above, restated for material instead of hue: **glass is
+chrome, never a content surface.**
+
+| Carries glass | Stays opaque |
+| -------------- | ------------- |
+| Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at every elevation |
+| Toolbars (native, automatic on iOS 26) | The Panoramica hero card |
+| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) | Any surface that carries a figure |
+| `PillButton` (`.buttonStyle(.glassProminent)`, `.tint(Palette.accent)`) | Movimenti day-group rows |
+| `IconButton` (`.glassEffect(.regular.tint(background).interactive(), in: Circle())`) | |
+| `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
+| `FilterChip` active state tints the same glass with `Palette.accent` — the allowed dose, not a new exception | |
+| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | |
+
+If a screen reads flat, the fix is still hierarchy — elevation, type scale,
+whitespace — never a translucent surface behind a number. `Card.swift` does
+not change for this revision.
+
+**Motion**: a row pushing to its detail screen zooms from the row's own
+frame instead of sliding in — `TransactionRow` → `TransactionDetailView`,
+`EventsView`'s row → `EventDetailView` (`.matchedTransitionSource` +
+`.navigationTransition(.zoom(sourceID:in:))`, iOS only —
+`ZoomNavigationTransition` is unavailable on macOS, so the destination gets
+the system's default push there). SwiftUI backs off to a plain push under
+Reduce Motion automatically; no extra handling needed, same as the rest of
+this file's motion (`AmountText`'s digit-roll, `SkeletonBlock`'s shimmer).
+A `GlassEffectContainer` around the Movimenti toolbar's "•••"/filtri/"+"
+cluster was considered and dropped: native `ToolbarItem`s already merge and
+separate their own glass on iOS 26, so wrapping them again would be inert.
+
+**Coherence sweep (2026-09-15)**: the same zoom transition extends to every
+row→detail push in the app, not just Movimenti/Eventi —
+`AdvancesView`'s person row → `PersonDetailView`, its advance row and
+`PersonDetailView`'s own advance row → `TransactionDetailLoader`, and
+`TransactionDetailView`'s event chip → `EventDetailView`. Settings'
+navigation rows (`SettingsView`) deliberately do **not** zoom — a plain list
+row with a small leading icon has no visual frame worth zooming from, same
+as Apple's own Settings app. Also found and fixed one real inconsistency:
+`TransferSuggestionCard`'s secondary "Ignora" button was still a flat
+`Palette.neutralFill` capsule sitting next to a glass `PillButton` — now
+`.buttonStyle(.glass)`. Checked and deliberately left alone: every other
+`Palette.neutralFill` fill in the app (role glyphs, avatars, progress
+tracks, the FX summary tile) is content/metadata, not a control — each
+already carries a comment saying so.
+
+**App icon**: `scripts/gen-app-icon.swift` (`make icon`) now renders three
+iOS variants — light (unchanged, cyan→azure), dark (same hue family, pulled
+down in luminosity so it doesn't glow next to the other dark Home Screen
+icons), and tinted (fully grayscale, per Apple's own requirement — the
+system multiplies its own colour on top). Declared in
+`AppIcon.appiconset/Contents.json` via the classic flat-PNG `appearances`
+extension (iOS 18+), not the newer layered Icon Composer format — `make icon`
+stays the one source of truth.
+
+**Picking a picker.** Two shapes, chosen by what the options are:
+
+- **Data-backed options that carry their own icon and colour** (accounts,
+  categories) → `SelectionSheet` (`App/Sources/DesignSystem/SelectionSheet.swift`),
+  opening an `OptionListCard`/`OptionRow` list (`OptionList.swift`) — a bare
+  `Picker`'s closed control shows neither the icon nor the colour.
+- **A small, static, closed enumeration** (`AccountKind`, 6 cases) → a native
+  `Picker` styled `.menu`, with `Label(_, systemImage:)` per option instead of
+  a bare `Text` — the icon comes along for free in both the open menu and the
+  closed control, and the whole thing renders in Liquid Glass automatically
+  on iOS 26. No need for `SelectionSheet`'s own sheet-and-card machinery when
+  there is no per-option colour to show and the list is short enough for a
+  dropdown.
+
+`Palette.backgroundElevated`: a barely-there neutral gradient over
+`Palette.background` (light `#F2F5F3 → #FAFBFA`, dark `#0B0B0C → #151517`),
+applied via `View.screenBackground()`. It exists only so the chrome's glass
+has something to refract — it carries no hue, so it is not a reprise of the
+accent-band rejections above. `Palette.background` itself is unchanged and
+still used wherever a flat fill is wanted (behind a sheet's content, the
+launch screen).
+
 ## Loading and press feedback
 
 - **Skeletons, not spinners.** A screen that is still loading draws a rough

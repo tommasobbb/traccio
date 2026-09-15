@@ -16,6 +16,20 @@ enum Palette {
     static let background = Color("Background", bundle: .main)
     static let card = Color("Card", bundle: .main)
     static let neutralFill = Color("NeutralFill", bundle: .main)
+    /// A barely-there step up from `background` — carries no hue of its own.
+    /// Only ever used through `backgroundGradient`
+    /// (`View.screenBackground()`, `ScreenBackground.swift`), never alone:
+    /// it exists so the chrome's Liquid Glass
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`) has something neutral
+    /// to refract, not to give the screen its own tint.
+    static let backgroundElevated = Color("BackgroundElevated", bundle: .main)
+
+    /// The screen background: a vertical gradient from `background` to
+    /// `backgroundElevated`. Not a reprise of the accent-band rejections
+    /// above ("Accent dosage") — it carries no hue, only a luminosity step.
+    static var backgroundGradient: LinearGradient {
+        LinearGradient(colors: [background, backgroundElevated], startPoint: .top, endPoint: .bottom)
+    }
 
     // MARK: Ink
 

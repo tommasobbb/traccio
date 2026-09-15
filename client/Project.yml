@@ -8,9 +8,14 @@ name: Traccio
 
 options:
   bundleIdPrefix: com.traccio
+  # Raised to 26 for Liquid Glass (glassEffect, tabBarMinimizeBehavior,
+  # scrollEdgeEffectStyle — see docs/decisions/0030-liquid-glass-chrome.md).
+  # Both target devices already run past this (an iPhone 17 on iOS 27, this
+  # Mac on macOS 26.2), so the floor costs nothing and the client stays with
+  # zero `#available` branches.
   deploymentTarget:
-    iOS: "17.0"
-    macOS: "14.0"
+    iOS: "26.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 
 packages:

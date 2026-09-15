@@ -66,7 +66,7 @@ struct ImportTransactionsSheet: View {
                     form
                 }
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Importa movimenti")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -154,13 +154,14 @@ struct ImportTransactionsSheet: View {
     ) -> some View {
         Card {
             EyebrowLabel(text: title)
-            Picker(title, selection: selection) {
-                Text("Scegli…").tag(UUID?.none)
-                ForEach(manualAccounts.filter { $0.id != exclude }) { account in
-                    Text(account.displayName ?? "Conto").tag(UUID?.some(account.id))
-                }
-            }
-            .pickerStyle(.menu)
+            SelectionSheet(
+                title: title,
+                options: manualAccounts.filter { $0.id != exclude },
+                selection: selection,
+                label: { $0.displayName ?? "Conto" },
+                icon: { ($0.tileIcon.systemImageName, $0.tileColor) },
+                noneTitle: "Scegli…"
+            )
             .onChange(of: selection.wrappedValue) { _, _ in resetPreview() }
         }
     }

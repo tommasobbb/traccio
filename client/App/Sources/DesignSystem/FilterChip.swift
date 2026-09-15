@@ -6,12 +6,12 @@ import SwiftUI
 /// tap to clear that dimension). A caller that instead presents a menu can
 /// pass `trailingSystemImage: "chevron.down"`.
 ///
-/// Built only from tokens already in `docs/design/tokens.md`: the pill
-/// radius (999), `Palette.card`/`Palette.separator` for the resting state,
-/// and the accent-vs-neutral convention `Badge.Style.accent` already uses
-/// for `isActive`. Presentation only — the caller wraps it in a `Button` or
-/// whatever interaction it needs; a design-system component holds no logic
-/// of its own.
+/// A Liquid Glass capsule (`docs/decisions/0030-liquid-glass-chrome.md`) at
+/// rest; `isActive` tints it with the accent — the one dose "Accent dosage"
+/// (`docs/design/tokens.md`) allows a filter token, same rule as before, now
+/// expressed as a glass tint instead of a flat `.opacity` fill. Presentation
+/// only — the caller wraps it in a `Button` or whatever interaction it
+/// needs; a design-system component holds no logic of its own.
 struct FilterChip: View {
     let title: String
     /// Whether a non-default filter is currently applied. Tints the chip
@@ -39,11 +39,9 @@ struct FilterChip: View {
         .padding(.leading, 13)
         .padding(.trailing, 12)
         .padding(.vertical, 7)
-        .background(isActive ? Palette.accent.opacity(0.12) : Palette.card)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(isActive ? Palette.accent.opacity(0.3) : Palette.separator)
+        .glassEffect(
+            isActive ? .regular.tint(Palette.accent).interactive() : .regular.interactive(),
+            in: Capsule()
         )
         .sensoryFeedback(.selection, trigger: isActive)
     }

@@ -48,7 +48,7 @@ struct FundedPaymentOrientationSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Doppia uscita")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

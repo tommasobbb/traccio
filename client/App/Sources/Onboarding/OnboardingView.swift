@@ -44,7 +44,7 @@ struct OnboardingView: View {
             .padding(20)
             .frame(maxWidth: .infinity)
         }
-        .background(Palette.background)
+        .screenBackground()
         .onChange(of: serverSettings.state) { _, newState in
             if newState == .success {
                 onComplete()

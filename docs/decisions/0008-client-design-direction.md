@@ -645,3 +645,14 @@ light/dark/Dynamic-Type pass, not a mockup.
 
 **Verified**: `make test-core` 402, `make test-app` 230, `xcodebuild` clean
 for macOS and the iOS Simulator, `make lint` clean.
+
+## 2026-09-15 revision: Liquid Glass in the chrome
+
+Full decision in `0030-liquid-glass-chrome.md`. Deployment target raised to
+iOS 26 / macOS 26 (both target devices already exceed it), and Liquid Glass
+adopted in the chrome layer only — tab bar, toolbars, sheet action bars,
+`PillButton`, `IconButton`, `FilterChip`, the new `SelectionSheet`. `Card`
+and every figure-bearing surface stay exactly as the 2026-09-08 revision left
+them: this is the same "dose, non tinta" discipline restated for material
+instead of hue. `docs/design/tokens.md` gains a **Glass** section recording
+which components carry it.

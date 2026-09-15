@@ -51,7 +51,7 @@ struct CreateManualTransactionSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Nuovo movimento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -71,12 +71,13 @@ struct CreateManualTransactionSheet: View {
     private var formCards: some View {
         Card {
             EyebrowLabel(text: "Conto")
-            Picker("Conto", selection: $selectedAccountID) {
-                ForEach(accounts) { account in
-                    Text(account.displayName ?? "Conto").tag(Optional(account.id))
-                }
-            }
-            .pickerStyle(.menu)
+            SelectionSheet(
+                title: "Conto",
+                options: accounts,
+                selection: $selectedAccountID,
+                label: { $0.displayName ?? "Conto" },
+                icon: { ($0.tileIcon.systemImageName, $0.tileColor) }
+            )
         }
         Card {
             EyebrowLabel(text: "Tipo")

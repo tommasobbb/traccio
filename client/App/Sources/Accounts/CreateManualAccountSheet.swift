@@ -60,7 +60,11 @@ struct CreateManualAccountSheet: View {
                         // segmented control on an iPhone-width sheet.
                         Picker("Tipo", selection: $kind) {
                             ForEach(kindOptions, id: \.self) { candidate in
-                                Text(Self.label(for: candidate)).tag(candidate)
+                                Label(
+                                    Self.label(for: candidate),
+                                    systemImage: AccountIcon.default(for: candidate).systemImageName
+                                )
+                                .tag(candidate)
                             }
                         }
                         .pickerStyle(.menu)
@@ -98,7 +102,7 @@ struct CreateManualAccountSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Nuovo conto manuale")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

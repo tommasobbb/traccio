@@ -67,7 +67,7 @@ struct AddReimbursementSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Aggiungi rimborso")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

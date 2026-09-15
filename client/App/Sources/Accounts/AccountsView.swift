@@ -19,7 +19,7 @@ struct AccountsView: View {
     var body: some View {
         NavigationStack {
             content
-                .background(Palette.background)
+                .screenBackground()
                 .navigationTitle("Conti")
                 .sensoryFeedback(.success, trigger: model.successTick)
                 .sensoryFeedback(.error, trigger: model.actionFailure)

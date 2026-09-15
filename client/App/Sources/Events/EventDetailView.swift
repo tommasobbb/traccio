@@ -72,7 +72,7 @@ struct EventDetailView: View {
             }
             .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle(model.event.name)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

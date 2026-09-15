@@ -16,6 +16,10 @@ struct PersonDetailView: View {
     private let client: any APIClientProtocol
     private let onNeedsReload: () -> Void
     private let onDashboardStale: () -> Void
+    /// Shared between an advance row and its pushed detail screen so the
+    /// push zooms from the row's own frame instead of sliding in
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -54,7 +58,7 @@ struct PersonDetailView: View {
             content
                 .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle(title)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -152,10 +156,14 @@ struct PersonDetailView: View {
                                 onDashboardStale: onDashboardStale,
                                 onDelete: { _ in changed() }
                             )
+                            #if os(iOS)
+                            .navigationTransition(.zoom(sourceID: advance.id, in: transitionNamespace))
+                            #endif
                         } label: {
                             advanceRow(advance)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressableRow)
+                        .matchedTransitionSource(id: advance.id, in: transitionNamespace)
                         if advance.id != advances.last?.id {
                             Divider().overlay(Palette.separator)
                         }

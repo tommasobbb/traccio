@@ -68,7 +68,7 @@ struct SettingsView: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Impostazioni")
             .task {
                 mealVouchers.onChanged = { freshness.markStale([.dashboard]) }
