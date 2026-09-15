@@ -83,11 +83,12 @@ struct TransactionFiltersSheet: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
-                        .background(Palette.accent, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glassProminent)
+                .tint(Palette.accent)
+                .buttonBorderShape(.roundedRectangle(radius: Radius.row))
                 .padding(Spacing.gutter)
-                .background(.regularMaterial)
+                .glassEffect(.regular, in: Rectangle())
             }
         }
         .presentationDetents([.medium, .large])

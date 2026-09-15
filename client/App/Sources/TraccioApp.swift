@@ -78,6 +78,10 @@ struct TraccioApp: App {
                 .environment(drillThrough)
                 .onChange(of: drillThrough.generation) { _, _ in selectedTab = .transactions }
                 #if os(iOS)
+                // The tab bar retreats on scroll-down and returns on
+                // scroll-up (Liquid Glass, ADR 0030) — unavailable on macOS,
+                // where the tab bar doesn't scroll with content the same way.
+                .tabBarMinimizeBehavior(.onScrollDown)
                 .appLockOverlay(lock)
                 #endif
             } else {

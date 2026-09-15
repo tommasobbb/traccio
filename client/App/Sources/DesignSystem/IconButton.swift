@@ -3,6 +3,10 @@ import SwiftUI
 /// The circular icon-only button used for a per-connection manual sync and
 /// the Conti top bar's "add" control (`docs/design/canvas/Accounts.dc.html`).
 ///
+/// A Liquid Glass circle (`docs/decisions/0030-liquid-glass-chrome.md`)
+/// tinted with `background` rather than a flat `Circle().fill(_:)` — chrome,
+/// same as every other control in this file, never a content surface.
+///
 /// Icon-only controls need an explicit `accessibilityLabel` — a decorative
 /// SF Symbol carries no label of its own (ADR 0008: accessibility is day-one,
 /// not a follow-up).
@@ -16,8 +20,7 @@ struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle().fill(background)
+            Group {
                 if isLoading {
                     ProgressView()
                         .controlSize(.mini)
@@ -31,6 +34,7 @@ struct IconButton: View {
             .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
+        .glassEffect(.regular.tint(background).interactive(), in: Circle())
         .disabled(isLoading)
         .accessibilityLabel(accessibilityLabel)
     }
