@@ -4,7 +4,8 @@ import TraccioCore
 /// "Anticipi" — every movement the user marked as money laid out for others,
 /// in one place: the total still owed, a per-person roll-up ("chi ti deve
 /// quanto"), and the list of advances with a lifecycle-status filter.
-/// Reached from the Impostazioni tab (ADR 0009).
+/// Reached from the "Altro" tab (ADR 0009; moved there from Impostazioni by
+/// `docs/decisions/0033-more-tab-and-settings-corner.md`).
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Anticipi
 /// artboard), so it follows `EventsView`'s shape: `Card`s in a `ScrollView`,

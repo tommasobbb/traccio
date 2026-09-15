@@ -1,18 +1,22 @@
 import SwiftUI
 import TraccioCore
 
-/// The Impostazioni tab — the container for every settings-shaped screen
-/// this app has or will have (ADR 0009). "Categorie e regole", "Eventi",
-/// "Anticipi", "Inizio tracciamento", and (iOS only) "Blocco con Face ID"
-/// are the entries today; backup/export is tracked in `tasks/backlog.md` as
-/// a later entry here.
+/// Impostazioni — the real settings, the ones you configure rather than
+/// use: "Inizio tracciamento", "Buoni pasto", (iOS only) "Blocco con Face
+/// ID", and the server connection. Reached from a toolbar button in the
+/// top-right corner of Panoramica, not from the tab dock — revises ADR
+/// 0009's fourth "Impostazioni" tab
+/// (`docs/decisions/0033-more-tab-and-settings-corner.md`): the tab kept
+/// growing two different kinds of content, things you *do* (Eventi,
+/// Anticipi, Categorie e regole — now `MoreView`, the "Altro" tab) and
+/// things you *configure* (this screen). Backup/export is tracked in
+/// `tasks/backlog.md` as a later entry here.
 ///
-/// No mockup covers this screen (`docs/design/canvas/` mocks only
-/// Panoramica/Movimenti/Conti/Dettaglio) — a fourth tab is a deliberate
-/// divergence from the canvas, recorded in ADR 0009 rather than left to
-/// drift silently (ADR 0008's "Revisit when"). Built from the same `Card`
-/// row idiom as every other screen, not a stock `List`, so it does not
-/// reintroduce the plain-row look ADR 0008 replaced.
+/// Pushed from Panoramica's own `NavigationStack`, so it has no
+/// `NavigationStack` of its own — same posture as `EventsView`/`AdvancesView`/
+/// `CategorizationView`. Built from the same `Card` row idiom as every other
+/// screen, not a stock `List`, so it does not reintroduce the plain-row look
+/// ADR 0008 replaced.
 struct SettingsView: View {
     @Environment(DataFreshness.self) private var freshness
     @Environment(AppLock.self) private var lock
@@ -20,59 +24,34 @@ struct SettingsView: View {
     @State private var mealVouchers = MealVouchersViewModel()
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: Spacing.cardGap) {
-                    Card {
-                        NavigationLink {
-                            CategorizationView(
-                                onSuggestionsChanged: { freshness.markStale([.dashboard, .transactions]) }
+        ScrollView {
+            VStack(spacing: Spacing.cardGap) {
+                Card {
+                    NavigationLink {
+                        TrackingStartView(
+                            model: TrackingStartViewModel(
+                                onChanged: { freshness.markStale([.dashboard, .transactions]) }
                             )
-                        } label: {
-                            settingsRow(title: "Categorie e regole", systemImage: "tag")
-                        }
-                        .buttonStyle(.plain)
-                        Divider().overlay(Palette.separator)
-                        NavigationLink {
-                            EventsView()
-                        } label: {
-                            settingsRow(title: "Eventi", systemImage: "calendar")
-                        }
-                        .buttonStyle(.plain)
-                        Divider().overlay(Palette.separator)
-                        NavigationLink {
-                            AdvancesView()
-                        } label: {
-                            settingsRow(title: "Anticipi", systemImage: "person.2")
-                        }
-                        .buttonStyle(.plain)
-                        Divider().overlay(Palette.separator)
-                        NavigationLink {
-                            TrackingStartView(
-                                model: TrackingStartViewModel(
-                                    onChanged: { freshness.markStale([.dashboard, .transactions]) }
-                                )
-                            )
-                        } label: {
-                            settingsRow(title: "Inizio tracciamento", systemImage: "calendar.badge.clock")
-                        }
-                        .buttonStyle(.plain)
-                        Divider().overlay(Palette.separator)
-                        mealVouchersRow
-                        #if os(iOS)
-                        Divider().overlay(Palette.separator)
-                        biometricLockRow
-                        #endif
+                        )
+                    } label: {
+                        settingsRow(title: "Inizio tracciamento", systemImage: "calendar.badge.clock")
                     }
-                    serverCard
+                    .buttonStyle(.plain)
+                    Divider().overlay(Palette.separator)
+                    mealVouchersRow
+                    #if os(iOS)
+                    Divider().overlay(Palette.separator)
+                    biometricLockRow
+                    #endif
                 }
-                .padding(Spacing.gutter)
+                serverCard
             }
-            .screenChrome("Impostazioni", style: .tabRoot)
-            .task {
-                mealVouchers.onChanged = { freshness.markStale([.dashboard]) }
-                await mealVouchers.load()
-            }
+            .padding(Spacing.gutter)
+        }
+        .screenChrome("Impostazioni")
+        .task {
+            mealVouchers.onChanged = { freshness.markStale([.dashboard]) }
+            await mealVouchers.load()
         }
     }
 
@@ -212,12 +191,14 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView()
-        .environment(DataFreshness())
-        .environment(
-            AppLock(
-                authenticator: UnavailableBiometricAuthenticator(),
-                defaults: UserDefaults(suiteName: "SettingsView.preview") ?? .standard
+    NavigationStack {
+        SettingsView()
+            .environment(DataFreshness())
+            .environment(
+                AppLock(
+                    authenticator: UnavailableBiometricAuthenticator(),
+                    defaults: UserDefaults(suiteName: "SettingsView.preview") ?? .standard
+                )
             )
-        )
+    }
 }

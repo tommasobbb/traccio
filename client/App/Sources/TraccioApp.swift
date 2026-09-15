@@ -2,16 +2,18 @@ import SwiftUI
 import TraccioCore
 
 /// App entry point. Presentation only — a four-tab shell (Panoramica,
-/// Movimenti, Conti, Impostazioni; ADR 0009 records the fourth tab's
-/// addition), gated behind `OnboardingView` until the server is configured.
-/// All logic lives in the TraccioCore package.
+/// Movimenti, Conti, Altro; ADR 0009 records the fourth tab's addition,
+/// `docs/decisions/0033-more-tab-and-settings-corner.md` its 2026-09-16
+/// revision — the fourth tab is "Altro" now, and Impostazioni moved to a
+/// toolbar button on Panoramica), gated behind `OnboardingView` until the
+/// server is configured. All logic lives in the TraccioCore package.
 @main
 struct TraccioApp: App {
     /// Identifies each tab, for the drill-through's tab switch below —
     /// `TabView`'s own `.tag(_:)` needs a `Hashable` value distinct from
     /// each tab's `View` type.
     private enum Tab: Hashable {
-        case dashboard, transactions, accounts, settings
+        case dashboard, transactions, accounts, more
     }
 
     /// Shared cross-tab invalidation signal — see `DataFreshness`'s
@@ -67,11 +69,17 @@ struct TraccioApp: App {
                             Label("Conti", systemImage: "creditcard")
                         }
                         .tag(Tab.accounts)
-                    SettingsView()
+                    MoreView()
                         .tabItem {
-                            Label("Impostazioni", systemImage: "gearshape")
+                            // "Altro" holds every *feature* screen that
+                            // isn't a daily-use tab — Eventi, Anticipi,
+                            // Categorie e regole — not settings, which moved
+                            // to a toolbar button on Panoramica (ADR 0033).
+                            // `ellipsis.circle` has a `.fill` variant, so the
+                            // active tab lights up.
+                            Label("Altro", systemImage: "ellipsis.circle")
                         }
-                        .tag(Tab.settings)
+                        .tag(Tab.more)
                 }
                 .environment(freshness)
                 .environment(lock)

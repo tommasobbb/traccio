@@ -3,7 +3,8 @@ import TraccioCore
 
 /// "Eventi" — the caller's events: a trip, a renovation, any occasion whose
 /// transactions the user wants grouped for a single net total. Reached from
-/// the Impostazioni tab (ADR 0009).
+/// the "Altro" tab (ADR 0009; moved there from Impostazioni by
+/// `docs/decisions/0033-more-tab-and-settings-corner.md`).
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Eventi
 /// artboard), so it is built from existing tokens/components, following

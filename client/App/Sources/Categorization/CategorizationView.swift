@@ -3,7 +3,8 @@ import TraccioCore
 
 /// "Categorie e regole" — manages the caller's categories and
 /// categorization rules, and runs `POST /rules/apply`. Reached from the
-/// Impostazioni tab (ADR 0009).
+/// "Altro" tab (ADR 0009; moved there from Impostazioni by
+/// `docs/decisions/0033-more-tab-and-settings-corner.md`).
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Categorie/
 /// Regole artboard), so it is built from existing tokens/components — same

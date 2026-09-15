@@ -64,6 +64,7 @@ struct DashboardView: View {
             // "protagonist", this reverts and every tab goes `.pushed`
             // instead (`tasks/backlog.md`'s on-device pass).
             .animation(.easeInOut(duration: 0.2), value: stateTag)
+            .toolbar { toolbarContent }
         }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
     }
@@ -82,6 +83,26 @@ struct DashboardView: View {
                 ?? summary.currencies.primary()?.spending
             return "loaded-\(spend ?? 0)"
         case .failed: return "failed"
+        }
+    }
+
+    // MARK: Toolbar
+
+    /// Panoramica's one toolbar entry: Impostazioni, pushed into this
+    /// screen's own `NavigationStack`. This tab was chosen over Movimenti/
+    /// Conti as the settings entry point precisely because it's the only
+    /// tab root without a toolbar of its own already
+    /// (`docs/decisions/0033-more-tab-and-settings-corner.md`) — the reason
+    /// ADR 0009 originally gave for rejecting a gear icon here no longer
+    /// applies once the icon has a real dedicated corner to sit in.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            NavigationLink {
+                SettingsView()
+            } label: {
+                Label("Impostazioni", systemImage: "gearshape")
+            }
         }
     }
 

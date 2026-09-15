@@ -1,7 +1,15 @@
 # 0009 — Client navigation: a fourth "Impostazioni" tab
 
-Status: accepted
+Status: accepted (revised — see below)
 Date: 2026-08-24
+
+> **2026-09-16**: the fourth tab's *contents* moved —
+> `docs/decisions/0033-more-tab-and-settings-corner.md`. It is now "Altro"
+> (Eventi, Anticipi, Categorie e regole — the *feature* screens this ADR's
+> reasoning covers); Impostazioni itself (the settings-shaped screens this
+> ADR also names) moved to a toolbar button on Panoramica. The analysis
+> below — why a fourth tab needed to exist at all — is unchanged; only what
+> sits inside it is.
 
 ## Context
 
