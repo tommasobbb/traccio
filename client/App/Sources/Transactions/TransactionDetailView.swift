@@ -331,8 +331,12 @@ struct TransactionDetailView: View {
 
     // MARK: Header
 
+    /// The one `.raised` (glass, `docs/decisions/0032-glass-on-raised-cards.md`)
+    /// surface on this screen, matching `EventDetailView`'s own header — a
+    /// real inconsistency the 2026-09-15 coherence pass found: this header
+    /// used to render as bare text with no card at all.
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        Card(elevation: .raised) {
             if let categoryName {
                 HStack(spacing: 6) {
                     Badge(text: categoryName, style: .neutral)

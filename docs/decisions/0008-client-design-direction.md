@@ -668,3 +668,13 @@ title on the four tabs (Panoramica included, reversing its `.inline` call
 from the 2026-09-08 revision — owed on-device judgment), and a single
 `DisclosureChevron` in place of one that had drifted to four sizes and two
 colours across seven files.
+
+## 2026-09-15 revision: glass on `.raised` cards
+
+Full decision in `0032-glass-on-raised-cards.md`. Narrows ADR 0030's "glass
+is chrome, never a content surface" to make one exception: the single
+`.raised` card a screen designates as its protagonist (Panoramica's hero,
+a detail screen's header) is Liquid Glass instead of an opaque fill with a
+shadow. Every other card and list row is untouched. Found and fixed one
+drift in the process: `TransactionDetailView`'s header had no card at all,
+unlike `EventDetailView`'s equivalent — both are `.raised` now.

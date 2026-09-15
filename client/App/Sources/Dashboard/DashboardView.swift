@@ -130,18 +130,15 @@ struct DashboardView: View {
             .pickerStyle(.segmented)
             .segmentedPickerTint()
         }
-        // A quiet flush card, not the old accent-tint block — the period
-        // strip is navigation, not a headline, and the accent no longer wants
-        // that much presence at the top of the screen (2026-09-08 tone
+        // Navigation chrome, not a headline — glass rather than an opaque
+        // fill (`docs/decisions/0032-glass-on-raised-cards.md`): this strip
+        // was always chrome by ADR 0030's own original rule, just missed in
+        // the batch that only touched Movimenti. The accent still doesn't
+        // get that much presence at the top of the screen (2026-09-08 tone
         // revision, Panoramica recompose).
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
-        )
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
     }
 
     private var unitBinding: Binding<CalendarPeriod.Unit> {

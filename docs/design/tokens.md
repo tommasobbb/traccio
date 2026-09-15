@@ -252,24 +252,31 @@ against it. Revert to `#000000` if cards read flat on device.
 Liquid Glass (`docs/decisions/0030-liquid-glass-chrome.md`), adopted since the
 deployment target moved to iOS 26 / macOS 26. The rule is the same discipline
 as "Accent dosage" above, restated for material instead of hue: **glass is
-chrome, never a content surface.**
+chrome, never a content surface** — narrowed since
+`docs/decisions/0032-glass-on-raised-cards.md` to make one deliberate
+exception: **the one `.raised` card a screen designates as its
+protagonist** is glass too. Every *other* content surface — a list row, an
+`OptionListCard`, `Badge`, `IconTile` — still never carries it.
 
 | Carries glass | Stays opaque |
 | -------------- | ------------- |
-| Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at every elevation |
-| Toolbars (native, automatic on iOS 26) | The Panoramica hero card |
-| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) | Any surface that carries a figure |
-| `PillButton` (`.buttonStyle(.glassProminent)`, `.tint(Palette.accent)`) | Movimenti day-group rows |
+| Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at `.flush`/`.resting` |
+| Toolbars (native, automatic on iOS 26) | Every list row (Movimenti, day groups, `OptionListCard`) |
+| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) | `Badge`, `IconTile`, `EventTile` |
+| `PillButton` (`.buttonStyle(.glassProminent)`, `.tint(Palette.accent)`) | `DisclosureChevron` — chrome-coloured (`inkQuaternary`) but opaque, no glass |
 | `IconButton` (`.glassEffect(.regular.tint(background).interactive(), in: Circle())`) | |
 | `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
 | `FilterChip` active state tints the same glass with `Palette.accent` — the allowed dose, not a new exception | |
-| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | `OptionListCard` |
-| Every sheet's action bar and toolbar, via `.sheetChrome(_:detents:)` (`SheetChrome.swift`) — no sheet is left with a flat full-height presentation since the 2026-09-15 coherence pass | `DisclosureChevron` — chrome-coloured (`inkQuaternary`) but opaque, no glass |
+| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | |
+| Every sheet's action bar and toolbar, via `.sheetChrome(_:detents:)` (`SheetChrome.swift`) — no sheet is left with a flat full-height presentation since the 2026-09-15 coherence pass | |
 | `TrackingStartView`'s primary/secondary buttons (`.glassProminent`/`.glass`, same idiom as the Filtri sheet's "Applica" bar) | |
+| **`Card(elevation: .raised)`** — the Panoramica hero, `EventDetailView`'s and `TransactionDetailView`'s headers, `PersonDetailView`'s summary (`docs/decisions/0032-glass-on-raised-cards.md`) | |
+| Panoramica's period strip (prev/next + unit picker) — chrome by ADR 0030's original rule, missed until 0032 | |
 
-If a screen reads flat, the fix is still hierarchy — elevation, type scale,
-whitespace — never a translucent surface behind a number. `Card.swift` does
-not change for this revision.
+If a screen reads flat, the fix is still hierarchy first — elevation, type
+scale, whitespace — and glass only for the screen's one designated
+`.raised` protagonist (ADR 0032), never a second translucent surface
+competing with it.
 
 **Motion**: a row pushing to its detail screen zooms from the row's own
 frame instead of sliding in — `TransactionRow` → `TransactionDetailView`,
