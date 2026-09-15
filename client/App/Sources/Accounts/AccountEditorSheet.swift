@@ -92,7 +92,11 @@ struct AccountEditorSheet: View {
                             EyebrowLabel(text: "Tipo")
                             Picker("Tipo", selection: $kind) {
                                 ForEach(kindOptions, id: \.self) { candidate in
-                                    Text(Self.label(for: candidate)).tag(candidate)
+                                    Label(
+                                        Self.label(for: candidate),
+                                        systemImage: AccountIcon.default(for: candidate).systemImageName
+                                    )
+                                    .tag(candidate)
                                 }
                             }
                             .pickerStyle(.menu)

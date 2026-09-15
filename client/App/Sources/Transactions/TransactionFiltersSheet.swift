@@ -103,15 +103,15 @@ struct TransactionFiltersSheet: View {
 
     private var accountSection: some View {
         section("Conto") {
-            optionCard {
-                optionRow(title: "Tutti i conti", isSelected: accountID == nil) {
+            OptionListCard {
+                OptionRow(title: "Tutti i conti", isSelected: accountID == nil) {
                     accountID = nil
                 }
                 ForEach(accounts) { account in
                     Divider().overlay(Palette.separator)
-                    optionRow(
+                    OptionRow(
                         title: account.displayName ?? "Conto",
-                        swatch: Palette.color(account.tileColor),
+                        icon: (account.tileIcon.systemImageName, account.tileColor),
                         isSelected: accountID == account.id
                     ) {
                         accountID = account.id
@@ -125,28 +125,28 @@ struct TransactionFiltersSheet: View {
 
     private var categorySection: some View {
         section("Categoria") {
-            optionCard {
-                optionRow(title: "Tutte le categorie", isSelected: category == .any) {
+            OptionListCard {
+                OptionRow(title: "Tutte le categorie", isSelected: category == .any) {
                     category = .any
                 }
                 Divider().overlay(Palette.separator)
-                optionRow(title: "Senza categoria", isSelected: category == .uncategorized) {
+                OptionRow(title: "Senza categoria", isSelected: category == .uncategorized) {
                     category = .uncategorized
                 }
                 ForEach(categoryTree) { node in
                     Divider().overlay(Palette.separator)
-                    optionRow(
+                    OptionRow(
                         title: node.category.name,
-                        swatch: Palette.color(node.category.color),
+                        icon: (node.category.tileIcon.systemImageName, node.category.color),
                         isSelected: category == .some(node.category.id)
                     ) {
                         category = .some(node.category.id)
                     }
                     ForEach(node.children) { child in
                         Divider().overlay(Palette.separator)
-                        optionRow(
+                        OptionRow(
                             title: child.name,
-                            swatch: Palette.color(child.color),
+                            icon: (child.tileIcon.systemImageName, child.color),
                             isSelected: category == .some(child.id),
                             indented: true
                         ) {
@@ -201,47 +201,6 @@ struct TransactionFiltersSheet: View {
         }
     }
 
-    private func optionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) { content() }
-            .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
-                    .strokeBorder(Palette.separatorSubtle)
-            )
-    }
-
-    private func optionRow(
-        title: String,
-        swatch: Color? = nil,
-        isSelected: Bool,
-        indented: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if let swatch {
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(swatch)
-                        .frame(width: 10, height: 10)
-                }
-                Text(title)
-                    .font(Typography.body)
-                    .foregroundStyle(isSelected ? Palette.accent : Palette.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Palette.accent)
-                }
-            }
-            .padding(.leading, indented ? 34 : 14)
-            .padding(.trailing, 14)
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 /// A minimal wrapping `HStack`: lays children left to right, dropping to the

@@ -258,16 +258,30 @@ chrome, never a content surface.**
 | -------------- | ------------- |
 | Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at every elevation |
 | Toolbars (native, automatic on iOS 26) | The Panoramica hero card |
-| Sheet bottom action bars (`.glassEffect`, replacing `.regularMaterial`) | Any surface that carries a figure |
-| `PillButton` (`.buttonStyle(.glassProminent)`, tinted `Palette.accent`) | Movimenti day-group rows |
-| `IconButton` (`.buttonStyle(.glass)`) | |
+| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) | Any surface that carries a figure |
+| `PillButton` (`.buttonStyle(.glassProminent)`, `.tint(Palette.accent)`) | Movimenti day-group rows |
+| `IconButton` (`.glassEffect(.regular.tint(background).interactive(), in: Circle())`) | |
 | `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
-| `FilterChip` active state keeps `Palette.accent.opacity(0.12)` + accent border — the allowed dose, not a new exception | |
-| `SelectionSheet`'s closed control (glass capsule showing the current selection's icon) | |
+| `FilterChip` active state tints the same glass with `Palette.accent` — the allowed dose, not a new exception | |
+| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | |
 
 If a screen reads flat, the fix is still hierarchy — elevation, type scale,
 whitespace — never a translucent surface behind a number. `Card.swift` does
 not change for this revision.
+
+**Picking a picker.** Two shapes, chosen by what the options are:
+
+- **Data-backed options that carry their own icon and colour** (accounts,
+  categories) → `SelectionSheet` (`App/Sources/DesignSystem/SelectionSheet.swift`),
+  opening an `OptionListCard`/`OptionRow` list (`OptionList.swift`) — a bare
+  `Picker`'s closed control shows neither the icon nor the colour.
+- **A small, static, closed enumeration** (`AccountKind`, 6 cases) → a native
+  `Picker` styled `.menu`, with `Label(_, systemImage:)` per option instead of
+  a bare `Text` — the icon comes along for free in both the open menu and the
+  closed control, and the whole thing renders in Liquid Glass automatically
+  on iOS 26. No need for `SelectionSheet`'s own sheet-and-card machinery when
+  there is no per-option colour to show and the list is short enough for a
+  dropdown.
 
 `Palette.backgroundElevated`: a barely-there neutral gradient over
 `Palette.background` (light `#F2F5F3 → #FAFBFA`, dark `#0B0B0C → #151517`),

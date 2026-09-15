@@ -7,19 +7,29 @@ import TraccioCore
 /// Lifted out of `AccountsView` (previously a private `defaultIcon(for:)`) so
 /// `TransactionRow` can render the same fallback rather than leaving its
 /// leading tile blank whenever appearance was never set.
-extension AccountResponse {
-    /// The icon this account renders with: the user's choice, or a fallback
-    /// keyed off `kind` rather than defaulting every kind to the same glyph.
-    var tileIcon: AccountIcon {
-        if let icon { return icon }
+extension AccountIcon {
+    /// The icon a bare `AccountKind` renders with before the user picks one
+    /// of their own — pulled out of `AccountResponse.tileIcon` so the "Tipo"
+    /// pickers (`CreateManualAccountSheet`, `AccountEditorSheet`) can show
+    /// the same icon next to each candidate kind, not just an account that
+    /// already has one.
+    static func `default`(for kind: AccountKind) -> AccountIcon {
         switch kind {
-        case .wallet: return .wallet
-        case .cash: return .cash
-        case .savings: return .savings
-        case .card: return .card
-        case .current: return .bank
-        case .voucher: return .voucher
+        case .wallet: .wallet
+        case .cash: .cash
+        case .savings: .savings
+        case .card: .card
+        case .current: .bank
+        case .voucher: .voucher
         }
+    }
+}
+
+extension AccountResponse {
+    /// The icon this account renders with: the user's choice, or the
+    /// `kind`-keyed fallback above.
+    var tileIcon: AccountIcon {
+        icon ?? .default(for: kind)
     }
 
     /// The colour this account renders with: the user's choice, or a neutral
