@@ -26,13 +26,23 @@ resolution happens automatically; no view branches on light/dark itself.
 
 ## Panoramica hero
 
-**No colour band.** Panoramica's hero (the spend total, the category ribbon,
-Entrate/Netto) is a plain `Card` at `.raised` — the only raised card on the
-screen, so it reads as the protagonist through elevation and the figure's own
-size (`Typography.heroFigure`, 44pt, tracking `-1.0`), not a filled surface.
-The `heroFill` / `heroFillDeep` / `onHero` / `onHeroSecondary` colorsets and
-`AmountText.Tone` were removed in the 2026-09-08 "dose, non tinta" revision —
-see "Accent dosage" below and the History entry.
+**`Palette.brandNight`, not white.** Since `docs/decisions/0034-brand-triad.md`
+(2026-09-16), Panoramica's hero (the spend total, the category ribbon,
+Entrate/Netto) is a `Card` at `.raised` with `background: Palette.brandNight`
+— the app's first brand surface. It is still the only `.raised` card on the
+screen, so the hierarchy is still elevation- and scale-driven
+(`Typography.heroFigure`, 44pt, tracking `-1.0`), not "one colour block among
+several" — the 2026-09-08 "dose, non tinta" diagnosis (surface *area*, not
+hue, is what reads as loud) still holds; see "Brand triad" below for the
+narrowed rule. The spend figure itself is `Palette.brandLime`; the eyebrow,
+currency label, "Entrate"/"Netto" captions, divider, and category-ribbon
+legend are `Palette.brandCream` at reduced opacity (via `AmountText.colorOverride`
+and explicit `foregroundStyle`s — see `DashboardView.heroCard`'s doc
+comment). Income and a positive net keep `Palette.income` untouched. Before
+this, the hero was the flat white `Card` the 2026-08-25→2026-09-08 revisions
+below describe — the `heroFill` / `heroFillDeep` / `onHero` / `onHeroSecondary`
+colorsets and `AmountText.Tone` removed then stay removed; this is a new,
+narrower brand surface, not a return to the old coloured-band hero.
 
 ## Ink (text)
 
@@ -86,6 +96,13 @@ hue — it was how much surface the accent covered. The rule, since the
   the reference: it has no band and no accent surface, and it is the screen
   the owner calls the cleanest.
 
+**Narrowed by `docs/decisions/0034-brand-triad.md` (2026-09-16):** a
+screen's one designated `.raised` protagonist surface may now be a brand
+triad colour (`Palette.brandNight`) instead of white — see "Brand triad"
+below. Every other rule above is unchanged: a data row, a list, a heading,
+navigation chrome, and every card *except* the one protagonist still never
+carry a filled colour, brand or accent.
+
 `net` in the dashboard hero no longer carries the accent when positive — it
 is `Palette.income`, like every other positive figure (`AmountText.Kind.net`).
 
@@ -103,6 +120,46 @@ petrol green `#0E7C86` for one day → forest green `#1B5E3F` / `#58BF95`
 below — decoupled from accent. After the fifth swap the conclusion was that
 the hue was not the problem (see "Accent dosage" above); the azure stays and
 gets re-judged on device *after* the dose came down, not before.
+
+## Brand triad
+
+`docs/decisions/0034-brand-triad.md` (2026-09-16). Three identity colours,
+each with a dark-appearance variant like every other token in this file:
+
+| Token       | Hex (light) | Hex (dark) | Swift name          | Use                                        |
+| ----------- | --------- | --------- | -------------------- | -------------------------------------------- |
+| Brand night | `#14183C` | `#1E2350` | `Palette.brandNight` | A screen's one designated protagonist surface (today: Panoramica's hero) |
+| Brand lime  | `#C8F000` | `#9FCB00` | `Palette.brandLime`  | The key figure/control *on* a `brandNight` surface — never on a light one |
+| Brand cream | `#FFD9A0` | `#4A3820` | `Palette.brandCream` | The neutral text/divider tone *inside* a `brandNight` surface |
+
+**The rule: brand surfaces yes, figures and data rows no.** A `brandNight`
+card is a legitimate exception to "no filled surface" (see "Accent dosage"
+above) *for the one screen protagonist already singled out by `.raised`
+elevation* — not a general license to tint cards. Once inside that surface,
+`brandLime`/`brandCream` exist to give text and controls contrast against
+navy, not to replace `ink` everywhere; a money figure or a data row outside
+a brand surface still stays `ink`, exactly as before.
+
+`brandLime` is never used on a light surface — `#C8F000` on near-white
+doesn't have the contrast to read as a control there. `Palette.accent`
+(azure) is untouched and keeps every job it already had; the triad doesn't
+replace it, including inside the app's global `AccentColor` asset.
+
+`brandNight` is intentionally near-constant across appearances (a brand
+colour, not a system-adaptive neutral) — its dark variant is lifted a few
+points only so it keeps an edge against the dark `Background` (`#0B0B0C`).
+`brandLime`/`brandCream` are pulled back a little in dark mode so a colour
+this saturated doesn't glow against an OLED-dark surface, the same
+adjustment the app icon's own dark variant makes for its gradient. All
+three dark values are a judgment call pending the on-device pass
+(`tasks/backlog.md` item 13) — the lime-on-navy and cream-on-navy contrast
+in particular need confirming against real content, not just a Simulator
+screenshot.
+
+`AmountText.colorOverride` and `Card`'s `background:` parameter are the two
+mechanisms: both default to `nil`/unset and change nothing at any existing
+call site. See their doc comments in `App/Sources/DesignSystem/` for exactly
+what each substitutes.
 
 ## Semantic
 
@@ -433,7 +490,11 @@ a tracked cleanup in `tasks/backlog.md`).
 
 ## Typography
 
-- System font (SF Pro via SwiftUI `.system`), not a custom typeface.
+- System font, `design: .rounded` (SF Pro Rounded) since
+  `docs/decisions/0034-brand-triad.md` — still a SwiftUI `.system` font, not
+  a custom typeface or a bundled dependency; every `Typography` token moved
+  together, figures included, so the voice doesn't mix rounded and sharp
+  cuts on the same screen.
 - **Tabular figures on every amount** — `AmountText` (the shared component)
   bakes this in; never render a bare `Text` for a money value.
 - Build sizes relative to a `Font.TextStyle` (`.system(.title, design: .default)`

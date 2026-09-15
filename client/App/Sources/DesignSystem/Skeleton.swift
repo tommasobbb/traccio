@@ -68,12 +68,15 @@ struct DashboardSkeleton: View {
         VStack(alignment: .leading, spacing: Spacing.cardGap) {
             SkeletonBlock(height: 64, cornerRadius: Radius.row)
 
-            Card(elevation: .raised) {
+            // `brandNight` background, matching `DashboardView.heroCard`
+            // (`docs/decisions/0034-brand-triad.md`) — so the hero doesn't
+            // flash from white to navy the moment data arrives.
+            Card(elevation: .raised, background: Palette.brandNight) {
                 SkeletonBlock(width: 120, height: 10)
                 SkeletonBlock(width: 200, height: 40)
                 SkeletonBlock(width: 40, height: 10)
                 SkeletonBlock(height: 10, cornerRadius: 5)
-                Divider().overlay(Palette.separator)
+                Divider().overlay(Palette.brandCream.opacity(0.18))
                 HStack(spacing: 16) {
                     SkeletonBlock(width: 90, height: 32)
                     SkeletonBlock(width: 90, height: 32)

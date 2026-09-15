@@ -678,3 +678,29 @@ a detail screen's header) is Liquid Glass instead of an opaque fill with a
 shadow. Every other card and list row is untouched. Found and fixed one
 drift in the process: `TransactionDetailView`'s header had no card at all,
 unlike `EventDetailView`'s equivalent — both are `.raised` now.
+
+**2026-09-16: reverted.** Judged live on device the day after shipping: a
+money figure over translucent glass read worse than the opaque card. ADR
+0032 is now recorded as rejected, not deleted. `.raised` is back to the
+opaque two-layer shadow everywhere; the `TransactionDetailView` header
+fix is kept.
+
+## 2026-09-16 revision: a brand triad, and the accent's rule narrowed
+
+Full decision in `0034-brand-triad.md`. Two changes, both from the owner
+naming the app "poor in visual identity": every `Typography` token moves to
+`design: .rounded` (still the system font, just its rounded cut — no new
+dependency); and three identity colours (`brandNight`/`brandLime`/
+`brandCream`) are introduced for a screen's designated *brand/structural*
+surface — so far, `DashboardView.heroCard`.
+
+This narrows, rather than repeals, the 2026-09-08 "dose, non tinta" rule
+below: **a money figure or a data row still never gets a filled colour
+band** — that diagnosis (surface area, not hue, is what reads as
+"unfinished" or "loud") holds exactly as written. What's now allowed is a
+screen's *one* designated protagonist surface (the same `.raised` card
+already singled out by elevation) carrying a brand colour instead of
+staying white — the triad's own rule is "brand surfaces yes, figures and
+data rows no," not "colour everywhere." `Palette.accent` (azure) is
+untouched and keeps its existing job everywhere outside a brand surface;
+the triad is additive.

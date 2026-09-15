@@ -43,9 +43,18 @@ extension View {
 /// `contentPadding` drops to `0` for a card that holds its own already-padded
 /// rows with hairline dividers (a day group), so the rows meet the card edge
 /// cleanly.
+///
+/// `background` defaults to `nil` (→ `Palette.card`, unchanged for every
+/// existing call site) — an explicit colour is the one screen-specific
+/// escape hatch for a brand/structural surface
+/// (`docs/decisions/0034-brand-triad.md`), e.g. Panoramica's hero on
+/// `Palette.brandNight`. Content inside such a card is responsible for its
+/// own contrast (`AmountText`'s `colorOverride`, an explicit
+/// `foregroundStyle`) — `Card` itself only ever changes the fill.
 struct Card<Content: View>: View {
     var elevation: CardElevation = .resting
     var contentPadding: CGFloat?
+    var background: Color?
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -53,7 +62,7 @@ struct Card<Content: View>: View {
             content
         }
         .padding(contentPadding ?? Spacing.cardPadding)
-        .background(Palette.card)
+        .background(background ?? Palette.card)
         .clipShape(RoundedRectangle(cornerRadius: elevation.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: elevation.cornerRadius, style: .continuous)

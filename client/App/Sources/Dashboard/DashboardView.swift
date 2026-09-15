@@ -297,47 +297,58 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Panoramica's protagonist. Since the 2026-09-08 "dose, non tinta"
-    /// revision this is a plain `Card` at `.raised` — the only raised card on
-    /// the screen, so the hierarchy is carried by elevation and the figure's
-    /// own scale, not by a filled colour band (`docs/design/tokens.md`'s
-    /// "Accent dosage"). The spend total is `ink`, big, with tight tracking.
+    /// Panoramica's protagonist, and the app's first brand surface
+    /// (`docs/decisions/0034-brand-triad.md`): `Palette.brandNight` instead
+    /// of the plain white `Card` fill, still the only `.raised` card on the
+    /// screen so the hierarchy is still carried by elevation and scale, not
+    /// by being one colour block among others. The spend total — the "key
+    /// figure on brandNight" the triad names directly — is `brandLime`
+    /// instead of `ink`; every other run on this card that would otherwise
+    /// read as `ink` (the eyebrow, "Entrate"/"Netto" labels, the divider)
+    /// substitutes `brandCream` instead, via `AmountText.colorOverride` and
+    /// explicit `foregroundStyle`s below. Income and a positive net keep
+    /// their ordinary green untouched — the one thing this card doesn't
+    /// change is what already reads as a semantic colour.
     private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
-        Card(elevation: .raised) {
+        Card(elevation: .raised, background: Palette.brandNight) {
             VStack(alignment: .leading, spacing: 6) {
-                EyebrowLabel(text: "Speso questo periodo")
+                EyebrowLabel(text: "Speso questo periodo", color: Palette.brandCream.opacity(0.7))
                 AmountText(
                     amount: summary.spending,
                     currencyCode: summary.currency,
                     kind: .spending,
                     font: Typography.heroFigure,
                     fractionFont: Typography.statFigure,
-                    tracking: -1.0
+                    tracking: -1.0,
+                    colorOverride: Palette.brandLime
                 )
                 Text(summary.currency)
                     .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
+                    .foregroundStyle(Palette.brandCream.opacity(0.7))
             }
 
             categoryRibbon(summary)
 
-            Divider().overlay(Palette.separator)
+            Divider().overlay(Palette.brandCream.opacity(0.18))
 
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Entrate")
                         .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
+                        .foregroundStyle(Palette.brandCream.opacity(0.7))
                     AmountText(amount: summary.income, currencyCode: summary.currency, kind: .income)
                 }
                 Rectangle()
-                    .fill(Palette.separator)
+                    .fill(Palette.brandCream.opacity(0.18))
                     .frame(width: 1)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Netto")
                         .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                    AmountText(amount: summary.net, currencyCode: summary.currency, kind: .net)
+                        .foregroundStyle(Palette.brandCream.opacity(0.7))
+                    AmountText(
+                        amount: summary.net, currencyCode: summary.currency, kind: .net,
+                        colorOverride: Palette.brandCream
+                    )
                 }
             }
         }
@@ -454,7 +465,9 @@ struct DashboardView: View {
 
     /// Up to three top spenders as coloured dot + name, then "+N" for the
     /// rest — a glance key for the ribbon; the full labelled breakdown is
-    /// the "Per categoria" card below.
+    /// the "Per categoria" card below. Text is `brandCream`, not `ink`/
+    /// `inkTertiary`: this legend only ever renders inside `heroCard`'s
+    /// `brandNight` surface (`docs/decisions/0034-brand-triad.md`).
     private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
         let shown = Array(spent.prefix(3))
         return HStack(spacing: 12) {
@@ -470,7 +483,7 @@ struct DashboardView: View {
                     // their width first via `layoutPriority`.
                     Text(entry.categoryName ?? "Senza categoria")
                         .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
+                        .foregroundStyle(Palette.brandCream.opacity(0.8))
                         .lineLimit(1)
                 }
                 .layoutPriority(Double(shown.count - rank))
@@ -478,7 +491,7 @@ struct DashboardView: View {
             if spent.count > shown.count {
                 Text("+\(spent.count - shown.count)")
                     .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
+                    .foregroundStyle(Palette.brandCream.opacity(0.6))
             }
             Spacer(minLength: 0)
         }
