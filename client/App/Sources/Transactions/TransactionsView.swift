@@ -37,6 +37,10 @@ struct TransactionsView: View {
     /// ready to link — sign alone doesn't say which leg funds which, unlike
     /// a two-sided transfer, so the user picks explicitly (ADR 0022).
     @State private var isChoosingFundedPaymentOrientation = false
+    /// Shared between a row and its pushed `TransactionDetailView` so the
+    /// push can zoom from the row's own frame (`TransactionRow`, iOS only —
+    /// `ZoomNavigationTransition` is unavailable on macOS).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -545,7 +549,8 @@ struct TransactionsView: View {
                             onDashboardStale: { freshness.markStale([.dashboard]) },
                             onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
                             onDelete: { model.remove(id: $0) },
-                            selection: rowSelection(for: transaction)
+                            selection: rowSelection(for: transaction),
+                            namespace: transitionNamespace
                         )
                         .onAppear {
                             if isLastGroup, transaction.id == group.transactions.last?.id {

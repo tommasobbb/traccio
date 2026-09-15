@@ -269,6 +269,18 @@ If a screen reads flat, the fix is still hierarchy — elevation, type scale,
 whitespace — never a translucent surface behind a number. `Card.swift` does
 not change for this revision.
 
+**Motion**: a row pushing to its detail screen zooms from the row's own
+frame instead of sliding in — `TransactionRow` → `TransactionDetailView`,
+`EventsView`'s row → `EventDetailView` (`.matchedTransitionSource` +
+`.navigationTransition(.zoom(sourceID:in:))`, iOS only —
+`ZoomNavigationTransition` is unavailable on macOS, so the destination gets
+the system's default push there). SwiftUI backs off to a plain push under
+Reduce Motion automatically; no extra handling needed, same as the rest of
+this file's motion (`AmountText`'s digit-roll, `SkeletonBlock`'s shimmer).
+A `GlassEffectContainer` around the Movimenti toolbar's "•••"/filtri/"+"
+cluster was considered and dropped: native `ToolbarItem`s already merge and
+separate their own glass on iOS 26, so wrapping them again would be inert.
+
 **Picking a picker.** Two shapes, chosen by what the options are:
 
 - **Data-backed options that carry their own icon and colour** (accounts,

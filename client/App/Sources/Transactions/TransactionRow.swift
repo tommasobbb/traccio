@@ -59,6 +59,10 @@ struct TransactionRow: View {
     /// renders a leading checkbox and toggles selection on tap instead of
     /// navigating to the detail screen (`docs/domain.md` §Transfer).
     var selection: Selection? = nil
+    /// Shared with `TransactionsView` so the push to `TransactionDetailView`
+    /// zooms from this row's own frame instead of sliding in
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`).
+    let namespace: Namespace.ID
 
     /// The row's state while the Movimenti list is in transfer-pairing
     /// selection mode.
@@ -94,10 +98,14 @@ struct TransactionRow: View {
                     onRulesApplied: onRulesApplied,
                     onDelete: onDelete
                 )
+                #if os(iOS)
+                .navigationTransition(.zoom(sourceID: transaction.id, in: namespace))
+                #endif
             } label: {
                 rowContent
             }
             .buttonStyle(.pressableRow)
+            .matchedTransitionSource(id: transaction.id, in: namespace)
         }
     }
 

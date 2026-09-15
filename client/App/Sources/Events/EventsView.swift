@@ -18,6 +18,10 @@ struct EventsView: View {
     @State private var model: EventsViewModel
     @State private var isPresentingCreateSheet = false
     private let client: any APIClientProtocol
+    /// Shared between a row and its pushed `EventDetailView` so the push
+    /// zooms from the row's own frame instead of sliding in
+    /// (`docs/decisions/0030-liquid-glass-chrome.md`).
+    @Namespace private var transitionNamespace
 
     /// Create the screen.
     ///
@@ -144,12 +148,16 @@ struct EventsView: View {
                                 onEventChange: { model.replace($0) },
                                 onEventDeleted: { model.remove(id: $0) }
                             )
+                            #if os(iOS)
+                            .navigationTransition(.zoom(sourceID: event.id, in: transitionNamespace))
+                            #endif
                         } label: {
                             EventRow(event: event)
                                 .padding(.horizontal, Spacing.cardPadding)
                                 .padding(.vertical, 6)
                         }
                         .buttonStyle(.pressableRow)
+                        .matchedTransitionSource(id: event.id, in: transitionNamespace)
                     }
                 }
             }
