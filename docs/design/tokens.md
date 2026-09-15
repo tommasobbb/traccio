@@ -281,6 +281,21 @@ A `GlassEffectContainer` around the Movimenti toolbar's "•••"/filtri/"+"
 cluster was considered and dropped: native `ToolbarItem`s already merge and
 separate their own glass on iOS 26, so wrapping them again would be inert.
 
+**Coherence sweep (2026-09-15)**: the same zoom transition extends to every
+row→detail push in the app, not just Movimenti/Eventi —
+`AdvancesView`'s person row → `PersonDetailView`, its advance row and
+`PersonDetailView`'s own advance row → `TransactionDetailLoader`, and
+`TransactionDetailView`'s event chip → `EventDetailView`. Settings'
+navigation rows (`SettingsView`) deliberately do **not** zoom — a plain list
+row with a small leading icon has no visual frame worth zooming from, same
+as Apple's own Settings app. Also found and fixed one real inconsistency:
+`TransferSuggestionCard`'s secondary "Ignora" button was still a flat
+`Palette.neutralFill` capsule sitting next to a glass `PillButton` — now
+`.buttonStyle(.glass)`. Checked and deliberately left alone: every other
+`Palette.neutralFill` fill in the app (role glyphs, avatars, progress
+tracks, the FX summary tile) is content/metadata, not a control — each
+already carries a comment saying so.
+
 **App icon**: `scripts/gen-app-icon.swift` (`make icon`) now renders three
 iOS variants — light (unchanged, cyan→azure), dark (same hue family, pulled
 down in luminosity so it doesn't glow next to the other dark Home Screen

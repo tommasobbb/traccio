@@ -76,10 +76,8 @@ struct TransferSuggestionCard: View {
                     .foregroundStyle(Palette.inkSecondary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Palette.neutralFill)
-                    .clipShape(Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
             .disabled(isUpdating)
         }
     }
