@@ -43,7 +43,7 @@ struct TransfersView: View {
 
     var body: some View {
         content
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Trasferimenti")
             .sensoryFeedback(.success, trigger: model.successTick)
             .sensoryFeedback(.error, trigger: model.actionFailure)

@@ -71,7 +71,7 @@ struct SelectionSheet<Option: Identifiable>: View {
                     }
                     .padding(Spacing.gutter)
                 }
-                .background(Palette.background)
+                .screenBackground()
                 .navigationTitle(title)
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)

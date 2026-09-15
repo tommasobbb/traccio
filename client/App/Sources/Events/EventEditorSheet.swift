@@ -76,7 +76,7 @@ struct EventEditorSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle(existing == nil ? "Nuovo evento" : "Modifica evento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

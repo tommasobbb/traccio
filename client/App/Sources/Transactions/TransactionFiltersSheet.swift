@@ -58,7 +58,7 @@ struct TransactionFiltersSheet: View {
                 }
                 .padding(Spacing.gutter)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Filtri")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

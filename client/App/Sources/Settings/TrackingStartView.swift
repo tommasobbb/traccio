@@ -41,7 +41,7 @@ struct TrackingStartView: View {
             }
             .padding(Spacing.gutter)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle("Inizio tracciamento")
         .task { await model.load() }
     }

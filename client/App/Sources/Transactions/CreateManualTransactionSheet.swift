@@ -51,7 +51,7 @@ struct CreateManualTransactionSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Nuovo movimento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

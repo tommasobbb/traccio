@@ -22,7 +22,7 @@ struct StartConnectionSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .background(Palette.background)
+                .screenBackground()
                 .navigationTitle("Collega un nuovo conto")
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {

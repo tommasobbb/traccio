@@ -33,7 +33,7 @@ struct AddEventMembersSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Aggiungi movimenti")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {

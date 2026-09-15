@@ -54,7 +54,7 @@ struct CategoryEditorSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

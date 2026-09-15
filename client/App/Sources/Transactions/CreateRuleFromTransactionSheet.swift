@@ -69,7 +69,7 @@ struct CreateRuleFromTransactionSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Categorizza sempre così")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

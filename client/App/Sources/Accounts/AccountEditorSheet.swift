@@ -134,7 +134,7 @@ struct AccountEditorSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Modifica conto")
             .confirmationDialog(
                 "Eliminare \(account.displayName ?? "questo conto")?",

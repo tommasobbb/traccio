@@ -102,7 +102,7 @@ struct CreateManualAccountSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Nuovo conto manuale")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

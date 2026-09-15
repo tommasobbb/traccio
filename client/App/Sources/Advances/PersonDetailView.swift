@@ -54,7 +54,7 @@ struct PersonDetailView: View {
             content
                 .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle(title)
         #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

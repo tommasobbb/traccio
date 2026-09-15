@@ -84,7 +84,7 @@ struct EditManualTransactionSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Modifica movimento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

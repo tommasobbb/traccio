@@ -55,7 +55,7 @@ struct TransactionDetailLoader: View {
 
     var body: some View {
         content
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Dettaglio movimento")
             .task { await model.load() }
     }

@@ -159,7 +159,7 @@ struct TransactionDetailView: View {
             }
             .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle("Dettaglio movimento")
         .sensoryFeedback(.success, trigger: model.successTick)
         .sensoryFeedback(.error, trigger: model.actionFailure)

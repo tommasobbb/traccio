@@ -36,7 +36,7 @@ struct DashboardView: View {
                 content
                     .padding(Spacing.gutter)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Panoramica")
             // With the hero band gone, a `.large` title would be the first
             // heavy thing on the screen and would compete with the spend

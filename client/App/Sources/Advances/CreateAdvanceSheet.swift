@@ -53,7 +53,7 @@ struct CreateAdvanceSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Segna come anticipo")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

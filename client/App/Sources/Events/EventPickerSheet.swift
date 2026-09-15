@@ -32,7 +32,7 @@ struct EventPickerSheet: View {
                 }
                 .padding(20)
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Scegli un evento")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

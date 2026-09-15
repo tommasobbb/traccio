@@ -37,7 +37,7 @@ struct EventsView: View {
             content
                 .padding(20)
         }
-        .background(Palette.background)
+        .screenBackground()
         .navigationTitle("Eventi")
         .animation(.easeInOut(duration: 0.2), value: stateTag)
         .refreshable { await model.load() }

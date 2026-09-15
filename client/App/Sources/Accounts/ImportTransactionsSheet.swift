@@ -66,7 +66,7 @@ struct ImportTransactionsSheet: View {
                     form
                 }
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Importa movimenti")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

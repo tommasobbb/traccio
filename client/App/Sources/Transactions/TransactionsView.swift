@@ -57,7 +57,7 @@ struct TransactionsView: View {
                 filterRow
                 content
             }
-            .background(Palette.background)
+            .screenBackground()
             .navigationTitle("Movimenti")
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }

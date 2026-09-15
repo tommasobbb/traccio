@@ -12,7 +12,7 @@ struct LockScreenView: View {
 
     var body: some View {
         ZStack {
-            Palette.background.ignoresSafeArea()
+            Palette.backgroundGradient.ignoresSafeArea()
             VStack(spacing: 20) {
                 icon
                 VStack(spacing: 6) {
