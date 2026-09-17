@@ -14,14 +14,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class AccountsViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded([ConnectionResponse])
-        case failed
-    }
-
     /// Why an in-flight sync or re-authorization failed, for the view to
     /// surface. Carries only a status-derived reason, never the response
     /// body — `APIError.badStatus` already drops it
@@ -56,7 +48,7 @@ final class AccountsViewModel {
 
     /// Current load state, observed by the view. Connections are
     /// authoritative for this screen; accounts below are best-effort.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<[ConnectionResponse]> = .idle
     /// Every account across every connection. The view pairs these with
     /// `state`'s connections via `TraccioCore.groupByConnection`. Best-effort:
     /// a failure to fetch accounts still leaves the consent cards worth

@@ -14,14 +14,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class CategorizationViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded(Content)
-        case failed
-    }
-
     /// The screen's loaded data: rules in evaluation order, and every
     /// category a rule (or a confirmation) can reference.
     struct Content: Equatable {
@@ -47,7 +39,7 @@ final class CategorizationViewModel {
     }
 
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<Content> = .idle
     /// Set while a create/rename/delete call is in flight, to disable the
     /// screen's controls rather than let two actions race.
     private(set) var isUpdating = false

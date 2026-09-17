@@ -46,19 +46,9 @@ struct AdvancesView: View {
                 .padding(Spacing.gutter)
         }
         .screenChrome("Anticipi")
-        .animation(.easeInOut(duration: 0.2), value: stateTag)
+        .animation(.easeInOut(duration: 0.2), value: model.state.tag)
         .refreshable { await model.load() }
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
-    }
-
-    /// A cheap discriminator for `.animation(_:value:)` — see
-    /// `TransactionsView.stateTag` for why not `Equatable`.
-    private var stateTag: String {
-        switch model.state {
-        case .idle, .loading: "loading"
-        case .loaded: "loaded"
-        case .failed: "failed"
-        }
     }
 
     @ViewBuilder

@@ -38,16 +38,8 @@ final class AdvancesViewModel {
         }
     }
 
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded(Loaded)
-        case failed
-    }
-
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<Loaded> = .idle
     /// The lifecycle filter applied to the *rows* (never the summary).
     /// `nil` means "all".
     private(set) var statusFilter: AdvanceStatus?

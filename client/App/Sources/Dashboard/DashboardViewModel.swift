@@ -12,14 +12,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class DashboardViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded(DashboardSummaryResponse)
-        case failed
-    }
-
     /// Which donut segment (and matching breakdown row) is currently
     /// highlighted. Not a plain `UUID??` — that would let "nothing selected"
     /// and "the no-category segment selected" collapse into ambiguous
@@ -31,7 +23,7 @@ final class DashboardViewModel {
     }
 
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<DashboardSummaryResponse> = .idle
     /// The period currently shown — a month, quarter, or year. Changing it
     /// (`goToPrevious()`/`goToNext()`/`changeUnit(_:)`) and reloading is how
     /// the period picker in `DashboardView` works.

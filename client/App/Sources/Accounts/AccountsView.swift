@@ -22,7 +22,7 @@ struct AccountsView: View {
                 .screenChrome("Conti", style: .tabRoot)
                 .sensoryFeedback(.success, trigger: model.successTick)
                 .sensoryFeedback(.error, trigger: model.actionFailure)
-                .animation(.easeInOut(duration: 0.2), value: stateTag)
+                .animation(.easeInOut(duration: 0.2), value: model.state.tag)
                 .refreshable { await model.load() }
         }
         .task { await model.load() }
@@ -137,16 +137,6 @@ struct AccountsView: View {
             return "Il conto contiene ancora movimenti. Eliminali prima di eliminare il conto."
         case .generic, nil:
             return "Non è stato possibile salvare le modifiche. Riprova."
-        }
-    }
-
-    /// A cheap discriminator for `.animation(_:value:)` — see
-    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
-    private var stateTag: String {
-        switch model.state {
-        case .idle, .loading: "loading"
-        case .loaded: "loaded"
-        case .failed: "failed"
         }
     }
 

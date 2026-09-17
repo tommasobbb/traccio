@@ -64,7 +64,7 @@ struct TransactionsView: View {
             .screenChrome("Movimenti", style: .tabRoot)
             .searchable(text: $searchText, prompt: "Cerca nei movimenti")
             .onChange(of: searchText) { _, newValue in model.updateSearchTerm(newValue) }
-            .animation(.easeInOut(duration: 0.2), value: stateTag)
+            .animation(.easeInOut(duration: 0.2), value: model.state.tag)
             .animation(.easeInOut(duration: 0.2), value: model.isSelecting)
             .sensoryFeedback(.success, trigger: model.successTick)
             .refreshable { if !model.isSelecting { await model.load() } }
@@ -445,17 +445,6 @@ struct TransactionsView: View {
 
 
     // MARK: Content
-
-    /// A cheap discriminator for `.animation(_:value:)` — `State` carries a
-    /// `[TransactionResponse]` payload not worth making `Equatable` just for
-    /// this, so the animation keys off which case, not the case's content.
-    private var stateTag: String {
-        switch model.state {
-        case .idle, .loading: "loading"
-        case .loaded: "loaded"
-        case .failed: "failed"
-        }
-    }
 
     @ViewBuilder
     private var content: some View {

@@ -50,11 +50,11 @@ struct DashboardView: View {
         .task(id: freshness.token(for: .dashboard)) { await model.load() }
     }
 
-    /// A cheap discriminator for `.animation(_:value:)` — see
-    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
-    /// Folds in the headline spend total so a loaded→loaded change (a new
-    /// period, an FX toggle) lands inside an animation transaction and the
-    /// hero figure's `.contentTransition(.numericText())` rolls the digits
+    /// A cheap discriminator for `.animation(_:value:)`, richer than
+    /// `LoadState.tag` (see its doc comment for why not `Equatable`): folds
+    /// in the headline spend total so a loaded→loaded change (a new period,
+    /// an FX toggle) lands inside an animation transaction and the hero
+    /// figure's `.contentTransition(.numericText())` rolls the digits
     /// instead of snapping.
     private var stateTag: String {
         switch model.state {

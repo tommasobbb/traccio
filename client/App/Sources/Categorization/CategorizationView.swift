@@ -48,7 +48,7 @@ struct CategorizationView: View {
                 .padding(Spacing.gutter)
         }
         .screenChrome("Categorie e regole")
-        .animation(.easeInOut(duration: 0.2), value: stateTag)
+        .animation(.easeInOut(duration: 0.2), value: model.state.tag)
         .refreshable { await model.load() }
         .task { await model.load() }
         .sheet(isPresented: $isPresentingCreateRuleSheet) {
@@ -109,16 +109,6 @@ struct CategorizationView: View {
             Text(
                 "«\(category.name)» ha delle sotto-categorie: elimina prima quelle, poi potrai eliminare «\(category.name)»."
             )
-        }
-    }
-
-    /// A cheap discriminator for `.animation(_:value:)` — see
-    /// `TransactionsView.stateTag`'s doc comment for why not `Equatable`.
-    private var stateTag: String {
-        switch model.state {
-        case .idle, .loading: "loading"
-        case .loaded: "loaded"
-        case .failed: "failed"
         }
     }
 

@@ -75,12 +75,12 @@ struct TransactionDetailLoader: View {
                 }
                 .padding(Spacing.gutter)
             }
-        case .loaded(let transaction, let account):
+        case .loaded(let loaded):
             TransactionDetailView(
-                transaction: transaction,
+                transaction: loaded.transaction,
                 categories: [],
                 advance: advance,
-                account: account,
+                account: loaded.account,
                 client: client,
                 onUpdate: onUpdate,
                 onAdvanceChange: onAdvanceChange,
@@ -104,14 +104,14 @@ struct TransactionDetailLoader: View {
     @MainActor
     @Observable
     final class Model {
-        enum State {
-            case idle
-            case loading
-            case loaded(TransactionResponse, AccountResponse?)
-            case failed
+        /// The resolved transaction and its account, bundled so `LoadState`
+        /// still only needs one type parameter.
+        struct Loaded {
+            var transaction: TransactionResponse
+            var account: AccountResponse?
         }
 
-        private(set) var state: State = .idle
+        private(set) var state: LoadState<Loaded> = .idle
         private let transactionID: UUID
         private let client: any APIClientProtocol
 
@@ -129,7 +129,7 @@ struct TransactionDetailLoader: View {
                 async let accountsResult = client.accounts()
                 let transaction = try await client.transaction(id: id)
                 let account = (try? await accountsResult)?.first { $0.id == transaction.accountID }
-                state = .loaded(transaction, account)
+                state = .loaded(Loaded(transaction: transaction, account: account))
             } catch {
                 state = .failed
             }

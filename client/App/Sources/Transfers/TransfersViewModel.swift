@@ -15,14 +15,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class TransfersViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded([TransferSuggestionPair])
-        case failed
-    }
-
     /// Why a confirm/reject action failed, for the view to surface. Carries
     /// only a status-derived reason, never the response body — same shape as
     /// `TransactionDetailViewModel.ActionFailure`.
@@ -31,7 +23,7 @@ final class TransfersViewModel {
     }
 
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<[TransferSuggestionPair]> = .idle
     /// Account id → the account, for a card's "Revolut → Isybank" line.
     /// Best-effort: a failed fetch leaves this empty rather than failing the
     /// whole screen, since the suggestions are the primary content.

@@ -14,14 +14,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class TransactionsViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded([TransactionResponse])
-        case failed
-    }
-
     /// Why creating a manual movement failed, for the "＋" sheet to surface.
     /// Carries only a status-derived reason, never the response body.
     enum CreateFailure: Equatable {
@@ -46,7 +38,7 @@ final class TransactionsViewModel {
     }
 
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<[TransactionResponse]> = .idle
     /// The caller's categories, for `TransactionDetailView`'s picker — seeded
     /// there to avoid a flash of empty. Best-effort, same reasoning as
     /// `categoryNames` below.

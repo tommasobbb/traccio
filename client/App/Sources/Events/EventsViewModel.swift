@@ -12,14 +12,6 @@ import TraccioCore
 @MainActor
 @Observable
 final class EventsViewModel {
-    /// What the view should show right now.
-    enum State {
-        case idle
-        case loading
-        case loaded([EventResponse])
-        case failed
-    }
-
     /// Why creating an event failed, for the view to surface. Carries only a
     /// status-derived reason, never the response body
     /// (`.claude/rules/data-safety.md`) — same shape as
@@ -29,7 +21,7 @@ final class EventsViewModel {
     }
 
     /// Current load state, observed by the view.
-    private(set) var state: State = .idle
+    private(set) var state: LoadState<[EventResponse]> = .idle
     /// Set while a create call is in flight, to disable the screen's
     /// controls rather than let two actions race.
     private(set) var isUpdating = false
