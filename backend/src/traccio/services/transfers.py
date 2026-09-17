@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict
 
 from traccio.domain.enums import AccountKind, TransactionRole, TransactionStatus, TransferKind
 from traccio.domain.models import Transaction
+from traccio.domain.transaction_time import transaction_when
 
 # Default matching tolerances. Tunable via ``Settings`` at the call site (the
 # endpoint passes the configured values in); these keep the pure function usable
@@ -109,15 +110,6 @@ class TransferSuggestion(BaseModel):
     day_gap: int
 
 
-def _effective_date(transaction: Transaction) -> datetime | None:
-    """Return the date a transaction is dated by, or ``None`` if it has neither.
-
-    Prefers ``booked_at`` (settlement) and falls back to ``value_date``, the same
-    coalescing the transaction listing orders by.
-    """
-    return transaction.booked_at or transaction.value_date
-
-
 def detect_transfers(
     transactions: Sequence[Transaction],
     *,
@@ -191,7 +183,7 @@ def detect_transfers(
     # re-checked for None below.
     candidates: list[tuple[Transaction, datetime]] = []
     for tx in transactions:
-        date = _effective_date(tx)
+        date = transaction_when(tx)
         if (
             tx.role is TransactionRole.PERSONAL
             and tx.status is not TransactionStatus.REJECTED

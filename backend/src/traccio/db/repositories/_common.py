@@ -25,7 +25,10 @@ def _transaction_when() -> "ColumnElement[datetime | None]":
     transactions by date uses this same expression, so a period filter (e.g.
     :func:`list_transactions`'s ``start``/``end``) can never disagree with the
     ordering, or with another query's own period filter, about which date a
-    row belongs to.
+    row belongs to. The SQL mirror of
+    :func:`~traccio.domain.transaction_time.transaction_when`, which does the
+    same coalescing in Python for code that already has a loaded
+    :class:`~traccio.domain.models.Transaction` rather than a query to build.
 
     Returns
     -------

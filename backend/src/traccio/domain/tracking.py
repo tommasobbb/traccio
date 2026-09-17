@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime, time
 from uuid import UUID
 
 from traccio.domain.models import Transaction
+from traccio.domain.transaction_time import transaction_when
 
 
 def suggest_tracking_start(earliest_by_account: Mapping[UUID, date]) -> date | None:
@@ -77,7 +78,7 @@ def is_within_tracking(transaction: Transaction, tracking_start: date | None) ->
     """
     if tracking_start is None:
         return True
-    when = transaction.booked_at or transaction.value_date
+    when = transaction_when(transaction)
     if when is None:
         return False
     if when.tzinfo is None:

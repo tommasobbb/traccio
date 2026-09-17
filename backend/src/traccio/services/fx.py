@@ -26,6 +26,7 @@ from traccio.core.logging import get_logger
 from traccio.db.repositories import get_fx_rates, latest_fx_rate_fetched_at, upsert_fx_rates
 from traccio.domain.fx import FxRate, RateResolver
 from traccio.domain.models import Transaction
+from traccio.domain.transaction_time import effective_calendar_date
 from traccio.providers.frankfurter import FrankfurterClient, FxRateError
 
 logger = get_logger(__name__)
@@ -49,11 +50,6 @@ class FxUnavailable(BaseModel):
     reason: str = "rates_unavailable"
 
 
-def _effective_date(transaction: Transaction) -> date | None:
-    when = transaction.booked_at or transaction.value_date
-    return when.date() if when is not None else None
-
-
 def _needed(
     transactions: Sequence[Transaction], *, base: str
 ) -> tuple[set[str], date | None, date | None, bool]:
@@ -65,7 +61,7 @@ def _needed(
         if transaction.money.currency == base:
             continue
         currencies.add(transaction.money.currency)
-        on = _effective_date(transaction)
+        on = effective_calendar_date(transaction)
         if on is None:
             has_dateless = True
         else:

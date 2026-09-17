@@ -40,6 +40,7 @@ from traccio.domain.effective_amount import effective_amount
 from traccio.domain.enums import BucketGranularity
 from traccio.domain.models import Transaction
 from traccio.domain.money import CurrencyCode, Money
+from traccio.domain.transaction_time import transaction_when
 
 
 def split_meal_voucher_transactions(
@@ -84,8 +85,9 @@ def _bucket_of(
     """The local bucket start a transaction falls into, or ``None``.
 
     Same "when" as :func:`~traccio.db.repositories.list_transactions_in_period`
-    uses to filter — ``coalesce(booked_at, value_date)`` — so a row can never
-    be counted in the period but excluded from every bucket, or vice versa.
+    uses to filter (:func:`~traccio.domain.transaction_time.transaction_when`,
+    mirroring that query's SQL ``coalesce``) — so a row can never be counted
+    in the period but excluded from every bucket, or vice versa.
     Every timestamp in this system is UTC (root ``CLAUDE.md``), but a value
     round-tripped through SQLite comes back naive; a naive value is treated as
     UTC rather than the local zone, per the same guard
@@ -94,7 +96,7 @@ def _bucket_of(
     would visibly misplace a day at either edge of a local month. ``None``
     when both dates are unset — there is nothing to bucket.
     """
-    when = transaction.booked_at or transaction.value_date
+    when = transaction_when(transaction)
     if when is None:
         return None
     aware = when if when.tzinfo is not None else when.replace(tzinfo=UTC)

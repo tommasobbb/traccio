@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict
 
 from traccio.domain.models import Transaction
 from traccio.domain.money import CurrencyCode, Money
+from traccio.domain.transaction_time import effective_calendar_date
 
 # A resolver from (currency, effective date or None) to the quote->base rate,
 # or ``None`` when no rate is available for that pair. ``date is None`` asks
@@ -130,9 +131,8 @@ def convert_amount(money: Money, *, to: CurrencyCode, rate: Decimal) -> Money:
 
 
 def _effective_date(transaction: Transaction) -> date | None:
-    """The calendar date a transaction converts at: ``booked_at`` else ``value_date``."""
-    when = transaction.booked_at or transaction.value_date
-    return when.date() if when is not None else None
+    """The calendar date a transaction converts at — see ``domain/transaction_time.py``."""
+    return effective_calendar_date(transaction)
 
 
 def to_base_currency(
