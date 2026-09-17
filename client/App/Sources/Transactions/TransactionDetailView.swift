@@ -26,6 +26,12 @@ import TraccioCore
 /// already-created advance case), so all three are built from existing
 /// tokens/components (`Card`, `Badge`, `EyebrowLabel`, `PillButton`,
 /// `Banner`) rather than a new design pass.
+///
+/// `TransactionHeaderCard`, `TransactionCategoryCard`, and
+/// `TransactionEventCard` each live in their own file next to this one —
+/// this view wires them to `TransactionDetailViewModel` and lays them out
+/// alongside `AdvanceSections`/`TransferSection` (already separate) and the
+/// two small manual-movement/mark-as-advance cards kept inline here.
 struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
     @State private var isPresentingCreateAdvanceSheet = false
@@ -124,12 +130,30 @@ struct TransactionDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
-                header
+                TransactionHeaderCard(
+                    transaction: model.transaction, categoryName: categoryName, account: account
+                )
                 if let bannerMessage {
                     Banner(message: bannerMessage)
                 }
-                categoryCard
-                eventCard
+                TransactionCategoryCard(
+                    categories: model.categories,
+                    transaction: model.transaction,
+                    isUpdating: model.isUpdating,
+                    onSeedDefaults: { Task { await model.seedDefaultCategories() } },
+                    onConfirm: { categoryID in Task { await model.confirm(categoryID: categoryID) } },
+                    onClear: { Task { await model.clearCategory() } },
+                    onCreateRule: { isPresentingCreateRuleSheet = true }
+                )
+                TransactionEventCard(
+                    eventID: model.transaction.eventID,
+                    events: events,
+                    client: client,
+                    transitionNamespace: transitionNamespace,
+                    isUpdating: model.isUpdating,
+                    onOpenEventPicker: { isPresentingEventPickerSheet = true },
+                    onRemoveFromEvent: { Task { await model.removeFromEvent() } }
+                )
                 if let advance = model.advance {
                     AdvanceSections(
                         transaction: model.transaction,
@@ -329,34 +353,6 @@ struct TransactionDetailView: View {
         }
     }
 
-    // MARK: Header
-
-    /// The one `.raised` (glass, `docs/decisions/0032-glass-on-raised-cards.md`)
-    /// surface on this screen, matching `EventDetailView`'s own header — a
-    /// real inconsistency the 2026-09-15 coherence pass found: this header
-    /// used to render as bare text with no card at all.
-    private var header: some View {
-        Card(elevation: .raised) {
-            if let categoryName {
-                HStack(spacing: 6) {
-                    Badge(text: categoryName, style: .neutral)
-                    // A rule-generated suggestion must not render like an
-                    // explicit user confirmation, now that `POST
-                    // /rules/apply` can produce one.
-                    if model.transaction.confirmedCategoryID == nil {
-                        Badge(text: "Suggerita", style: .neutral)
-                    }
-                }
-            }
-            Text(model.transaction.displayDescription ?? model.transaction.description)
-                .font(Typography.statFigure)
-                .foregroundStyle(Palette.ink)
-            Text(headerSubtitle)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-        }
-    }
-
     /// The effective category's display name, resolved against
     /// `model.categories` — recomputed whenever either changes, so a fresh
     /// confirm/clear is reflected immediately.
@@ -390,201 +386,5 @@ struct TransactionDetailView: View {
         return failure == .duplicateRule
             ? "Esiste già una regola così."
             : "Non è stato possibile creare la regola. Riprova."
-    }
-
-    private var headerSubtitle: String {
-        let dateTime = model.transaction.effectiveDate.map { date -> String in
-            TraccioCore.formatDate(date, style: .dayMonthYearTime)
-        }
-        let accountLabel = "\(account?.name ?? "Conto") \(model.transaction.currency)"
-        return [dateTime, accountLabel].compactMap { $0 }.joined(separator: " · ")
-    }
-
-    // MARK: Category
-
-    private var categoryCard: some View {
-        Card {
-            EyebrowLabel(text: "Categoria")
-            if model.categories.isEmpty {
-                emptyCategoriesState
-            } else {
-                categoryList
-                if model.transaction.confirmedCategoryID != nil {
-                    Divider().overlay(Palette.separator)
-                    clearCategoryRow
-                    PillButton(
-                        title: "Categorizza sempre così",
-                        action: { isPresentingCreateRuleSheet = true }
-                    )
-                }
-            }
-        }
-    }
-
-    /// A fresh database has no categories yet — the picker would dead-end
-    /// without a way to seed the defaults (`POST /categories/defaults`).
-    private var emptyCategoriesState: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Non hai ancora nessuna categoria.")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
-            PillButton(
-                title: "Crea categorie predefinite",
-                isLoading: model.isUpdating,
-                action: { Task { await model.seedDefaultCategories() } }
-            )
-        }
-    }
-
-    /// Two-level picker (ADR 0018): each root immediately followed by its own
-    /// children, indented — `TraccioCore.categoryTree(_:)` does the pure
-    /// regrouping, this view only adds indentation.
-    private var categoryList: some View {
-        let tree = TraccioCore.categoryTree(model.categories)
-        return VStack(spacing: 0) {
-            ForEach(tree) { node in
-                categoryRow(node.category, indented: false)
-                if !node.children.isEmpty {
-                    Divider().overlay(Palette.separatorSubtle)
-                }
-                ForEach(node.children) { child in
-                    categoryRow(child, indented: true)
-                    if child.id != node.children.last?.id {
-                        Divider().overlay(Palette.separatorSubtle)
-                    }
-                }
-                if node.id != tree.last?.id {
-                    Divider().overlay(Palette.separator)
-                }
-            }
-        }
-    }
-
-    private func categoryRow(_ category: CategoryResponse, indented: Bool) -> some View {
-        let isConfirmed = category.id == model.transaction.confirmedCategoryID
-        // A suggestion renders as a lightweight tag, never the checkmark
-        // reserved for an explicit confirmation — tapping still confirms it,
-        // same as any other row.
-        let isSuggestedOnly =
-            !isConfirmed && category.id == model.transaction.suggestedCategoryID
-        return Button {
-            Task { await model.confirm(categoryID: category.id) }
-        } label: {
-            HStack(spacing: 10) {
-                IconTile(
-                    systemImage: (category.icon ?? .other).systemImageName,
-                    color: category.color,
-                    diameter: 28
-                )
-                Text(category.name)
-                    .font(Typography.body)
-                    .foregroundStyle(Palette.ink)
-                if isSuggestedOnly {
-                    Badge(text: "Suggerita", style: .neutral)
-                }
-                Spacer()
-                if isConfirmed {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Palette.accent)
-                        .accessibilityHidden(true)
-                }
-            }
-            .padding(.vertical, 8)
-            .padding(.leading, indented ? 24 : 0)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isUpdating)
-        .accessibilityAddTraits(isConfirmed ? [.isSelected] : [])
-    }
-
-    private var clearCategoryRow: some View {
-        Button {
-            Task { await model.clearCategory() }
-        } label: {
-            Text("Rimuovi categoria")
-                .font(Typography.body.weight(.semibold))
-                .foregroundStyle(Palette.inkSecondary)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isUpdating)
-    }
-
-    // MARK: Event
-
-    /// The event card: a chip naming this transaction's event, plus the
-    /// actions to change it — closes the "assign to event" gap left open
-    /// when `event_id` first landed on the read model (see
-    /// `tasks/backlog.md`), which only let a transaction be *added* to an
-    /// event from the event's own detail screen (`AddEventMembersSheet`).
-    /// This card is the reverse direction, so unlike the read-only chip it
-    /// replaced, it renders even without an event.
-    ///
-    /// The chip is a `NavigationLink` to `EventDetailView` when the event
-    /// resolved against `events` (the caller's already-fetched list);
-    /// otherwise a non-navigable row showing a generic label, the same
-    /// degrade `TransactionRow`'s advance lookup already uses — the
-    /// backend, not a stale local list, stays the authority on whether the
-    /// event still exists.
-    private var eventCard: some View {
-        Card {
-            EyebrowLabel(text: "Evento")
-            if let eventID = model.transaction.eventID {
-                if let event = events.first(where: { $0.id == eventID }) {
-                    NavigationLink {
-                        EventDetailView(event: event, client: client)
-                        #if os(iOS)
-                        .navigationTransition(.zoom(sourceID: event.id, in: transitionNamespace))
-                        #endif
-                    } label: {
-                        eventRow(event: event, isNavigable: true)
-                    }
-                    .buttonStyle(.pressableRow)
-                    .matchedTransitionSource(id: event.id, in: transitionNamespace)
-                } else {
-                    eventRow(event: nil, isNavigable: false)
-                }
-                Divider().overlay(Palette.separator)
-                eventActionRow(title: "Cambia evento") { isPresentingEventPickerSheet = true }
-                eventActionRow(title: "Rimuovi dall'evento") {
-                    Task { await model.removeFromEvent() }
-                }
-            } else {
-                eventActionRow(title: "Assegna a un evento") { isPresentingEventPickerSheet = true }
-            }
-        }
-    }
-
-    private func eventActionRow(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(Typography.body.weight(.semibold))
-                .foregroundStyle(Palette.inkSecondary)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(model.isUpdating)
-    }
-
-    private func eventRow(event: EventResponse?, isNavigable: Bool) -> some View {
-        HStack(spacing: 12) {
-            if let event {
-                EventTile(emoji: event.emoji, color: event.color, diameter: 32)
-            }
-            Text(event?.name ?? "Evento")
-                .font(Typography.body.weight(.semibold))
-                .foregroundStyle(isNavigable ? Palette.ink : Palette.inkSecondary)
-                .lineLimit(1)
-            Spacer()
-            if isNavigable {
-                DisclosureChevron()
-            }
-        }
-        .contentShape(Rectangle())
     }
 }
