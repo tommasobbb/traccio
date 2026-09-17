@@ -13,6 +13,12 @@ import TraccioCore
 /// built now: the trend renders as daily spending bars, not the mockup's
 /// net line (`docs/decisions/0007-dashboard-aggregation.md`'s 2026-08-25
 /// revision).
+///
+/// The card-sized pieces (`DashboardPeriodPicker`, `DashboardHeroCard`,
+/// `DashboardHeroFootnote`, `CategoryBreakdownCard`, `DailySpendingCard`,
+/// `OtherCurrenciesCard`, `AccountBreakdownCard`, `MealVoucherCard`) each
+/// live in their own file next to this one — this view only wires them to
+/// `DashboardViewModel` and lays them out.
 struct DashboardView: View {
     @State private var model = DashboardViewModel()
     /// `.dashboard` is bumped by a write on another tab that can change this
@@ -26,9 +32,6 @@ struct DashboardView: View {
     /// `TransactionsDrillThrough`'s own doc comment for why this is a tab
     /// switch, not a `NavigationLink` push.
     @Environment(TransactionsDrillThrough.self) private var drillThrough
-    /// The donut's fixed size — also the max width for its center label, so
-    /// a category name doesn't overflow the ring's hole.
-    private let donutDiameter: CGFloat = 96
 
     var body: some View {
         NavigationStack {
@@ -115,84 +118,14 @@ struct DashboardView: View {
     }
 
     private var periodPicker: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Button {
-                    Task { await model.goToPrevious() }
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .accessibilityLabel("Periodo precedente")
-                .disabled(!model.canGoToPrevious)
-
-                Text(title(for: model.period))
-                    .font(Typography.cardTitle)
-                    .foregroundStyle(Palette.ink)
-                    .frame(maxWidth: .infinity)
-
-                Button {
-                    Task { await model.goToNext() }
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .accessibilityLabel("Periodo successivo")
-                .disabled(!model.canGoToNext)
-            }
-            .buttonStyle(.plain)
-            // The period chevrons are navigation chrome, not a brand touch —
-            // ink, not accent (2026-09-08 tone revision, second pass).
-            .foregroundStyle(Palette.inkSecondary)
-
-            Picker("Unità", selection: unitBinding) {
-                Text("Mese").tag(CalendarPeriod.Unit.month)
-                Text("Trimestre").tag(CalendarPeriod.Unit.quarter)
-                Text("Anno").tag(CalendarPeriod.Unit.year)
-            }
-            .pickerStyle(.segmented)
-            .segmentedPickerTint()
-        }
-        // A quiet flush card, not the old accent-tint block — the period
-        // strip is navigation, not a headline, and the accent no longer wants
-        // that much presence at the top of the screen (2026-09-08 tone
-        // revision, Panoramica recompose). Glass here was tried and reverted
-        // (`docs/decisions/0032-glass-on-raised-cards.md`).
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Palette.card)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Radius.row, style: .continuous)
-                .strokeBorder(Palette.separatorSubtle, lineWidth: 1)
+        DashboardPeriodPicker(
+            period: model.period,
+            canGoToPrevious: model.canGoToPrevious,
+            canGoToNext: model.canGoToNext,
+            onPrevious: { Task { await model.goToPrevious() } },
+            onNext: { Task { await model.goToNext() } },
+            onChangeUnit: { newUnit in Task { await model.changeUnit(newUnit) } }
         )
-    }
-
-    private var unitBinding: Binding<CalendarPeriod.Unit> {
-        Binding(
-            get: { model.period.unit },
-            set: { newUnit in Task { await model.changeUnit(newUnit) } }
-        )
-    }
-
-    /// A display title for `period`, e.g. "agosto 2026" (month), "T3 2026"
-    /// (quarter), "2026" (year) — `TraccioCore.formatDate` where that can do
-    /// it (month, year), and a small Italian-only literal for the
-    /// quarter label ("T" for "Trimestre"), consistent with the client being
-    /// officially Italian-only (`client/CLAUDE.md`). Lives here, not on
-    /// `CalendarPeriod` itself, per the same "display copy stays in the
-    /// view" rule `TransactionPeriodPreset` and `TransactionsView.title(for:)`
-    /// already follow.
-    private func title(for period: CalendarPeriod) -> String {
-        switch period.unit {
-        case .month:
-            return TraccioCore.formatDate(period.start, style: .monthYear).capitalized
-        case .quarter:
-            let calendar = Calendar.current
-            let quarter = (calendar.component(.month, from: period.start) - 1) / 3 + 1
-            let year = calendar.component(.year, from: period.start)
-            return "T\(quarter) \(year)"
-        case .year:
-            return TraccioCore.formatDate(period.start, style: .year)
-        }
     }
 
     @ViewBuilder
@@ -203,22 +136,22 @@ struct DashboardView: View {
         // card. Otherwise it is the pre-FX behaviour: a chosen primary
         // currency up front, the rest listed separately and never summed.
         if let converted = summary.converted {
-            heroCard(converted.summary)
+            DashboardHeroCard(summary: converted.summary)
             heroFootnote(converted.summary)
             conversionCaption(converted)
 
             if summary.currencies.count > 1 {
-                otherCurrenciesCard(summary.currencies, combined: true)
+                OtherCurrenciesCard(others: summary.currencies, combined: true)
             }
             breakdownCards(converted.summary)
             mealVoucherCards(summary.mealVouchers)
         } else if let primary = summary.currencies.primary() {
-            heroCard(primary)
+            DashboardHeroCard(summary: primary)
             heroFootnote(primary)
 
             let others = summary.currencies.filter { $0.currency != primary.currency }
             if !others.isEmpty {
-                otherCurrenciesCard(others, combined: false)
+                OtherCurrenciesCard(others: others, combined: false)
             }
             if summary.conversionUnavailable != nil {
                 Text("Totale combinato non disponibile al momento.")
@@ -238,16 +171,40 @@ struct DashboardView: View {
         }
     }
 
+    private func heroFootnote(_ summary: CurrencySummaryResponse) -> some View {
+        DashboardHeroFootnote(
+            summary: summary, previousPeriodTitle: model.period.previous().displayTitle
+        )
+    }
+
     /// The donut / trend / account cards, all read from one
     /// `CurrencySummaryResponse` — the converted combined summary when FX is
     /// on, else the primary currency. Each renders nothing when it has
     /// nothing to show (pure-income period, no accounts). The period
-    /// comparison is no longer a card here — it is a chunk of `heroFootnote`
+    /// comparison is no longer a card here — it is `heroFootnote`
     /// (2026-09-08 tone revision).
     @ViewBuilder
     private func breakdownCards(_ summary: CurrencySummaryResponse) -> some View {
-        categoryBreakdownCard(summary)
-        dailySpendingCard(summary)
+        CategoryBreakdownCard(
+            summary: summary,
+            selectedCategoryID: model.selectedCategoryID,
+            expandedRootIDs: model.expandedRootIDs,
+            onSelectCategory: { model.selectCategory($0) },
+            onToggleExpanded: { model.toggleExpanded($0) },
+            onDrillThrough: { categoryID in
+                drillThrough.request(model.drillThroughFilter(categoryID: categoryID))
+            }
+        )
+        DailySpendingCard(
+            summary: summary,
+            selectedBucketIndex: model.selectedBucketIndex,
+            onScrub: { model.selectBucket($0) },
+            onDrillThrough: { start, end in
+                if let filter = model.drillThroughFilter(bucketStart: start, bucketEnd: end) {
+                    drillThrough.request(filter)
+                }
+            }
+        )
         AccountBreakdownCard(
             accounts: summary.byAccount, currency: summary.currency, totalSpending: summary.spending
         )
@@ -273,347 +230,6 @@ struct DashboardView: View {
             .font(Typography.caption)
             .foregroundStyle(Palette.inkTertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Panoramica's protagonist. Since the 2026-09-08 "dose, non tinta"
-    /// revision this is a plain `Card` at `.raised` — the only raised card on
-    /// the screen, so the hierarchy is carried by elevation and the figure's
-    /// own scale, not by a filled colour band (`docs/design/tokens.md`'s
-    /// "Accent dosage"). The spend total is `ink`, big, with tight tracking.
-    private func heroCard(_ summary: CurrencySummaryResponse) -> some View {
-        Card(elevation: .raised) {
-            VStack(alignment: .leading, spacing: 6) {
-                EyebrowLabel(text: "Speso questo periodo")
-                AmountText(
-                    amount: summary.spending,
-                    currencyCode: summary.currency,
-                    kind: .spending,
-                    font: Typography.heroFigure,
-                    fractionFont: Typography.statFigure,
-                    tracking: -1.0
-                )
-                Text(summary.currency)
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-            }
-
-            categoryRibbon(summary)
-
-            Divider().overlay(Palette.separator)
-
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Entrate")
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                    AmountText(amount: summary.income, currencyCode: summary.currency, kind: .income)
-                }
-                Rectangle()
-                    .fill(Palette.separator)
-                    .frame(width: 1)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Netto")
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                    AmountText(amount: summary.net, currencyCode: summary.currency, kind: .net)
-                }
-            }
-        }
-    }
-
-    /// A single quiet line under the hero card, on the background — the
-    /// period comparison and the three secondary stats (media/giorno,
-    /// movimenti, categorie) that used to be a second and third crammed
-    /// section inside the hero body and a whole `ComparisonCard` of their
-    /// own (2026-09-08 tone revision, Panoramica recompose). The comparison
-    /// chunk keeps `ComparisonCard`'s old two-colour rule: a rise in spend is
-    /// `warning`, a fall is `accent`.
-    @ViewBuilder
-    private func heroFootnote(_ summary: CurrencySummaryResponse) -> some View {
-        let stats = [
-            summary.averageDailySpending.map {
-                "\(TraccioCore.formatMoney(amount: $0, currencyCode: summary.currency))/g"
-            },
-            "\(summary.transactionCount) mov.",
-            "\(summary.byCategory.filter { $0.spending > 0 }.count) cat.",
-        ].compactMap { $0 }
-
-        HStack(spacing: 6) {
-            if let comparison = summary.comparison {
-                Image(systemName: comparisonImage(comparison))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(comparisonColor(comparison))
-                Text(comparisonText(comparison, currency: summary.currency))
-                    .font(Typography.caption)
-                    .foregroundStyle(comparisonColor(comparison))
-                Text("·").font(Typography.caption).foregroundStyle(Palette.inkQuaternary)
-            }
-            Text(stats.joined(separator: " · "))
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 4)
-    }
-
-    private func comparisonImage(_ c: ComparisonSummaryResponse) -> String {
-        if c.spendingDelta > 0 { return "arrow.up.right" }
-        if c.spendingDelta < 0 { return "arrow.down.right" }
-        return "minus"
-    }
-
-    /// Spending up carries `warning` (a genuine flag); spending down or flat
-    /// stays ink — the direction is already in the words ("in meno"), and the
-    /// dashboard keeps blue off its chrome (2026-09-08 tone revision, second
-    /// pass).
-    private func comparisonColor(_ c: ComparisonSummaryResponse) -> Color {
-        if c.spendingDelta > 0 { return Palette.warning }
-        return Palette.inkTertiary
-    }
-
-    /// "12% in più di agosto" / "12% in meno di agosto", or the signed
-    /// amount when the previous period spent nothing (no percentage). The
-    /// period label is the same `title(for:)` the picker uses.
-    private func comparisonText(_ c: ComparisonSummaryResponse, currency: String) -> String {
-        let previous = title(for: model.period.previous())
-        guard let pct = c.spendingDeltaPct else {
-            let amount = TraccioCore.formatMoney(
-                amount: c.spendingDelta, currencyCode: currency, explicitSign: true
-            )
-            return "\(amount) su \(previous)"
-        }
-        let percentage = abs(TraccioCore.roundedPercentage(pct))
-        let direction = c.spendingDelta > 0 ? "in più" : "in meno"
-        return "\(percentage)% \(direction) di \(previous)"
-    }
-
-    /// The category-spend ribbon under the hero total (Fase B redesign, the
-    /// "more colour" direction — `docs/design/canvas/MainV2.dc.html`): a
-    /// full-width stacked bar in each root category's own `PaletteColor`,
-    /// proportional to its spending, plus a compact legend of the top few.
-    /// Drawn from `byCategory` — the same data the "Per categoria" donut
-    /// uses, so no backend gap. Renders nothing when there is no spending to
-    /// split, same posture as the donut card.
-    @ViewBuilder
-    private func categoryRibbon(_ summary: CurrencySummaryResponse) -> some View {
-        let segments = TraccioCore.donutSegments(summary.byCategory)
-        let spent = summary.byCategory.filter { $0.spending > 0 }
-
-        if !segments.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                GeometryReader { geo in
-                    // Each segment positioned by its own fraction rather than
-                    // laid out in an `HStack` whose widths (each `max(_, 2)`-
-                    // clamped, plus 1pt spacing) sum past `geo.size.width` and
-                    // silently clip the tail on quarter/year periods, where
-                    // there are many small categories.
-                    ZStack(alignment: .leading) {
-                        ForEach(segments, id: \.rank) { segment in
-                            Palette.color(segment.color)
-                                .frame(
-                                    width: max(
-                                        geo.size.width
-                                            * (segment.endFraction - segment.startFraction),
-                                        1
-                                    )
-                                )
-                                .offset(x: geo.size.width * segment.startFraction)
-                        }
-                    }
-                }
-                .frame(height: 10)
-                .clipShape(Capsule())
-
-                ribbonLegend(spent)
-            }
-        }
-    }
-
-    /// Up to three top spenders as coloured dot + name, then "+N" for the
-    /// rest — a glance key for the ribbon; the full labelled breakdown is
-    /// the "Per categoria" card below.
-    private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
-        let shown = Array(spent.prefix(3))
-        return HStack(spacing: 12) {
-            ForEach(Array(shown.enumerated()), id: \.element.categoryID) { rank, entry in
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(Palette.color(entry.color ?? .slate))
-                        .frame(width: 7, height: 7)
-                    // No `.fixedSize` here: three full Italian category names
-                    // exceed the card width and would force the hero card —
-                    // and the whole content column — wider than the viewport.
-                    // The label truncates instead; the higher-spend items keep
-                    // their width first via `layoutPriority`.
-                    Text(entry.categoryName ?? "Senza categoria")
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkSecondary)
-                        .lineLimit(1)
-                }
-                .layoutPriority(Double(shown.count - rank))
-            }
-            if spent.count > shown.count {
-                Text("+\(spent.count - shown.count)")
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-            }
-            Spacer(minLength: 0)
-        }
-    }
-
-    /// Per-currency net figures. `combined == false` is the pre-FX card:
-    /// currencies *other* than the primary, explicitly not summed.
-    /// `combined == true` lists *every* currency and notes that they are
-    /// already folded into the converted total above.
-    private func otherCurrenciesCard(
-        _ others: [CurrencySummaryResponse], combined: Bool
-    ) -> some View {
-        Card {
-            EyebrowLabel(text: combined ? "Per valuta" : "Altre valute", color: Palette.ink)
-            HStack(spacing: 10) {
-                ForEach(others, id: \.currency) { summary in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(summary.currency)
-                            .font(Typography.caption)
-                            .foregroundStyle(Palette.inkTertiary)
-                        AmountText(
-                            amount: summary.net,
-                            currencyCode: summary.currency,
-                            kind: .net,
-                            font: Typography.compactFigure
-                        )
-                        Text("\(summary.transactionCount) movimenti")
-                            .font(Typography.caption)
-                            .foregroundStyle(Palette.inkTertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(Palette.neutralFill)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                }
-            }
-            Text(
-                combined
-                    ? "Già incluse nell'importo convertito qui sopra, ai tassi BCE."
-                    : "Non sommate all'importo principale — Traccio non applica cambi tra valute."
-            )
-            .font(Typography.caption)
-            .foregroundStyle(Palette.inkTertiary)
-        }
-    }
-
-    /// The "Per categoria" card (`docs/design/canvas/Main.dc.html`), the
-    /// mockup element the "Concept · richiede backend" badge blocked until
-    /// `GET /dashboard/summary` started returning `by_category`. Renders
-    /// nothing when there is nothing to show, rather than an empty donut —
-    /// same posture as `heroCard`'s own empty-period branch above.
-    ///
-    /// 2026-08-26 revision (ADR 0008): the donut shrinks and gains tap-to-
-    /// select, its center switches between the selected category and the
-    /// period total, and the old position-paired side legend is replaced by
-    /// `CategoryBreakdownList` — a full-width, expandable, drill-through-able
-    /// list that is also this card's accessible representation of the
-    /// (`.accessibilityHidden(true)`) donut.
-    @ViewBuilder
-    private func categoryBreakdownCard(_ summary: CurrencySummaryResponse) -> some View {
-        let segments = TraccioCore.donutSegments(summary.byCategory)
-
-        if !segments.isEmpty {
-            Card {
-                EyebrowLabel(text: "Per categoria", color: Palette.ink)
-                HStack {
-                    Spacer(minLength: 0)
-                    ZStack {
-                        DonutChart(
-                            segments: segments,
-                            selection: model.selectedCategoryID,
-                            onSelect: { model.selectCategory($0) },
-                            diameter: donutDiameter
-                        )
-                        donutCenter(summary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                CategoryBreakdownList(
-                    rows: TraccioCore.breakdownRows(
-                        groups: summary.byCategory, expanded: model.expandedRootIDs
-                    ),
-                    currency: summary.currency,
-                    totalSpending: summary.spending,
-                    expandedRootIDs: model.expandedRootIDs,
-                    onToggleExpanded: { model.toggleExpanded($0) },
-                    onDrillThrough: { categoryID in
-                        drillThrough.request(model.drillThroughFilter(categoryID: categoryID))
-                    }
-                )
-            }
-        }
-    }
-
-    /// The donut's center label — the selected category's own name and
-    /// amount, or the period total when nothing is selected. A selection
-    /// whose category no longer resolves against `summary.byCategory` (a
-    /// stale id after a reload race) falls back to the total, same as no
-    /// selection at all.
-    @ViewBuilder
-    private func donutCenter(_ summary: CurrencySummaryResponse) -> some View {
-        let selectedGroup: CategoryGroupSummaryResponse? = {
-            guard case .category(let categoryID) = model.selectedCategoryID else { return nil }
-            return summary.byCategory.first { $0.categoryID == categoryID }
-        }()
-
-        VStack(spacing: 2) {
-            AmountText(
-                amount: selectedGroup?.spending ?? summary.spending,
-                currencyCode: summary.currency,
-                kind: .spending,
-                font: Typography.compactFigure
-            )
-            .minimumScaleFactor(0.6)
-            .lineLimit(1)
-            Text(selectedGroup.map { $0.categoryName ?? "Senza categoria" } ?? "totale")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: donutDiameter - 32)
-    }
-
-    /// The trend card (`docs/design/canvas/Main.dc.html`'s "Andamento netto"
-    /// slot, rebuilt as a spending bar chart rather than a net line — ADR
-    /// 0007's 2026-08-25 revision). Renders nothing when there is nothing to
-    /// show, same posture as `heroCard`'s and `categoryBreakdownCard`'s own
-    /// empty branches.
-    ///
-    /// Uses the same period the rest of the screen shows — no independent
-    /// selector. Bucketed at `period.granularity` (day/week/month per unit,
-    /// Task 6), and the backend gap-fills `by_bucket` across the whole
-    /// requested period since both bounds are always sent, so
-    /// `spendingBars(_:)` never needs to reconcile a mismatch between the
-    /// axis and `model.period`.
-    @ViewBuilder
-    private func dailySpendingCard(_ summary: CurrencySummaryResponse) -> some View {
-        let bars = TraccioCore.spendingBars(summary.byBucket)
-
-        if !bars.isEmpty {
-            Card {
-                EyebrowLabel(text: "Andamento spesa", color: Palette.ink)
-                BucketBarsChart(
-                    bars: bars,
-                    currency: summary.currency,
-                    selectedIndex: model.selectedBucketIndex,
-                    onScrub: { model.selectBucket($0) },
-                    onDrillThrough: { index in
-                        guard bars.indices.contains(index) else { return }
-                        let bar = bars[index]
-                        if let filter = model.drillThroughFilter(bucketStart: bar.start, bucketEnd: bar.end) {
-                            drillThrough.request(filter)
-                        }
-                    }
-                )
-            }
-        }
     }
 }
 
