@@ -17,6 +17,10 @@ import TraccioCore
 /// when nothing is filtered. Filtering happens server-side
 /// (`TransactionFilter`, `TransactionsViewModel.applyFilter(_:)`), never on
 /// an already-fetched page.
+///
+/// `TransferSuggestionsLinkCard`, `TransactionSelectionBar`, and
+/// `ActiveFilterTokensRow` each live in their own file next to this one —
+/// this view only wires them to `TransactionsViewModel` and lays them out.
 struct TransactionsView: View {
     @State private var model: TransactionsViewModel
     /// Bound to `.searchable`. Kept separate from `model.filter.searchTerm`
@@ -186,116 +190,24 @@ struct TransactionsView: View {
         }
     }
 
-    // MARK: Transfer-suggestions card
-
-    /// Shown at the top of the list whenever there is at least one transfer
-    /// suggestion to review — the discoverable replacement for the old
-    /// toolbar count. Tapping opens `TransfersView`.
-    private var transferSuggestionCard: some View {
-        NavigationLink {
-            TransfersView(
-                client: model.client,
-                onUpdate: { model.replace($0) },
-                onDashboardStale: { freshness.markStale([.dashboard]) }
-            )
-        } label: {
-            // A plain `.flush` card, not an accent-tinted slab: the accent is
-            // carried by the one leading tile, the chevron is chrome, and the
-            // surface is card-white like every other row
-            // (`docs/design/tokens.md`'s "Accent dosage").
-            Card(elevation: .flush, contentPadding: 14) {
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.left.arrow.right")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Palette.accent)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            Palette.accent.opacity(0.14),
-                            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(transferSuggestionCardTitle)
-                            .font(Typography.body.weight(.semibold))
-                            .foregroundStyle(Palette.ink)
-                            .lineLimit(1)
-                        Text("Movimenti collegati tra i tuoi conti")
-                            .font(Typography.caption)
-                            .foregroundStyle(Palette.inkSecondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    DisclosureChevron()
-                }
-            }
-        }
-        .buttonStyle(.pressable)
-    }
-
-    private var transferSuggestionCardTitle: String {
-        let n = model.transferSuggestionCount
-        return n == 1
-            ? "1 trasferimento da confermare"
-            : "\(n) trasferimenti da confermare"
-    }
-
     // MARK: Transfer-pairing selection bar
 
-    /// The bottom bar shown while `model.isSelecting`: guidance until two rows
-    /// are picked, then either the link action or the reason it is blocked,
-    /// plus any failure from the last attempt.
     private var selectionBar: some View {
-        VStack(spacing: 8) {
-            if let message = linkFailureMessage {
-                Banner(message: message)
-            }
-            if model.canLinkAsTwoSided {
-                PillButton(
-                    title: "Collega come trasferimento",
-                    isLoading: model.isLinking,
-                    action: {
-                        Task {
-                            if await model.linkSelectedAsTransfer() {
-                                freshness.markStale([.dashboard])
-                            }
-                        }
+        TransactionSelectionBar(
+            selectedTransactions: model.selectedTransactions,
+            canLinkAsTwoSided: model.canLinkAsTwoSided,
+            canLinkAsFundedPaymentSelection: model.canLinkAsFundedPaymentSelection,
+            isLinking: model.isLinking,
+            linkFailure: model.linkFailure,
+            onLinkAsTransfer: {
+                Task {
+                    if await model.linkSelectedAsTransfer() {
+                        freshness.markStale([.dashboard])
                     }
-                )
-            } else if model.canLinkAsFundedPaymentSelection {
-                PillButton(
-                    title: "Collega come doppia uscita",
-                    isLoading: model.isLinking,
-                    action: { isChoosingFundedPaymentOrientation = true }
-                )
-            } else {
-                Text(selectionGuidance)
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkSecondary)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(16)
-        .glassEffect(.regular, in: Rectangle())
-        .overlay(alignment: .top) { Divider() }
-    }
-
-    /// What to tell the user given how many rows are selected and whether
-    /// they can be linked. Pure view copy derived from the two
-    /// `TransactionResponse`s — the backend stays the authority on the link.
-    private var selectionGuidance: String {
-        let selected = model.selectedTransactions
-        switch selected.count {
-        case 0, 1:
-            return "Seleziona due movimenti da collegare come trasferimento"
-        default:
-            let a = selected[0]
-            let b = selected[1]
-            if a.role != .personal || b.role != .personal {
-                return "Uno dei due movimenti è già collegato (trasferimento, anticipo o rimborso)"
-            }
-            if a.currency != b.currency { return "I due movimenti hanno valute diverse" }
-            if a.accountID == b.accountID { return "I due movimenti sono sullo stesso conto" }
-            return "Questi due movimenti non possono formare un trasferimento"
-        }
+                }
+            },
+            onChooseFundedPaymentOrientation: { isChoosingFundedPaymentOrientation = true }
+        )
     }
 
     private var linkFailureMessage: String? {
@@ -315,65 +227,24 @@ struct TransactionsView: View {
     /// opens `TransactionFiltersSheet`); this row only *shows and clears* what
     /// is active. Independent of `model.state`: a load failure or an empty
     /// result doesn't hide it.
-    @ViewBuilder
     private var filterRow: some View {
-        if hasActiveFilters {
-            ScrollView(.horizontal, showsIndicators: false) {
-                activeFilterTokens
-                    .padding(.horizontal, 20)
-            }
-            .scrollClipDisabled()
-            .padding(.top, 12)
-            .padding(.bottom, 4)
-        }
-    }
-
-    /// The active tokens in one row, inside `filterRow`'s horizontal
-    /// `ScrollView` so a long label ("Abbonamenti e servizi") scrolls into
-    /// view instead of squeezing its neighbours or wrapping
-    /// (`docs/design/tokens.md`: never wrap). Tapping a token clears that one
-    /// dimension.
-    private var activeFilterTokens: some View {
-        HStack(spacing: 8) {
-            if model.filter.accountID != nil {
-                Button {
-                    applyFilters(
-                        accountID: nil,
-                        category: model.filter.category,
-                        period: selectedPeriodPreset
-                    )
-                } label: {
-                    FilterChip(title: accountFilterTitle, isActive: true)
+        ActiveFilterTokensRow(
+            accountToken: model.filter.accountID.map { _ in
+                .init(title: accountFilterTitle) {
+                    applyFilters(accountID: nil, category: model.filter.category, period: selectedPeriodPreset)
                 }
+            },
+            categoryToken: model.filter.category == .any ? nil : .init(title: categoryFilterTitle) {
+                applyFilters(accountID: model.filter.accountID, category: .any, period: selectedPeriodPreset)
+            },
+            periodToken: selectedPeriodPreset == .all ? nil : .init(title: periodFilterTitle) {
+                applyFilters(accountID: model.filter.accountID, category: model.filter.category, period: .all)
             }
-            if model.filter.category != .any {
-                Button {
-                    applyFilters(
-                        accountID: model.filter.accountID,
-                        category: .any,
-                        period: selectedPeriodPreset
-                    )
-                } label: {
-                    FilterChip(title: categoryFilterTitle, isActive: true)
-                }
-            }
-            if selectedPeriodPreset != .all {
-                Button {
-                    applyFilters(
-                        accountID: model.filter.accountID,
-                        category: model.filter.category,
-                        period: .all
-                    )
-                } label: {
-                    FilterChip(title: periodFilterTitle, isActive: true)
-                }
-            }
-        }
-        .buttonStyle(.plain)
+        )
     }
 
     /// Whether any of the three dimensions is set — drives the toolbar
-    /// button's `.fill` variant and whether `filterRow` renders at all.
+    /// button's `.fill` variant.
     private var hasActiveFilters: Bool {
         model.filter.accountID != nil
             || model.filter.category != .any
@@ -443,7 +314,6 @@ struct TransactionsView: View {
         }
     }
 
-
     // MARK: Content
 
     @ViewBuilder
@@ -492,7 +362,12 @@ struct TransactionsView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
                 if model.transferSuggestionCount > 0 {
-                    transferSuggestionCard
+                    TransferSuggestionsLinkCard(
+                        count: model.transferSuggestionCount,
+                        client: model.client,
+                        onUpdate: { model.replace($0) },
+                        onDashboardStale: { freshness.markStale([.dashboard]) }
+                    )
                 }
                 LazyVStack(alignment: .leading, spacing: 22) {
                     ForEach(groups) { group in
