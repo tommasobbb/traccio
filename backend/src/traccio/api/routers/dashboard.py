@@ -39,10 +39,8 @@ from traccio.core.logging import get_logger
 from traccio.db.repositories import (
     get_fx_rates,
     list_accounts,
-    list_advances,
     list_categories,
     list_transactions_in_period,
-    sum_reimbursements_by_advance,
 )
 from traccio.db.session import get_session
 from traccio.domain.accounts import display_name
@@ -54,9 +52,10 @@ from traccio.domain.dashboard import (
 )
 from traccio.domain.enums import AccountKind, BucketGranularity
 from traccio.domain.fx import MissingRate, to_base_currency
-from traccio.domain.models import Advance, Transaction
+from traccio.domain.models import Transaction
 from traccio.domain.money import Money
 from traccio.providers.frankfurter import FrankfurterClient
+from traccio.services.advance_shares import fetch_advance_pool
 from traccio.services.advances import spending_shares
 from traccio.services.fx import FxUnavailable, build_rate_resolver
 
@@ -257,10 +256,9 @@ def dashboard_summary(
         compare_start = _clamp(compare_start)
 
     found = list_transactions_in_period(session, user_id, start=start, end=end)
-    advance_by_tx: dict[UUID, Advance] = {
-        advance.transaction_id: advance for advance in list_advances(session, user_id)
-    }
-    reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
+    # Fetched once, not once per period: the comparison period below reuses
+    # the same advance_by_tx/reimbursed_by_advance pair.
+    advance_by_tx, reimbursed_by_advance = fetch_advance_pool(session, user_id=user_id)
     shares = spending_shares(found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance)
 
     categories = list_categories(session, user_id)

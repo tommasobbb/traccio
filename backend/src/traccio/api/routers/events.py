@@ -40,13 +40,11 @@ from traccio.db.repositories import (
     get_event,
     get_transaction,
     get_transaction_event_id,
-    list_advances,
     list_categories,
     list_event_candidates,
     list_event_members,
     list_events,
     set_event_status,
-    sum_reimbursements_by_advance,
     unassign_transaction_from_event,
     update_event,
 )
@@ -56,6 +54,7 @@ from traccio.domain.enums import EventStatus
 from traccio.domain.events import event_total
 from traccio.domain.models import Advance, Event, Transaction
 from traccio.domain.money import Money
+from traccio.services.advance_shares import fetch_advance_pool
 from traccio.services.advances import spending_shares
 
 logger = get_logger(__name__)
@@ -96,12 +95,8 @@ def _advance_spending_shares(
     pass it in once instead of this function re-fetching the identical
     user-wide result set on every call.
     """
-    if advance_by_tx is None:
-        advance_by_tx = {
-            advance.transaction_id: advance for advance in list_advances(session, user_id)
-        }
-    if reimbursed is None:
-        reimbursed = sum_reimbursements_by_advance(session, user_id)
+    if advance_by_tx is None or reimbursed is None:
+        advance_by_tx, reimbursed = fetch_advance_pool(session, user_id=user_id)
     return spending_shares(transactions, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
 
 
@@ -246,8 +241,7 @@ def events(
     # the same user-wide advance pool and reimbursement totals to resolve its
     # members' spending shares, so re-fetching per event would be 2 queries
     # times the event count for identical data every time.
-    advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
-    reimbursed = sum_reimbursements_by_advance(session, user_id)
+    advance_by_tx, reimbursed = fetch_advance_pool(session, user_id=user_id)
     responses = [
         _event_response(
             session,

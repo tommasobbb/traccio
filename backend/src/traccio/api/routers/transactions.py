@@ -32,12 +32,10 @@ from traccio.db.repositories import (
     get_category,
     get_transaction,
     get_transaction_event_id,
-    list_advances,
     list_child_category_ids,
     list_transactions,
     prune_stale_pending_transactions,
     set_confirmed_category,
-    sum_reimbursements_by_advance,
     transaction_is_linked,
     update_manual_transaction,
 )
@@ -49,10 +47,10 @@ from traccio.domain.enums import (
     TransactionRole,
     TransactionStatus,
 )
-from traccio.domain.models import Advance, Transaction
+from traccio.domain.models import Transaction
 from traccio.domain.money import Money
 from traccio.domain.search import MAX_SEARCH_TERM_LENGTH, normalize_search_term
-from traccio.services.advances import spending_shares
+from traccio.services.advance_shares import resolve_advance_shares
 
 logger = get_logger(__name__)
 
@@ -158,14 +156,9 @@ def transactions(
     # An advance transaction's effective_amount is its derived spending share,
     # which depends on the declared own_share, the reimbursements received, and
     # whether the advance was written off (a write-off moves the outstanding
-    # amount into spending). Resolve each advanced transaction's signed share
-    # once per row (role=advance is only ever set alongside an Advance row, so
-    # the map is always consistent — see the advances router).
-    advance_by_tx: dict[UUID, Advance] = {
-        advance.transaction_id: advance for advance in list_advances(session, user_id)
-    }
-    reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
-    shares = spending_shares(found, advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance)
+    # amount into spending). Resolved once per row (role=advance is only ever
+    # set alongside an Advance row, so the map is always consistent).
+    shares = resolve_advance_shares(session, user_id=user_id, transactions=found)
     event_by_tx = event_ids_for_transactions(
         session, user_id=user_id, transaction_ids=[transaction.id for transaction in found]
     )
@@ -222,13 +215,7 @@ def transaction(
     # reimbursements received, and write-off state, all resolved the same way.
     advance_own_share = None
     if found.role == TransactionRole.ADVANCE:
-        advance_by_tx: dict[UUID, Advance] = {
-            advance.transaction_id: advance for advance in list_advances(session, user_id)
-        }
-        reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
-        shares = spending_shares(
-            [found], advance_by_tx=advance_by_tx, reimbursed=reimbursed_by_advance
-        )
+        shares = resolve_advance_shares(session, user_id=user_id, transactions=[found])
         advance_own_share = shares.get(found.id)
     event_id = get_transaction_event_id(session, user_id=user_id, transaction_id=found.id)
 
