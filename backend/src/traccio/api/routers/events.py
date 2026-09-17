@@ -54,7 +54,7 @@ from traccio.db.session import get_session
 from traccio.domain.dashboard import summarize
 from traccio.domain.enums import EventStatus
 from traccio.domain.events import event_total
-from traccio.domain.models import Event, Transaction
+from traccio.domain.models import Advance, Event, Transaction
 from traccio.domain.money import Money
 from traccio.services.advances import spending_shares
 
@@ -76,7 +76,12 @@ def _load_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event:
 
 
 def _advance_spending_shares(
-    session: Session, *, user_id: UUID, transactions: list[Transaction]
+    session: Session,
+    *,
+    user_id: UUID,
+    transactions: list[Transaction],
+    advance_by_tx: dict[UUID, Advance] | None = None,
+    reimbursed: dict[UUID, Money] | None = None,
 ) -> dict[UUID, Money]:
     """Resolve each advanced transaction's signed spending share.
 
@@ -85,22 +90,45 @@ def _advance_spending_shares(
     advance-share resolution :func:`~traccio.api.routers.transactions.transactions`
     performs, since an advance's ``effective_amount`` is a derived share, not its
     full amount.
+
+    ``advance_by_tx``/``reimbursed`` let a caller that already listed the
+    user's whole advance pool (:func:`events`, over every event in one page)
+    pass it in once instead of this function re-fetching the identical
+    user-wide result set on every call.
     """
-    advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
-    reimbursed = sum_reimbursements_by_advance(session, user_id)
+    if advance_by_tx is None:
+        advance_by_tx = {
+            advance.transaction_id: advance for advance in list_advances(session, user_id)
+        }
+    if reimbursed is None:
+        reimbursed = sum_reimbursements_by_advance(session, user_id)
     return spending_shares(transactions, advance_by_tx=advance_by_tx, reimbursed=reimbursed)
 
 
-def _event_response(session: Session, *, user_id: UUID, event: Event) -> EventResponse:
+def _event_response(
+    session: Session,
+    *,
+    user_id: UUID,
+    event: Event,
+    advance_by_tx: dict[UUID, Advance] | None = None,
+    reimbursed: dict[UUID, Money] | None = None,
+) -> EventResponse:
     """Project an event with its derived net total and member count threaded in.
 
     Resolves each advance member's spending share (via
     :func:`_advance_spending_shares`) so the pure
     :func:`~traccio.domain.events.event_total` can sum ``effective_amount`` across
-    the members in the event's single currency.
+    the members in the event's single currency. ``advance_by_tx``/``reimbursed``
+    are forwarded to :func:`_advance_spending_shares` unchanged — see there.
     """
     members = list_event_members(session, user_id=user_id, event_id=event.id)
-    shares = _advance_spending_shares(session, user_id=user_id, transactions=members)
+    shares = _advance_spending_shares(
+        session,
+        user_id=user_id,
+        transactions=members,
+        advance_by_tx=advance_by_tx,
+        reimbursed=reimbursed,
+    )
     total = event_total(members, advance_shares=shares)
     return EventResponse.from_domain(event, total=total, member_count=len(members))
 
@@ -214,7 +242,22 @@ def events(
         The user's events, oldest first (empty if none).
     """
     found = list_events(session, user_id)
-    responses = [_event_response(session, user_id=user_id, event=event) for event in found]
+    # Fetched once for the whole page, not once per event: every event needs
+    # the same user-wide advance pool and reimbursement totals to resolve its
+    # members' spending shares, so re-fetching per event would be 2 queries
+    # times the event count for identical data every time.
+    advance_by_tx = {advance.transaction_id: advance for advance in list_advances(session, user_id)}
+    reimbursed = sum_reimbursements_by_advance(session, user_id)
+    responses = [
+        _event_response(
+            session,
+            user_id=user_id,
+            event=event,
+            advance_by_tx=advance_by_tx,
+            reimbursed=reimbursed,
+        )
+        for event in found
+    ]
     logger.info("events.list", count=len(responses))
     return EventsResponse(events=responses)
 

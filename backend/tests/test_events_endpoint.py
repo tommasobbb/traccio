@@ -215,6 +215,58 @@ def test_assign_transactions_and_derive_total() -> None:
     assert body["currency"] == "EUR"
 
 
+def test_list_events_returns_each_with_its_own_total_and_member_count() -> None:
+    """``GET /events`` — previously untested (coverage flagged its whole body).
+
+    Covers two events, one carrying an advance member, so each iteration of
+    the list's per-event total resolution actually needs the advance pool
+    and reimbursement totals shared across the loop (the query the endpoint
+    fetches once for the page, not once per event).
+    """
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    plain = _seed_tx(engine, user_id=dev_user_id, amount=-4000, stable_key="TX-PLAIN")
+    advanced = _seed_tx(engine, user_id=dev_user_id, amount=-50000, stable_key="TX-ADV")
+    client = _client(engine)
+
+    assert (
+        client.post("/advances", json={"transaction_id": advanced, "own_share": 10000}).status_code
+        == 201
+    )
+
+    trip_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
+    dinner_id = client.post("/events", json={"name": "TEST DINNER 01"}).json()["id"]
+    assert (
+        client.post(
+            f"/events/{trip_id}/transactions", json={"transaction_id": advanced}
+        ).status_code
+        == 204
+    )
+    assert (
+        client.post(f"/events/{dinner_id}/transactions", json={"transaction_id": plain}).status_code
+        == 204
+    )
+
+    body = client.get("/events").json()
+
+    by_id = {event["id"]: event for event in body["events"]}
+    assert by_id[trip_id]["member_count"] == 1
+    assert by_id[trip_id]["total"] == -10000  # only the advance's own share
+    assert by_id[dinner_id]["member_count"] == 1
+    assert by_id[dinner_id]["total"] == -4000
+
+
+def test_list_events_is_empty_with_no_events() -> None:
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-100, stable_key="TX-UNGROUPED")
+    client = _client(engine)
+
+    body = client.get("/events").json()
+
+    assert body["events"] == []
+
+
 def test_total_zeroes_transfer_and_applies_advance_share() -> None:
     dev_user_id = get_settings().dev_user_id
     engine = _sqlite_engine()
