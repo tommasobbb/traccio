@@ -1,7 +1,16 @@
 # 0031 — Visual coherence pass: chrome, sheets, motion applied everywhere
 
-Status: accepted
+Status: accepted (glass reach narrowed — see below)
 Date: 2026-09-15
+
+> **2026-09-17**: this pass applied ADR 0030's glass rule uniformly, but
+> ADR 0030 itself was read too broadly (component identity, not screen
+> position) — `docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`
+> narrows it. `screenChrome`/`sheetChrome`, the sheet detents/drag
+> indicators, `DisclosureChevron`, the `Spacing`/`Radius` sweep, and the
+> motion work below are all unaffected — only the in-body glass components
+> this pass helped spread further (`PillButton`, `FilterChip`, `IconButton`)
+> are affected, and only at their own definition, not here.
 
 ## Context
 

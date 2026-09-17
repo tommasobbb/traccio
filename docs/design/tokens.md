@@ -26,23 +26,19 @@ resolution happens automatically; no view branches on light/dark itself.
 
 ## Panoramica hero
 
-**`Palette.brandNight`, not white.** Since `docs/decisions/0034-brand-triad.md`
-(2026-09-16), Panoramica's hero (the spend total, the category ribbon,
-Entrate/Netto) is a `Card` at `.raised` with `background: Palette.brandNight`
-— the app's first brand surface. It is still the only `.raised` card on the
-screen, so the hierarchy is still elevation- and scale-driven
-(`Typography.heroFigure`, 44pt, tracking `-1.0`), not "one colour block among
-several" — the 2026-09-08 "dose, non tinta" diagnosis (surface *area*, not
-hue, is what reads as loud) still holds; see "Brand triad" below for the
-narrowed rule. The spend figure itself is `Palette.brandLime`; the eyebrow,
-currency label, "Entrate"/"Netto" captions, divider, and category-ribbon
-legend are `Palette.brandCream` at reduced opacity (via `AmountText.colorOverride`
-and explicit `foregroundStyle`s — see `DashboardView.heroCard`'s doc
-comment). Income and a positive net keep `Palette.income` untouched. Before
-this, the hero was the flat white `Card` the 2026-08-25→2026-09-08 revisions
-below describe — the `heroFill` / `heroFillDeep` / `onHero` / `onHeroSecondary`
-colorsets and `AmountText.Tone` removed then stay removed; this is a new,
-narrower brand surface, not a return to the old coloured-band hero.
+A plain `Card` at `.raised` — still the only `.raised` card on the screen, so
+the hierarchy is elevation- and scale-driven (`Typography.heroFigure`, 44pt,
+tracking `-1.0`), not carried by a filled colour. The spend figure and every
+label on the card are `ink`/`inkSecondary`/`inkTertiary`, same as any other
+card. A `docs/decisions/0034-brand-triad.md` navy/lime/cream treatment
+shipped here for one day (2026-09-16) and was withdrawn on-device
+(`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`) — not
+tuned, reverted; the color question is reopened, not decided. The `heroFill`
+/ `heroFillDeep` / `onHero` / `onHeroSecondary` colorsets and `AmountText.Tone`
+from the 2026-08-25→2026-09-08 revisions below stay removed too — this
+section has now gone flat-white twice for two different reasons (dose, then
+withdrawal), which is itself a signal that any future color treatment here
+should be settled carefully, not shipped as a single-file experiment.
 
 ## Ink (text)
 
@@ -96,11 +92,12 @@ hue — it was how much surface the accent covered. The rule, since the
   the reference: it has no band and no accent surface, and it is the screen
   the owner calls the cleanest.
 
-**Narrowed by `docs/decisions/0034-brand-triad.md` (2026-09-16):** a
-screen's one designated `.raised` protagonist surface may now be a brand
-triad colour (`Palette.brandNight`) instead of white — see "Brand triad"
-below. Every other rule above is unchanged: a data row, a list, a heading,
-navigation chrome, and every card *except* the one protagonist still never
+`docs/decisions/0034-brand-triad.md` (2026-09-16) narrowed this rule for one
+day to let a screen's designated `.raised` protagonist surface carry a brand
+colour instead of white; withdrawn on-device the next day
+(`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`) — see
+"Panoramica hero" above. The rule above is back to unqualified: a data row, a
+list, a heading, navigation chrome, and every card without exception never
 carry a filled colour, brand or accent.
 
 `net` in the dashboard hero no longer carries the accent when positive — it
@@ -120,46 +117,6 @@ petrol green `#0E7C86` for one day → forest green `#1B5E3F` / `#58BF95`
 below — decoupled from accent. After the fifth swap the conclusion was that
 the hue was not the problem (see "Accent dosage" above); the azure stays and
 gets re-judged on device *after* the dose came down, not before.
-
-## Brand triad
-
-`docs/decisions/0034-brand-triad.md` (2026-09-16). Three identity colours,
-each with a dark-appearance variant like every other token in this file:
-
-| Token       | Hex (light) | Hex (dark) | Swift name          | Use                                        |
-| ----------- | --------- | --------- | -------------------- | -------------------------------------------- |
-| Brand night | `#14183C` | `#1E2350` | `Palette.brandNight` | A screen's one designated protagonist surface (today: Panoramica's hero) |
-| Brand lime  | `#C8F000` | `#9FCB00` | `Palette.brandLime`  | The key figure/control *on* a `brandNight` surface — never on a light one |
-| Brand cream | `#FFD9A0` | `#4A3820` | `Palette.brandCream` | The neutral text/divider tone *inside* a `brandNight` surface |
-
-**The rule: brand surfaces yes, figures and data rows no.** A `brandNight`
-card is a legitimate exception to "no filled surface" (see "Accent dosage"
-above) *for the one screen protagonist already singled out by `.raised`
-elevation* — not a general license to tint cards. Once inside that surface,
-`brandLime`/`brandCream` exist to give text and controls contrast against
-navy, not to replace `ink` everywhere; a money figure or a data row outside
-a brand surface still stays `ink`, exactly as before.
-
-`brandLime` is never used on a light surface — `#C8F000` on near-white
-doesn't have the contrast to read as a control there. `Palette.accent`
-(azure) is untouched and keeps every job it already had; the triad doesn't
-replace it, including inside the app's global `AccentColor` asset.
-
-`brandNight` is intentionally near-constant across appearances (a brand
-colour, not a system-adaptive neutral) — its dark variant is lifted a few
-points only so it keeps an edge against the dark `Background` (`#0B0B0C`).
-`brandLime`/`brandCream` are pulled back a little in dark mode so a colour
-this saturated doesn't glow against an OLED-dark surface, the same
-adjustment the app icon's own dark variant makes for its gradient. All
-three dark values are a judgment call pending the on-device pass
-(`tasks/backlog.md` item 13) — the lime-on-navy and cream-on-navy contrast
-in particular need confirming against real content, not just a Simulator
-screenshot.
-
-`AmountText.colorOverride` and `Card`'s `background:` parameter are the two
-mechanisms: both default to `nil`/unset and change nothing at any existing
-call site. See their doc comments in `App/Sources/DesignSystem/` for exactly
-what each substitutes.
 
 ## Semantic
 
@@ -307,27 +264,37 @@ against it. Revert to `#000000` if cards read flat on device.
 ## Glass
 
 Liquid Glass (`docs/decisions/0030-liquid-glass-chrome.md`), adopted since the
-deployment target moved to iOS 26 / macOS 26. The rule is the same discipline
-as "Accent dosage" above, restated for material instead of hue: **glass is
-chrome, never a content surface**. A narrower exception for the one `.raised`
-card per screen was tried and rejected on device
-(`docs/decisions/0032-glass-on-raised-cards.md`) — a money figure read worse
-on translucent material than on the opaque card, so the rule holds without
-exception again: `Card` at every elevation, a list row, an `OptionListCard`,
-`Badge`, `IconTile` — none of these carry glass.
+deployment target moved to iOS 26 / macOS 26. **Glass marks chrome anchored
+to a screen edge — the tab bar, a toolbar, a sheet's own bottom action bar —
+never a content surface and never a control living inside a screen's
+scrollable body**, narrowed to this position-based criterion by
+`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md` after
+on-device use found the app's own apps never put glass on an in-body chip or
+button, only on their own dock/toolbar. Two earlier, narrower exceptions were
+tried and rejected the same way: the one `.raised` card per screen
+(`docs/decisions/0032-glass-on-raised-cards.md` — a money figure read worse
+on translucent material) and, now, every in-body control ADR 0030/0031
+originally put in glass by component identity rather than position.
+`Card` at every elevation, a list row, an `OptionListCard`, `Badge`,
+`IconTile` — none of these carry glass, and neither does `PillButton`,
+`FilterChip`, `IconButton`, or `SelectionSheet`'s closed control any more.
 
 | Carries glass | Stays opaque |
 | -------------- | ------------- |
 | Tab bar (`.tabBarMinimizeBehavior(.onScrollDown)`, iOS only) | `Card` at every elevation (`.flush`/`.resting`/`.raised`) |
 | Toolbars (native, automatic on iOS 26) | Every list row (Movimenti, day groups, `OptionListCard`) |
-| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) | `Badge`, `IconTile`, `EventTile` |
-| `PillButton` (`.buttonStyle(.glassProminent)`, `.tint(Palette.accent)`) | `DisclosureChevron` — chrome-coloured (`inkQuaternary`) but opaque, no glass |
-| `IconButton` (`.glassEffect(.regular.tint(background).interactive(), in: Circle())`) | Panoramica's period strip (prev/next + unit picker) — a flush-styled opaque surface, glass tried and reverted (ADR 0032) |
-| `FilterChip` at rest (`.glassEffect(.regular, in: Capsule())`) | |
-| `FilterChip` active state tints the same glass with `Palette.accent` — the allowed dose, not a new exception | |
-| `SelectionSheet`'s closed control (a glass `Radius.tile` rectangle showing the current selection's icon + a chevron) | |
-| Every sheet's action bar and toolbar, via `.sheetChrome(_:detents:)` (`SheetChrome.swift`) — no sheet is left with a flat full-height presentation since the 2026-09-15 coherence pass | |
-| `TrackingStartView`'s primary/secondary buttons (`.glassProminent`/`.glass`, same idiom as the Filtri sheet's "Applica" bar) | |
+| Sheet bottom action bars (`.glassEffect(.regular, in: Rectangle())`, replacing `.regularMaterial`) — the Filtri sheet's "Applica" bar, Movimenti's transfer-selection bar | `PillButton`, the Filtri sheet's "Applica" button, `TrackingStartView`'s primary/secondary pair — flat `ActionButtonStyle`/hand-rolled fills (`ActionButtonStyle.swift`) since they live inside a screen, not at its edge |
+| `.scrollEdgeEffectStyle(.soft, for: .all)` (the chrome's own edge effect, `ScreenChrome.swift`) | `FilterChip` — flat `Palette.card`/`Palette.accentTint` capsule with a hairline border |
+| `.pickerStyle(.menu)`'s system-provided glass (`AccountKind`, 6 cases) | `IconButton` — flat `Circle().fill(background)`, `.pressable` for press feedback |
+| | `SelectionSheet`'s closed control — a bordered `Palette.card` rectangle, the same idiom `OptionListCard` uses |
+| | `TransferSuggestionCard`'s "Ignora" button — flat `Palette.neutralFill` capsule |
+| | `DisclosureChevron` — chrome-coloured (`inkQuaternary`) but opaque, no glass |
+| | Panoramica's period strip (prev/next + unit picker) — a flush-styled opaque surface, glass tried and reverted (ADR 0032) |
+
+Every sheet still gets its action bar and toolbar via
+`.sheetChrome(_:detents:)` (`SheetChrome.swift`) — no sheet is left with a
+flat full-height presentation since the 2026-09-15 coherence pass; what
+changed is only the button drawn *inside* each bar.
 
 If a screen reads flat, the fix is hierarchy — elevation, type scale,
 whitespace — never a translucent content surface; `Conti` is the reference.
@@ -351,10 +318,12 @@ row→detail push in the app, not just Movimenti/Eventi —
 `TransactionDetailView`'s event chip → `EventDetailView`. Settings'
 navigation rows (`SettingsView`) deliberately do **not** zoom — a plain list
 row with a small leading icon has no visual frame worth zooming from, same
-as Apple's own Settings app. Also found and fixed one real inconsistency:
-`TransferSuggestionCard`'s secondary "Ignora" button was still a flat
-`Palette.neutralFill` capsule sitting next to a glass `PillButton` — now
-`.buttonStyle(.glass)`. Checked and deliberately left alone: every other
+as Apple's own Settings app. Also found and fixed one real inconsistency at
+the time: `TransferSuggestionCard`'s secondary "Ignora" button was a flat
+`Palette.neutralFill` capsule sitting next to a glass `PillButton` — glass
+briefly, back to its original flat capsule since
+`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`. Checked
+and deliberately left alone at the time: every other
 `Palette.neutralFill` fill in the app (role glyphs, avatars, progress
 tracks, the FX summary tile) is content/metadata, not a control — each
 already carries a comment saying so.
@@ -684,3 +653,17 @@ accent was on too much surface, not the wrong hue. Client-only:
 Still owed (`tasks/backlog.md`): the on-device visual pass — light + dark +
 Dynamic Type, every screen, now including the band-less Panoramica and the
 new dark background — and a `Spacing`/`Radius` sweep of `DashboardView`.
+
+**Glass narrowed to chrome-by-position, brand triad withdrawn, 2026-09-17**
+(`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`, after
+real daily use of the `feat/visual-coherence` branch). Two findings: Liquid
+Glass on `PillButton`/`FilterChip`/`IconButton`/`SelectionSheet` read wrong
+wherever they sat inside a screen's own content, not just at a screen edge —
+"Glass" above is rewritten around that edge-vs-body criterion, and those four
+components go back to the flat fills they had before ADR 0030 (a shared
+`ActionButtonStyle` for the three identical accent-CTA shapes, each other
+call site restored to its own pre-0030 look). And the 2026-09-16 brand
+triad (`brandNight`/`brandLime`/`brandCream`) is withdrawn outright — see
+"Panoramica hero" and "Accent dosage" above — not tuned or extended; the
+color question beyond the accent is reopened with no default assumed.
+`design: .rounded` typography is unaffected.

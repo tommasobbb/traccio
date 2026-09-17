@@ -52,36 +52,6 @@ enum Palette {
     /// you touch, never a filled surface or a heading.
     static let accentTint = Color("AccentTint", bundle: .main)
 
-    // MARK: Brand triad
-
-    /// The three identity colours (`docs/decisions/0034-brand-triad.md`),
-    /// deliberately separate from `accent` — they mark a *brand/structural*
-    /// surface (a screen's protagonist card, a header, chrome), never a data
-    /// row or a money figure, which stay `ink`/the semantic colours below.
-    /// `accent` is untouched and keeps doing what it always did (buttons,
-    /// links, the system's own global accent) — this is additive, not a
-    /// replacement.
-    ///
-    /// `brandNight` is near-black navy in both appearances by design (a
-    /// brand surface, not a system-adaptive neutral) — the dark variant is
-    /// lifted a few points so it still shows an edge against the dark
-    /// `Background` (`#0B0B0C`), same reasoning as `Background`'s own light
-    /// lift off pure black. `brandLime` and `brandCream` are pulled back a
-    /// little in dark mode so a colour this saturated doesn't glow against
-    /// an OLED-dark surface — the same adjustment the app icon's dark
-    /// variant already makes for its own gradient. All three are a judgment
-    /// call pending the on-device pass (`tasks/backlog.md` item 13).
-    static let brandNight = Color("BrandNight", bundle: .main)
-    /// The one colour that reads as "you can touch this" on a `brandNight`
-    /// surface — a CTA, a selection, the hero's own key figure. Never used
-    /// on a light surface: `#C8F000` on near-white has too little contrast
-    /// to read as a control there, so `accent` still owns that role
-    /// everywhere except inside a `brandNight` surface.
-    static let brandLime = Color("BrandLime", bundle: .main)
-    /// The quiet warm fill — tiles, empty states — that keeps the triad from
-    /// reading as two colours plus black.
-    static let brandCream = Color("BrandCream", bundle: .main)
-
     // MARK: Semantic
 
     /// Positive amounts (salary, reimbursement). Spending never uses a

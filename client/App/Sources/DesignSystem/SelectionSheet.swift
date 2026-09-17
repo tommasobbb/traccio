@@ -1,11 +1,14 @@
 import SwiftUI
 import TraccioCore
 
-/// A closed Liquid Glass control (`docs/decisions/0030-liquid-glass-chrome.md`)
-/// showing the current selection with its icon, opening an `OptionListCard`
-/// sheet to change it. Replaces a bare `.pickerStyle(.menu)` for data-backed
-/// options (accounts) that carry their own icon and colour — a native
-/// `Picker`'s closed control shows neither.
+/// A closed control showing the current selection with its icon, opening an
+/// `OptionListCard` sheet to change it. Replaces a bare `.pickerStyle(.menu)`
+/// for data-backed options (accounts) that carry their own icon and colour —
+/// a native `Picker`'s closed control shows neither. A bordered
+/// `Palette.card` surface, the same idiom `OptionListCard` itself uses — not
+/// Liquid Glass: glass is chrome only
+/// (`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`), and
+/// this control lives inside a screen's own content.
 struct SelectionSheet<Option: Identifiable>: View {
     let title: String
     let options: [Option]
@@ -43,8 +46,12 @@ struct SelectionSheet<Option: Identifiable>: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
         }
-        .buttonStyle(.plain)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .buttonStyle(.pressable)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                .strokeBorder(Palette.separatorSubtle)
+        )
         .sheet(isPresented: $isPresented) {
             NavigationStack {
                 ScrollView {

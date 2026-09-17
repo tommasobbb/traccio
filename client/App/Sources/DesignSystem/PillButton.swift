@@ -2,10 +2,10 @@ import SwiftUI
 
 /// The accent pill button ("Rinnova ora" in `docs/design/canvas/Accounts.dc.html`)
 /// — the app's one primary-CTA shape ("Accent dosage",
-/// `docs/design/tokens.md`), now a Liquid Glass button
-/// (`docs/decisions/0030-liquid-glass-chrome.md`): `.glassProminent` tinted
-/// with the accent, so the dose stays the same but the surface is chrome
-/// material instead of a flat fill.
+/// `docs/design/tokens.md`): a solid `Palette.accent` capsule, white text,
+/// via the shared `ActionButtonStyle`
+/// (`docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md` —
+/// glass is chrome only, this button lives inside a screen's own content).
 struct PillButton: View {
     let title: String
     var isLoading: Bool = false
@@ -22,13 +22,10 @@ struct PillButton: View {
                 Text(title)
                     .font(Typography.eyebrow)
             }
-            .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }
-        .buttonStyle(.glassProminent)
-        .tint(isLoading ? Palette.accentPressed : Palette.accent)
-        .buttonBorderShape(.capsule)
+        .buttonStyle(.action(isLoading: isLoading))
         .disabled(isLoading)
         .accessibilityLabel(isLoading ? "\(title) — in corso" : title)
     }

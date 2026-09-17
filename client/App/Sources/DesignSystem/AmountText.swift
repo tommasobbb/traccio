@@ -41,19 +41,6 @@ struct AmountText: View {
     /// Letter spacing applied to the whole figure. Large protagonist figures
     /// want a slight negative value; the default 0 leaves list figures alone.
     var tracking: CGFloat = 0
-    /// Substitutes for `Palette.ink`/`.inkTertiary`/`.inkQuaternary` wherever
-    /// `kind` would otherwise use one of them — the one escape hatch for a
-    /// figure sitting on a non-standard background where `ink` wouldn't have
-    /// enough contrast, e.g. the hero's spend total on `Palette.brandNight`
-    /// (`docs/decisions/0034-brand-triad.md`; `ink` swaps near-black/
-    /// near-white with the *system* appearance, not with whatever a card's
-    /// own background happens to be, so a fixed dark brand surface needs its
-    /// own neutral). `income`'s green is never touched by this — a positive
-    /// net or an income figure stays exactly as recognizable inside a
-    /// `colorOverride`d amount as everywhere else; only the "no colour"
-    /// fallback changes. `nil` (the default) leaves every existing call
-    /// site untouched.
-    var colorOverride: Color?
 
     var body: some View {
         let formatted = TraccioCore.formatMoney(
@@ -101,24 +88,22 @@ struct AmountText: View {
 
     private var color: Color {
         switch kind {
-        case .spending: return colorOverride ?? Palette.ink
+        case .spending: return Palette.ink
         case .income: return Palette.income
-        case .net: return amount > 0 ? Palette.income : (colorOverride ?? Palette.ink)
-        case .notCounted: return colorOverride ?? Palette.inkQuaternary
+        case .net: return amount > 0 ? Palette.income : Palette.ink
+        case .notCounted: return Palette.inkQuaternary
         }
     }
 
     /// The cents run. Recedes for a spend or a non-counted leg (whole units
     /// read first); stays the figure colour for income / positive net, where
-    /// a grey tail on a green number would look broken. Wherever this would
-    /// recede to an `ink`-family tone, `colorOverride` (at reduced opacity)
-    /// substitutes instead — see its own doc comment.
+    /// a grey tail on a green number would look broken.
     private var fractionColor: Color {
         switch kind {
-        case .spending: return colorOverride?.opacity(0.6) ?? Palette.inkTertiary
-        case .notCounted: return colorOverride?.opacity(0.6) ?? Palette.inkQuaternary
+        case .spending: return Palette.inkTertiary
+        case .notCounted: return Palette.inkQuaternary
         case .income: return Palette.income
-        case .net: return amount > 0 ? Palette.income : (colorOverride?.opacity(0.6) ?? Palette.inkTertiary)
+        case .net: return amount > 0 ? Palette.income : Palette.inkTertiary
         }
     }
 }

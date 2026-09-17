@@ -76,13 +76,10 @@ struct TransactionFiltersSheet: View {
                 } label: {
                     Text("Applica")
                         .font(Typography.body.weight(.semibold))
-                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
                 }
-                .buttonStyle(.glassProminent)
-                .tint(Palette.accent)
-                .buttonBorderShape(.roundedRectangle(radius: Radius.row))
+                .buttonStyle(.action(shape: .roundedRectangle(Radius.row)))
                 .padding(Spacing.gutter)
                 .glassEffect(.regular, in: Rectangle())
             }

@@ -1,7 +1,16 @@
 # 0030 — Liquid Glass in the chrome, deployment target raised to 26
 
-Status: accepted
+Status: accepted (narrowed — see below)
 Date: 2026-09-15
+
+> **2026-09-17**: on-device use found "chrome" here was read as *component
+> identity* (a `PillButton` is chrome wherever it appears) rather than
+> *screen position* — `docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`
+> narrows decision 2's component list to only what's anchored to a screen
+> edge (tab bar, toolbars, a sheet's own bottom bar); `PillButton`,
+> `IconButton`, `FilterChip`, and `SelectionSheet`'s closed control go back
+> to a flat fill when they live inside a screen's scrollable body. The
+> underlying discipline (never `Card`, never a figure) is unchanged.
 
 ## Context
 

@@ -1,9 +1,16 @@
 # 0034 — A brand triad and a rounded type voice
 
-Status: accepted (first slice shipped; full reach still owed — see
-"Consequences")
+Status: **color half withdrawn** (typography half stands) — see below
 
 Date: 2026-09-16
+
+> **2026-09-17**: `docs/decisions/0035-glass-to-chrome-only-and-triad-withdrawn.md`
+> withdraws the triad on-device — not "not yet extended" as this ADR's own
+> "Consequences"/"Revisit when" anticipated, but reverted, with the color
+> question reopened from scratch rather than tuned or grown. `brandNight`/
+> `brandLime`/`brandCream`, `Card.background`, and `AmountText.colorOverride`
+> are removed; `DashboardView.heroCard` is a plain `Card` again. The
+> "Typography" section below (`design: .rounded`) is unaffected and stands.
 
 ## Context
 
