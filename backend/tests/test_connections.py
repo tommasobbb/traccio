@@ -14,15 +14,14 @@ from uuid import UUID, uuid4
 import pytest
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, select, update
+from sqlalchemy import Engine, select, update
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _sqlite_engine
 from traccio.api.deps import get_bank_provider, get_token_cipher_dep
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
 from traccio.core.crypto import TokenCipher
-from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.session import get_session
 from traccio.domain import Account, Transaction
@@ -136,17 +135,6 @@ class FakeProvider(BankProvider):
                 key_strategy=KeyStrategy.ENTRY_REFERENCE,
             )
         ]
-
-
-def _sqlite_engine() -> Engine:
-    """Create a fresh in-memory SQLite engine sharing one connection."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _client(
@@ -698,8 +686,7 @@ def test_backfill_logos_matches_institution_name_case_insensitively() -> None:
 
     assert client.post("/connections/backfill-logos").json() == {"updated": 1}
     assert (
-        _connection(engine, connection_id).institution_logo
-        == "https://logos.example.test/it/tb01/"
+        _connection(engine, connection_id).institution_logo == "https://logos.example.test/it/tb01/"
     )
 
 

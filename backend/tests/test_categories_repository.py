@@ -8,11 +8,10 @@ value is synthetic (round amounts, invented names) — see
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.models import TransactionRow
 from traccio.db.repositories import (
     category_has_children,
@@ -36,16 +35,6 @@ from traccio.domain.models import Category
 _DEFAULT_CATEGORY_COUNT = len(DEFAULT_CATEGORY_TREE) + sum(
     len(root.children) for root in DEFAULT_CATEGORY_TREE
 )
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _category(*, user_id: UUID, name: str = "TEST CATEGORY 01") -> Category:

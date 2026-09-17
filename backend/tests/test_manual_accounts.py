@@ -11,13 +11,12 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _engine
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
-from traccio.db.base import Base
 from traccio.db.models import AccountRow, TransactionRow
 from traccio.db.session import get_session
 from traccio.domain.enums import AccountKind, KeyStrategy, TransactionStatus
@@ -34,14 +33,6 @@ def _client(engine: Engine) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
     return TestClient(app)
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _seed_synced_account(

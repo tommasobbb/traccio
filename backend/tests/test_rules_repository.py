@@ -8,11 +8,10 @@ value is synthetic (round amounts, invented patterns) — see
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.mappers import category_to_row
 from traccio.db.models import RuleRow, TransactionRow
 from traccio.db.repositories import (
@@ -27,16 +26,6 @@ from traccio.db.repositories import (
 )
 from traccio.domain.enums import KeyStrategy, RuleMatchKind, TransactionStatus
 from traccio.domain.models import Category, Rule
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _category(*, user_id: UUID, name: str = "TEST CATEGORY 01") -> Category:

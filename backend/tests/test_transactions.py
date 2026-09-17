@@ -11,13 +11,12 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _sqlite_engine
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
-from traccio.db.base import Base
 from traccio.db.models import CategoryRow, TransactionRow
 from traccio.db.session import get_session
 from traccio.domain.enums import KeyStrategy, PaletteColor, TransactionRole, TransactionStatus
@@ -73,17 +72,6 @@ def _client(engine: Engine) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
     return TestClient(app)
-
-
-def _sqlite_engine() -> Engine:
-    """Create a fresh in-memory SQLite engine sharing one connection."""
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def test_transactions_returns_only_current_users_most_recent_first() -> None:

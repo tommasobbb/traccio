@@ -10,24 +10,14 @@ protected endpoint" — it needs only a database session and the fixed
 from collections.abc import Iterator
 
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _sqlite_engine
 from traccio.api.main import create_app
 from traccio.core.config import Settings, get_settings
-from traccio.db.base import Base
 from traccio.db.session import get_session
 
 _TOKEN = "TEST-TOKEN-01"
-
-
-def _sqlite_engine() -> Engine:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _client(*, api_token: str | None) -> TestClient:

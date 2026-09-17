@@ -14,12 +14,11 @@ from uuid import UUID, uuid4
 
 import pytest
 from cryptography.fernet import Fernet
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _engine
 from traccio.core.crypto import TokenCipher
-from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     activate_connection,
@@ -123,14 +122,6 @@ class FakeProvider(BankProvider):
                 key_strategy=KeyStrategy.ENTRY_REFERENCE,
             )
         ]
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _cipher() -> TokenCipher:

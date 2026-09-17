@@ -7,11 +7,9 @@ value is synthetic (see ``.claude/rules/data-safety.md``).
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.repositories import (
     count_recent_sync_runs,
     list_sync_runs,
@@ -23,16 +21,6 @@ from traccio.domain.models import SyncRun
 
 _USER_ID = uuid4()
 _NOW = datetime(2026, 8, 24, 12, 0, 0, tzinfo=UTC)
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _run(

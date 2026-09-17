@@ -11,13 +11,12 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
+from tests.conftest import sqlite_engine as _sqlite_engine
 from traccio.api.main import create_app
 from traccio.core.config import get_settings
-from traccio.db.base import Base
 from traccio.db.models import TransactionRow
 from traccio.db.repositories import create_event
 from traccio.db.session import get_session
@@ -66,16 +65,6 @@ def _client(engine: Engine) -> TestClient:
     return TestClient(app)
 
 
-def _sqlite_engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
-
-
 def _seed_tx(
     engine: Engine,
     *,
@@ -111,9 +100,7 @@ def test_create_event_starts_empty() -> None:
 def test_create_event_with_emoji_and_color_round_trips() -> None:
     client = _client(_sqlite_engine())
 
-    response = client.post(
-        "/events", json={"name": "TEST TRIP 01", "emoji": "🇹🇷", "color": "teal"}
-    )
+    response = client.post("/events", json={"name": "TEST TRIP 01", "emoji": "🇹🇷", "color": "teal"})
 
     assert response.status_code == 201
     body = response.json()
@@ -161,9 +148,7 @@ def test_update_event_rejects_a_non_emoji() -> None:
     client = _client(_sqlite_engine())
     event_id = client.post("/events", json={"name": "TEST TRIP 01"}).json()["id"]
 
-    response = client.post(
-        f"/events/{event_id}", json={"name": "TEST TRIP 01", "emoji": "🎉🎂"}
-    )
+    response = client.post(f"/events/{event_id}", json={"name": "TEST TRIP 01", "emoji": "🎉🎂"})
 
     assert response.status_code == 422
 
@@ -171,9 +156,7 @@ def test_update_event_rejects_a_non_emoji() -> None:
 def test_update_unknown_event_is_404() -> None:
     client = _client(_sqlite_engine())
 
-    response = client.post(
-        f"/events/{uuid4()}", json={"name": "TEST TRIP 01"}
-    )
+    response = client.post(f"/events/{uuid4()}", json={"name": "TEST TRIP 01"})
 
     assert response.status_code == 404
 
@@ -186,9 +169,7 @@ def test_update_another_users_event_is_404() -> None:
         session.commit()
         their_event_id = str(created.id)
 
-    response = _client(engine).post(
-        f"/events/{their_event_id}", json={"name": "HIJACKED"}
-    )
+    response = _client(engine).post(f"/events/{their_event_id}", json={"name": "HIJACKED"})
     assert response.status_code == 404
 
 

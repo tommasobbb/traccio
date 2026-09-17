@@ -8,11 +8,10 @@ token (see ``.claude/rules/data-safety.md``).
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     get_connection_credentials,
@@ -38,16 +37,6 @@ from traccio.domain.enums import (
 from traccio.domain.money import Money
 
 _NOW = datetime(2026, 8, 21, 12, 0, 0, tzinfo=UTC)
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _account(

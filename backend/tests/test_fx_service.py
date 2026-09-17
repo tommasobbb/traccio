@@ -10,11 +10,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import Engine, create_engine, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.models import FxRateRow
 from traccio.domain.enums import KeyStrategy, TransactionStatus
 from traccio.domain.models import Transaction
@@ -23,14 +22,6 @@ from traccio.providers.frankfurter import FrankfurterClient
 from traccio.services.fx import FxUnavailable, build_rate_resolver
 
 _NOW = datetime(2026, 3, 13, 12, 0, tzinfo=UTC)
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _tx(*, amount: int, currency: str, when: datetime | None) -> Transaction:

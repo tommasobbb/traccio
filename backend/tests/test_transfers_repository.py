@@ -8,11 +8,9 @@ value is synthetic (round amounts, invented ids) — see
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from traccio.db.base import Base
+from tests.conftest import sqlite_engine as _engine
 from traccio.db.models import TransactionRow
 from traccio.db.repositories import (
     create_transfer,
@@ -26,16 +24,6 @@ from traccio.db.repositories import (
 )
 from traccio.domain.enums import KeyStrategy, TransactionRole, TransactionStatus
 from traccio.domain.models import Transfer
-
-
-def _engine() -> Engine:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    return engine
 
 
 def _add_tx(session: Session, *, user_id: UUID, amount: int, stable_key: str) -> UUID:
