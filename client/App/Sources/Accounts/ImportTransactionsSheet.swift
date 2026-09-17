@@ -301,15 +301,15 @@ struct ImportTransactionsSheet: View {
         }
     }
 
-    private static func reasonLabel(_ reason: String?) -> String {
+    private static func reasonLabel(_ reason: ImportRowResponse.FailureReason?) -> String {
         switch reason {
-        case "amount_split_mismatch": "Gli importi non tornano"
-        case "unknown_status": "Stato non riconosciuto"
-        case "invalid_amount": "Importo non valido"
-        case "invalid_date": "Data non valida"
-        case "missing_id": "Riga senza identificativo"
-        case "zero_amount": "Importo a zero"
-        default: "Riga non importabile"
+        case .amountSplitMismatch: "Gli importi non tornano"
+        case .unknownStatus: "Stato non riconosciuto"
+        case .invalidAmount: "Importo non valido"
+        case .invalidDate: "Data non valida"
+        case .missingID: "Riga senza identificativo"
+        case .zeroAmount: "Importo a zero"
+        case nil: "Riga non importabile"
         }
     }
 }

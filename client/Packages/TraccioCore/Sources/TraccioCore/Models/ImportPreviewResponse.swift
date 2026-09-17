@@ -32,13 +32,27 @@ public struct ImportRowResponse: Codable, Sendable, Equatable, Identifiable {
         case invalid
     }
 
+    /// Why an `invalid` row could not be turned into a movement — the
+    /// backend's stable `REASON_*` codes
+    /// (`domain/imports/models.py`). Like `Status`, an unrecognized wire
+    /// value fails to decode rather than silently becoming `nil` — a real
+    /// `nil` `reason` means "not an invalid row", a distinct case a
+    /// mis-decoded unknown reason must never be confused with.
+    public enum FailureReason: String, Codable, Sendable {
+        case invalidAmount = "invalid_amount"
+        case invalidDate = "invalid_date"
+        case missingID = "missing_id"
+        case unknownStatus = "unknown_status"
+        case amountSplitMismatch = "amount_split_mismatch"
+        case zeroAmount = "zero_amount"
+    }
+
     /// 1-based position of the source row.
     public let rowNumber: Int
     /// `new`, `alreadyImported`, or `invalid`.
     public let status: Status
-    /// A stable, value-free code for an `invalid` row (e.g.
-    /// `"amount_split_mismatch"`); `nil` otherwise.
-    public let reason: String?
+    /// Why an `invalid` row failed; `nil` otherwise.
+    public let reason: FailureReason?
     /// Which account this movement would land on; `nil` for an `invalid` row.
     public let targetAccountID: UUID?
     /// Signed minor units; `nil` for an `invalid` row.
@@ -52,7 +66,7 @@ public struct ImportRowResponse: Codable, Sendable, Equatable, Identifiable {
 
     /// Stable identity for `ForEach`: the row number plus the target (or the
     /// reason, for an invalid row), so a split row's two legs do not collide.
-    public var id: String { "\(rowNumber)-\(targetAccountID?.uuidString ?? reason ?? "?")" }
+    public var id: String { "\(rowNumber)-\(targetAccountID?.uuidString ?? reason?.rawValue ?? "?")" }
 
     private enum CodingKeys: String, CodingKey {
         case rowNumber = "row_number"
@@ -68,7 +82,7 @@ public struct ImportRowResponse: Codable, Sendable, Equatable, Identifiable {
     public init(
         rowNumber: Int,
         status: Status,
-        reason: String?,
+        reason: FailureReason?,
         targetAccountID: UUID?,
         amount: Int?,
         currency: String?,

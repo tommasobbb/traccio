@@ -60,7 +60,7 @@ struct ImportResponseTests {
         )
         // An invalid row carries only the row number, status, and reason.
         let invalid = response.rows[2]
-        #expect(invalid.reason == "amount_split_mismatch")
+        #expect(invalid.reason == .amountSplitMismatch)
         #expect(invalid.amount == nil)
         #expect(invalid.targetAccountID == nil)
         #expect(invalid.valueDate == nil)
@@ -71,6 +71,22 @@ struct ImportResponseTests {
             {
               "rows": [ {
                 "row_number": 1, "status": "maybe", "reason": null,
+                "target_account_id": null, "amount": null, "currency": null,
+                "value_date": null, "description": null
+              } ],
+              "summary": { "new": 0, "already_imported": 0, "invalid": 1, "total": 1 }
+            }
+            """
+        #expect(throws: DecodingError.self) {
+            try TraccioCore.jsonDecoder().decode(ImportPreviewResponse.self, from: Data(json.utf8))
+        }
+    }
+
+    @Test func rejectsAnUnknownFailureReason() {
+        let json = """
+            {
+              "rows": [ {
+                "row_number": 1, "status": "invalid", "reason": "a_new_backend_reason",
                 "target_account_id": null, "amount": null, "currency": null,
                 "value_date": null, "description": null
               } ],
