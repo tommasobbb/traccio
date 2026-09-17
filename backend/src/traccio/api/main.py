@@ -99,6 +99,15 @@ def create_app() -> FastAPI:
     configure_logging(log_level=settings.log_level, json_logs=settings.log_json)
 
     app_version = resolve_version()
+
+    # Fail loudly and early (.claude/rules/python.md): an unauthenticated
+    # API is the deliberate localhost default (ADR 0014), but "production"
+    # declared with no token would otherwise boot exposing every user's
+    # financial data behind nothing but a log line. Development and test
+    # environments are unaffected — only a literal "production" is gated.
+    if settings.environment == "production" and settings.api_token is None:
+        raise RuntimeError("TRACCIO_API_TOKEN is required when TRACCIO_ENVIRONMENT=production")
+
     app = FastAPI(title="Traccio", version=app_version, lifespan=_lifespan)
 
     # Log identifiers only, never financial data (see data-safety rules).
