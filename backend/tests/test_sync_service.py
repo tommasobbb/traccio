@@ -614,6 +614,73 @@ def test_sync_succeeds_even_if_detection_raises(monkeypatch: pytest.MonkeyPatch)
         assert row.suggested_category_id is None
 
 
+def test_sync_survives_a_database_error_inside_detection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A detection failure that actually invalidates the DB transaction must
+    not cost the sync its own already-upserted rows.
+
+    Unlike a plain Python exception raised before any write (the case above),
+    a failed ORM flush leaves the session needing a rollback before it can be
+    used again (a Core statement failure alone does not — only a flush does,
+    on every backend; a real Postgres deployment additionally aborts the
+    whole transaction on *any* failing statement, which SQLite does not
+    model, but the flush case reproduces the same "session unusable until
+    rolled back" condition here). Swallowing that without rolling back would
+    make the very next write in ``sync_connection`` — ``mark_connection_synced``
+    — raise ``PendingRollbackError`` and, had detection instead run last,
+    would take the caller's own ``session.commit()`` down with it, discarding
+    the accounts/transactions this sync just persisted. This is exactly the
+    regression ``_suggest_categories_for``'s ``SAVEPOINT`` isolation prevents.
+    """
+    import traccio.services.sync as sync_module
+
+    engine = _engine()
+    cipher = _cipher()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, expires_at=None)
+
+        def boom(*args: object, **kwargs: object) -> None:
+            # A duplicate primary key insert: a genuine ORM flush failure,
+            # which (unlike a bare Core statement error) leaves the session
+            # needing Session.rollback() before any further use, on every
+            # backend SQLAlchemy supports — the same state a real Postgres
+            # failure would leave it in.
+            session.add(
+                ConnectionRow(
+                    id=connection_id,
+                    user_id=_USER_ID,
+                    provider="duplicate",
+                    institution_name="TEST BANK 01",
+                    status=ConnectionStatus.PENDING,
+                    created_at=_NOW,
+                )
+            )
+            session.flush()
+
+        monkeypatch.setattr(sync_module, "set_suggested_categories", boom)
+
+        outcome = sync_connection(
+            session,
+            provider=FakeProvider(),
+            cipher=cipher,
+            user_id=_USER_ID,
+            connection_id=connection_id,
+            context=SyncContext(psu_present=True),
+            initial_history_days=730,
+            sync_overlap_days=7,
+            consent_warning_window_days=14,
+            now=_NOW,
+        )
+        # The bug this guards against: without a SAVEPOINT, either this call
+        # or the commit below raises sqlalchemy.exc.PendingRollbackError and
+        # loses everything the sync just persisted.
+        session.commit()
+
+        assert outcome.transactions_synced == 1
+        assert session.scalars(select(AccountRow)).one() is not None
+        row = session.scalars(select(TransactionRow)).one()
+        assert row.suggested_category_id is None
+
+
 def test_sync_with_no_upserted_transactions_skips_detection_entirely(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

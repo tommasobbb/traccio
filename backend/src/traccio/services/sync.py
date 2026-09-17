@@ -288,6 +288,15 @@ def _suggest_categories_for(
     user's rules on a sync that upserted nothing (a terminal row re-observed
     unchanged, or zero accounts).
 
+    Runs inside its own ``SAVEPOINT`` (:meth:`Session.begin_nested`), not the
+    outer transaction: a failure here must roll back only this function's own
+    writes, never the accounts and transactions the sync already upserted in
+    the same session. Swallowing the exception without doing that would leave
+    the session needing a rollback the caller doesn't know to issue — its
+    later ``commit()`` would then raise ``PendingRollbackError`` and discard
+    everything this sync persisted, exactly the failure "detection failures
+    do not fail the sync" is meant to prevent.
+
     Parameters
     ----------
     session : Session
@@ -303,9 +312,14 @@ def _suggest_categories_for(
     if not transactions:
         return
     try:
-        rules = list_rules(session, user_id)
-        suggestions = suggest_categories(transactions, rules)
-        assignments = {s.transaction_id: s.category_id for s in suggestions}
-        set_suggested_categories(session, user_id=user_id, assignments=assignments)
-    except Exception:
-        logger.warning("sync.detection_failed", user_id=str(user_id))
+        with session.begin_nested():
+            rules = list_rules(session, user_id)
+            suggestions = suggest_categories(transactions, rules)
+            assignments = {s.transaction_id: s.category_id for s in suggestions}
+            set_suggested_categories(session, user_id=user_id, assignments=assignments)
+    except Exception as exc:
+        # Value-free by construction: only the exception's type is logged,
+        # never str(exc), which could carry a rule's own free-text pattern.
+        logger.warning(
+            "sync.detection_failed", user_id=str(user_id), reason=type(exc).__name__
+        )
