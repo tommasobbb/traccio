@@ -128,14 +128,11 @@ an amount.
 | Token         | Hex (light) | Hex (dark) | Swift name              | Use                                   |
 | ------------- | --------- | --------- | ------------------------ | ---------------------------------------- |
 | Income        | `#248A3D` | `#30D158` | `Palette.income`         | Positive amounts (salary, reimbursement) |
-| Income tint   | `#E2F7E6` | `#0F2A17` | `Palette.incomeTint`     | Income icon tile background              |
 | Warning       | `#C2660A` | `#FF9F0A` | `Palette.warning`        | Consent-expiry banner icon               |
 | Warning ink   | `#8A4B08` | `#FFB454` | `Palette.warningInk`     | Consent-expiry banner title text (`warning` itself is too low-contrast for small bold text on `warningTint`) |
 | Warning tint  | `#FFF1DE` | `#3A2410` | `Palette.warningTint`    | Consent-expiry banner background         |
 | Warning border| `#FFD8A8` | `#6B4A1E` | `Palette.warningBorder`  | Consent-expiry banner border             |
 | Status dot    | `#FF9500` | `#FF9F0A` | `Palette.statusWarn`     | Connection status dot (expiring soon)    |
-| Category red  | `#D70015` | `#FF453A` | `Palette.categoryRed`    | Category icon only — never an amount     |
-| Category red tint | `#FFEDEC` | `#3A1210` | `Palette.categoryRedTint`| Category icon tile background        |
 
 `net` in the dashboard hero is `Palette.income` when positive and
 `Palette.ink` otherwise (`AmountText.Kind.net`). It used to take `Palette.accent`
@@ -455,7 +452,11 @@ a tracked cleanup in `tasks/backlog.md`).
 | Card           | 20     | `Radius.card` |
 | Row            | 16     | `Radius.row`  |
 | Icon tile      | 12     | `Radius.tile` |
-| Pill / chip    | 999 (fully rounded) | `Radius.pill` |
+
+A pill or chip (`PillButton`, `FilterChip`) is fully rounded via SwiftUI's
+`Capsule()` shape directly, not a numeric radius — there was a
+`Radius.pill = 999` token for this, but it had zero call sites (`git log -S`)
+and was removed 2026-09-18.
 
 ## Typography
 

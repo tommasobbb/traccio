@@ -58,7 +58,6 @@ enum Palette {
     /// dedicated color — it stays `ink` — so this is the only semantic color
     /// an amount can carry besides `accent` on a positive `net`.
     static let income = Color("Income", bundle: .main)
-    static let incomeTint = Color("IncomeTint", bundle: .main)
 
     static let warning = Color("Warning", bundle: .main)
     /// Consent-expiry banner title text — `warning` itself is too
@@ -67,10 +66,6 @@ enum Palette {
     static let warningTint = Color("WarningTint", bundle: .main)
     static let warningBorder = Color("WarningBorder", bundle: .main)
     static let statusWarn = Color("StatusWarn", bundle: .main)
-
-    /// Category iconography only — never an amount.
-    static let categoryRed = Color("CategoryRed", bundle: .main)
-    static let categoryRedTint = Color("CategoryRedTint", bundle: .main)
 
     // MARK: Separators and shadow
 
