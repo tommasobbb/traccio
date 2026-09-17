@@ -16,6 +16,7 @@ from traccio.db.base import Base
 from traccio.db.models import AccountRow, ConnectionRow, TransactionRow
 from traccio.db.repositories import (
     get_connection_credentials,
+    list_transactions_by_ids,
     list_transactions_in_period,
     mark_connection_synced,
     prune_stale_pending_transactions,
@@ -501,6 +502,59 @@ def test_upsert_transaction_same_key_on_different_accounts_are_separate() -> Non
     # Uniqueness is (account_id, stable_key): the same key on two accounts is two rows.
     assert len(rows) == 2
     assert {r.account_id for r in rows} == {account_a.id, account_b.id}
+
+
+def test_list_transactions_by_ids_returns_a_map_keyed_by_id() -> None:
+    engine = _engine()
+    user_id, connection_id = uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=user_id, connection_id=connection_id)
+        )
+        first = upsert_transaction(
+            session,
+            transaction=_transaction(account_id=account.id, user_id=user_id, stable_key="TX-A"),
+            now=_NOW,
+        )
+        second = upsert_transaction(
+            session,
+            transaction=_transaction(account_id=account.id, user_id=user_id, stable_key="TX-B"),
+            now=_NOW,
+        )
+        session.commit()
+
+        found = list_transactions_by_ids(session, user_id=user_id, ids=[first.id, second.id])
+
+    assert set(found) == {first.id, second.id}
+    assert found[first.id].stable_key == "TX-A"
+    assert found[second.id].stable_key == "TX-B"
+
+
+def test_list_transactions_by_ids_omits_another_users_transaction() -> None:
+    engine = _engine()
+    owner_id, other_id, connection_id = uuid4(), uuid4(), uuid4()
+
+    with Session(engine) as session:
+        account = upsert_account(
+            session, account=_account(user_id=owner_id, connection_id=connection_id)
+        )
+        mine = upsert_transaction(
+            session, transaction=_transaction(account_id=account.id, user_id=owner_id), now=_NOW
+        )
+        session.commit()
+
+        # Asking as a different user must not leak the row, the same
+        # scoping get_transaction already enforces for a single id.
+        found = list_transactions_by_ids(session, user_id=other_id, ids=[mine.id])
+
+    assert found == {}
+
+
+def test_list_transactions_by_ids_with_no_ids_makes_no_query() -> None:
+    engine = _engine()
+    with Session(engine) as session:
+        assert list_transactions_by_ids(session, user_id=uuid4(), ids=[]) == {}
 
 
 def test_get_connection_credentials_returns_active_ciphertext() -> None:

@@ -394,6 +394,43 @@ def get_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) ->
     return None if row is None else row_to_transaction(row)
 
 
+def list_transactions_by_ids(
+    session: Session, *, user_id: UUID, ids: Sequence[UUID]
+) -> dict[UUID, Transaction]:
+    """Return the transactions among ``ids`` that belong to ``user_id``, keyed by id.
+
+    One query for however many ids are asked for, in place of calling
+    :func:`get_transaction` once per id — the batch form a caller resolving a
+    whole page of rows (e.g. every advance's linked transaction) needs to
+    avoid an N+1. An id not owned by ``user_id``, or unknown, is simply absent
+    from the result rather than raising.
+
+    Parameters
+    ----------
+    session : Session
+        Active database session.
+    user_id : UUID
+        Owner the ids are scoped to.
+    ids : Sequence[UUID]
+        The transaction ids to fetch. An empty sequence short-circuits to an
+        empty result with no query.
+
+    Returns
+    -------
+    dict[UUID, Transaction]
+        Each found transaction, keyed by its id.
+    """
+    if not ids:
+        return {}
+    rows = session.scalars(
+        select(TransactionRow).where(
+            TransactionRow.id.in_(ids),
+            TransactionRow.user_id == user_id,
+        )
+    ).all()
+    return {row.id: row_to_transaction(row) for row in rows}
+
+
 def create_manual_transaction(
     session: Session,
     *,

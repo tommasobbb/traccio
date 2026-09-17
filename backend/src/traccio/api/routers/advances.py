@@ -47,6 +47,7 @@ from traccio.db.repositories import (
     get_transaction,
     list_advances,
     list_reimbursements,
+    list_transactions_by_ids,
     set_advance_status,
     set_transaction_role,
     sum_reimbursements_by_advance,
@@ -237,18 +238,22 @@ def advances(
         cross-advance summary.
     """
     found = list_advances(session, user_id)
-    # Both aggregates are one query for the whole page, never one per advance
-    # or one per participant (ADR 0004 / ADR 0012).
+    # All three are one query for the whole page, never one per advance or
+    # one per participant (ADR 0004 / ADR 0012) — including the linked
+    # transactions, batched here rather than one _load_transaction per advance.
     reimbursed_by_advance = sum_reimbursements_by_advance(session, user_id)
     reimbursed_by_participant = sum_reimbursements_by_participant(session, user_id)
+    transactions_by_id = list_transactions_by_ids(
+        session, user_id=user_id, ids=[advance.transaction_id for advance in found]
+    )
 
     advance_states: list[AdvanceState] = []
     participant_states_by_advance: list[list[ParticipantState]] = []
     responses: list[AdvanceResponse] = []
     for advance in found:
-        transaction = _load_transaction(
-            session, user_id=user_id, transaction_id=advance.transaction_id
-        )
+        transaction = transactions_by_id.get(advance.transaction_id)
+        if transaction is None:
+            raise HTTPException(status_code=404, detail="unknown transaction")
         # Applied here, where the transaction is already in hand: skipping the
         # advance before it reaches ``advance_states`` /
         # ``participant_states_by_advance`` keeps the rows and the summary in
