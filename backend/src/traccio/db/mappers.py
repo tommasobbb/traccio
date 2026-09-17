@@ -5,6 +5,11 @@ These functions are pure — no session, no I/O — which keeps them testable
 without a database. The only non-trivial mapping is :class:`Money`, which the
 domain carries as one value object and the schema stores as two columns
 (``amount`` + ``currency``).
+
+``UserRow`` has no mapper here: it has too little shape (an id, a timestamp,
+two scalar settings) to earn the indirection, and every write site
+(``db/repositories/settings.py``, ``db/seed_dev.py``) already constructs it
+directly.
 """
 
 from collections.abc import Sequence
@@ -22,7 +27,6 @@ from traccio.db.models import (
     SyncRunRow,
     TransactionRow,
     TransferRow,
-    UserRow,
 )
 from traccio.domain.models import (
     Account,
@@ -36,29 +40,8 @@ from traccio.domain.models import (
     SyncRun,
     Transaction,
     Transfer,
-    User,
 )
 from traccio.domain.money import Money
-
-
-def user_to_row(user: User) -> UserRow:
-    """Translate a domain :class:`User` into a :class:`UserRow`."""
-    return UserRow(
-        id=user.id,
-        created_at=user.created_at,
-        tracking_start_date=user.tracking_start_date,
-        meal_vouchers_enabled=user.meal_vouchers_enabled,
-    )
-
-
-def row_to_user(row: UserRow) -> User:
-    """Translate a :class:`UserRow` into a domain :class:`User`."""
-    return User(
-        id=row.id,
-        created_at=row.created_at,
-        tracking_start_date=row.tracking_start_date,
-        meal_vouchers_enabled=row.meal_vouchers_enabled,
-    )
 
 
 def connection_to_row(connection: Connection) -> ConnectionRow:

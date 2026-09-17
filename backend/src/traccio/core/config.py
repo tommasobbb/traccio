@@ -213,7 +213,7 @@ class Settings(BaseSettings):
     dev_user_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     # Fernet key for encrypting stored bank credentials; None until set so the
     # app still boots with no .env. Never logged. See core/crypto.py and ADR 0003.
-    encryption_key: str | None = None
+    encryption_key: str | None = Field(default=None, repr=False)
     # Enable Banking credentials. The application id is the JWT kid (not secret);
     # the private key is a secret file held outside the DB — only its path lives
     # here, never logged. Both None until configured. See docs/openbanking.md.

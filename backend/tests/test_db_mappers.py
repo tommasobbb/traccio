@@ -18,11 +18,9 @@ from traccio.db.mappers import (
     row_to_rule,
     row_to_sync_run,
     row_to_transaction,
-    row_to_user,
     rule_to_row,
     sync_run_to_row,
     transaction_to_row,
-    user_to_row,
 )
 from traccio.domain.enums import (
     AccountIcon,
@@ -35,13 +33,8 @@ from traccio.domain.enums import (
     SyncTrigger,
     TransactionStatus,
 )
-from traccio.domain.models import Account, Category, Connection, Rule, SyncRun, Transaction, User
+from traccio.domain.models import Account, Category, Connection, Rule, SyncRun, Transaction
 from traccio.domain.money import Money
-
-
-def test_user_round_trips() -> None:
-    user = User(id=uuid4(), created_at=datetime(2026, 1, 1, tzinfo=UTC))
-    assert row_to_user(user_to_row(user)) == user
 
 
 def test_connection_round_trips() -> None:

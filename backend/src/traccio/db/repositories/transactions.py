@@ -42,6 +42,13 @@ def upsert_transaction(session: Session, *, transaction: Transaction, now: datet
     dialect-specific upsert) so it behaves the same on SQLite and PostgreSQL. The
     caller owns the transaction boundary and commits.
 
+    The match is also scoped by ``user_id`` — root ``CLAUDE.md``'s "every query
+    is scoped by ``user_id``, no exceptions" applies here too, even though
+    ``account_id`` alone is already user-unique (an account belongs to exactly
+    one user, like :func:`~traccio.db.repositories.upsert_account`'s own
+    ``user_id`` scoping on ``identification_hash``): defense in depth costs
+    nothing on an indexed column.
+
     Conflict handling follows the domain's immutability rule
     (``docs/domain.md``):
 
@@ -83,6 +90,7 @@ def upsert_transaction(session: Session, *, transaction: Transaction, now: datet
     """
     existing = session.scalars(
         select(TransactionRow).where(
+            TransactionRow.user_id == transaction.user_id,
             TransactionRow.account_id == transaction.account_id,
             TransactionRow.stable_key == transaction.stable_key,
         )
