@@ -261,6 +261,24 @@ def test_reject_is_order_independent() -> None:
     assert client.get("/transfers/suggestions").json() == {"suggestions": []}
 
 
+def test_reject_the_same_transaction_twice_is_422() -> None:
+    """Unlike confirm (guarded transitively by validate_transfer_pair's
+    same-account check), reject had no such guard: naming one transaction
+    as both legs would persist a self-referential dismissal row."""
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    out_id, _ = _seed_pair(engine, user_id=dev_user_id)
+    client = _client(engine)
+
+    response = client.post(
+        "/transfers/reject",
+        json={"outgoing_transaction_id": out_id, "incoming_transaction_id": out_id},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "same_transaction"
+
+
 def test_confirm_unknown_transaction_is_404() -> None:
     dev_user_id = get_settings().dev_user_id
     engine = _sqlite_engine()

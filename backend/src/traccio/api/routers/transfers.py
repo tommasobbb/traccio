@@ -244,6 +244,8 @@ def reject_transfer(
     user_id : UUID
         The user the transactions belong to.
     """
+    if body.outgoing_transaction_id == body.incoming_transaction_id:
+        raise HTTPException(status_code=422, detail="same_transaction")
     outgoing = _load_leg(session, user_id=user_id, transaction_id=body.outgoing_transaction_id)
     incoming = _load_leg(session, user_id=user_id, transaction_id=body.incoming_transaction_id)
     create_transfer_dismissal(
