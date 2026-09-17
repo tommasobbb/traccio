@@ -84,12 +84,13 @@ struct TransferSuggestionCard: View {
         }
     }
 
-    /// Built once per card rather than per row: the class of formatter
-    /// `iso8601Date(from:)`'s doc comment warns against sharing (a mutable
-    /// global under strict concurrency) is `ISO8601DateFormatter`/date
-    /// *parsing*; a `View`'s own `static let` is not a shared mutable
-    /// global across concurrency domains the way a package-level one would
-    /// be — each `TransferSuggestionCard` value gets its own.
+    /// One `DateFormatter` shared by every `TransferSuggestionCard`, not one
+    /// per value — a `static let` is a single instance for the whole type,
+    /// same as at package scope. Safe here only because SwiftUI infers
+    /// `@MainActor` for every `View` conformance, so this non-`Sendable`
+    /// formatter is never actually touched from more than one isolation
+    /// domain; it is not safe by virtue of being `private` or `static` on a
+    /// value type, and does not generalize to a non-`View` type.
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.setLocalizedDateFormatFromTemplate("d MMMM")
