@@ -1,8 +1,16 @@
 import Foundation
 
+/// The dashboard endpoint — one slice of `APIClientProtocol`.
+public protocol DashboardAPI: Sendable {
+    func dashboardSummary(
+        start: Date?, end: Date?, granularity: BucketGranularity, tz: String?,
+        compareStart: Date?, compareEnd: Date?
+    ) async throws -> DashboardSummaryResponse
+}
+
 // Dashboard endpoint — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: DashboardAPI {
     /// Summarize real spending and income over a period, per currency.
     ///
     /// Mirrors `GET /dashboard/summary` (`docs/decisions/

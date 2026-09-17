@@ -1,8 +1,20 @@
 import Foundation
 
+/// Bank-connection endpoints — one slice of `APIClientProtocol`.
+public protocol ConnectionsAPI: Sendable {
+    func connections() async throws -> [ConnectionResponse]
+    func institutions(country: String) async throws -> [InstitutionResponse]
+    func startConnection(
+        institution: String, country: String, logo: String?
+    ) async throws -> StartConnectionResponse
+    func syncConnection(connectionID: UUID) async throws -> SyncResponse
+    func reauthorizeConnection(connectionID: UUID) async throws -> StartConnectionResponse
+    func backfillConnectionLogos() async throws -> BackfillLogosResponse
+}
+
 // Bank-connection endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: ConnectionsAPI {
     /// Fetch the caller's bank connections, oldest first.
     ///
     /// Returns

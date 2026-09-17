@@ -1,8 +1,19 @@
 import Foundation
 
+/// Transfer endpoints — one slice of `APIClientProtocol`.
+public protocol TransfersAPI: Sendable {
+    func transferSuggestions() async throws -> [TransferSuggestionResponse]
+    func transfers() async throws -> [TransferResponse]
+    func confirmTransfer(
+        outgoingID: UUID, incomingID: UUID, kind: TransferKind
+    ) async throws -> TransferResponse
+    func rejectTransfer(outgoingID: UUID, incomingID: UUID) async throws
+    func deleteTransfer(id: UUID) async throws
+}
+
 // Transfer endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: TransfersAPI {
     /// Suggest transfers among the caller's transactions.
     ///
     /// Mirrors `GET /transfers/suggestions`. Detection only *suggests* — see

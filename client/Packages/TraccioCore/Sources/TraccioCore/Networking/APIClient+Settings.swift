@@ -1,8 +1,16 @@
 import Foundation
 
+/// Settings / tracking-start endpoints — one slice of `APIClientProtocol`.
+public protocol SettingsAPI: Sendable {
+    func settings() async throws -> SettingsResponse
+    func setTrackingStart(_ date: CalendarDate?) async throws -> SettingsResponse
+    func setMealVouchersEnabled(_ enabled: Bool) async throws -> SettingsResponse
+    func trackingStartSuggestion() async throws -> TrackingStartSuggestionResponse
+}
+
 // Settings / tracking-start endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: SettingsAPI {
     /// Fetch the current user's settings (ADR 0024, ADR 0029).
     ///
     /// Mirrors `GET /settings`: the tracking-start floor — the day the

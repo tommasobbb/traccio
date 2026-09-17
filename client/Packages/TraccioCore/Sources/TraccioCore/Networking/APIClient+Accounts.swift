@@ -1,8 +1,25 @@
 import Foundation
 
+/// Account endpoints — one slice of `APIClientProtocol`. See the concrete
+/// methods below for behavior; `APIClient` conforms via the extension rather
+/// than duplicating documentation here.
+public protocol AccountsAPI: Sendable {
+    func accounts() async throws -> [AccountResponse]
+    func renameAccount(id: UUID, alias: String?) async throws -> AccountResponse
+    func setAccountAppearance(
+        id: UUID, color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse
+    func setAccountKind(id: UUID, kind: AccountKind) async throws -> AccountResponse
+    func createManualAccount(
+        alias: String, kind: AccountKind, currency: String,
+        color: PaletteColor?, icon: AccountIcon?
+    ) async throws -> AccountResponse
+    func deleteAccount(id: UUID) async throws
+}
+
 // Account endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: AccountsAPI {
     /// Fetch the caller's accounts, oldest first.
     ///
     /// Returns

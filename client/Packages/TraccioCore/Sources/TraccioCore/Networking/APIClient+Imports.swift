@@ -1,8 +1,14 @@
 import Foundation
 
+/// Import endpoints — one slice of `APIClientProtocol`.
+public protocol ImportsAPI: Sendable {
+    func importPreview(_ request: ImportPreviewRequest) async throws -> ImportPreviewResponse
+    func importCommit(_ request: ImportPreviewRequest) async throws -> ImportCommitResponse
+}
+
 // File-import endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: ImportsAPI {
     /// Preview a file import without writing anything (ADR 0023).
     ///
     /// Mirrors `POST /imports/preview`. Every movement the file would create is

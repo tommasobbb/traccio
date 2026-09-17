@@ -1,8 +1,24 @@
 import Foundation
 
+/// Event endpoints — one slice of `APIClientProtocol`.
+public protocol EventsAPI: Sendable {
+    func events() async throws -> [EventResponse]
+    func event(id: UUID) async throws -> EventResponse
+    func eventTransactions(id: UUID) async throws -> [TransactionResponse]
+    func eventSummary(id: UUID) async throws -> EventSummaryResponse
+    func eventSuggestions(id: UUID) async throws -> [TransactionResponse]
+    func createEvent(_ request: CreateEventRequest) async throws -> EventResponse
+    func updateEvent(id: UUID, _ request: UpdateEventRequest) async throws -> EventResponse
+    func deleteEvent(id: UUID) async throws
+    func closeEvent(id: UUID) async throws -> EventResponse
+    func reopenEvent(id: UUID) async throws -> EventResponse
+    func assignTransaction(eventID: UUID, transactionID: UUID) async throws
+    func unassignTransaction(eventID: UUID, transactionID: UUID) async throws
+}
+
 // Event endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: EventsAPI {
     /// Fetch the caller's events.
     ///
     /// Returns

@@ -1,8 +1,23 @@
 import Foundation
 
+/// Advance and reimbursement endpoints — one slice of `APIClientProtocol`.
+public protocol AdvancesAPI: Sendable {
+    func advances(status: AdvanceStatus?) async throws -> AdvancesResponse
+    func advance(id: UUID) async throws -> AdvanceResponse
+    func createAdvance(_ request: CreateAdvanceRequest) async throws -> AdvanceResponse
+    func deleteAdvance(id: UUID) async throws
+    func writeOffAdvance(id: UUID) async throws -> AdvanceResponse
+    func reopenAdvance(id: UUID) async throws -> AdvanceResponse
+    func createReimbursement(
+        advanceID: UUID, _ request: CreateReimbursementRequest
+    ) async throws -> ReimbursementResponse
+    func reimbursements(advanceID: UUID) async throws -> [ReimbursementResponse]
+    func deleteReimbursement(advanceID: UUID, id: UUID) async throws
+}
+
 // Advance and reimbursement endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: AdvancesAPI {
     /// Fetch the caller's advances and the cross-advance summary.
     ///
     /// Parameters

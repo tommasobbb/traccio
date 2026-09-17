@@ -1,8 +1,16 @@
 import Foundation
 
+/// Categorization-rule endpoints — one slice of `APIClientProtocol`.
+public protocol RulesAPI: Sendable {
+    func rules() async throws -> [RuleResponse]
+    func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse
+    func deleteRule(id: UUID) async throws
+    func applyRules() async throws -> ApplyRulesResponse
+}
+
 // Categorization-rule endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: RulesAPI {
     /// Fetch the caller's categorization rules, in evaluation order.
     ///
     /// Mirrors `GET /rules` (ADR 0005). The order is the order rules actually

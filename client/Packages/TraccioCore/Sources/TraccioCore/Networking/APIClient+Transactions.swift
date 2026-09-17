@@ -1,8 +1,24 @@
 import Foundation
 
+/// Transaction endpoints — one slice of `APIClientProtocol`.
+public protocol TransactionsAPI: Sendable {
+    func transaction(id: UUID) async throws -> TransactionResponse
+    func confirmCategory(transactionID: UUID, categoryID: UUID) async throws
+    func clearCategory(transactionID: UUID) async throws
+    func createManualTransaction(
+        _ request: CreateManualTransactionRequest
+    ) async throws -> TransactionResponse
+    func editManualTransaction(
+        id: UUID, _ request: EditManualTransactionRequest
+    ) async throws -> TransactionResponse
+    func deleteManualTransaction(id: UUID) async throws
+    func transactions(filter: TransactionFilter, limit: Int, offset: Int) async throws
+        -> [TransactionResponse]
+}
+
 // Transaction endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: TransactionsAPI {
     /// Fetch one transaction by id.
     ///
     /// Mirrors `GET /transactions/{id}`. Exists so a caller can re-fetch a

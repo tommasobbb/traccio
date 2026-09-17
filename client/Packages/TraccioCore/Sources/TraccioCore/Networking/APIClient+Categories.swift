@@ -1,8 +1,23 @@
 import Foundation
 
+/// Category endpoints — one slice of `APIClientProtocol`.
+public protocol CategoriesAPI: Sendable {
+    func categories() async throws -> [CategoryResponse]
+    func seedDefaultCategories() async throws -> [CategoryResponse]
+    func createCategory(
+        name: String, parentID: UUID?, color: PaletteColor?, icon: CategoryIcon?
+    ) async throws -> CategoryResponse
+    func renameCategory(id: UUID, name: String) async throws -> CategoryResponse
+    func setCategoryAppearance(
+        id: UUID, color: PaletteColor, icon: CategoryIcon?
+    ) async throws -> CategoryResponse
+    func moveCategory(id: UUID, parentID: UUID?) async throws -> CategoryResponse
+    func deleteCategory(id: UUID) async throws
+}
+
 // Category endpoints — split out of APIClient.swift (2026-09-07). The transport
 // helpers (`get`/`post`/`send`/`delete`) live on the primary file.
-extension APIClient {
+extension APIClient: CategoriesAPI {
     /// Fetch the caller's categories.
     ///
     /// Returns
