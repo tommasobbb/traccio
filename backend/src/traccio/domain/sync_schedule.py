@@ -184,3 +184,46 @@ def next_sync_eligible_at(
             return None
         return as_aware_utc(oldest_run_started_at) + timedelta(hours=24)
     return None
+
+
+def project_schedule(
+    *,
+    consent_state: ConsentState,
+    runs_last_24h: int,
+    oldest_run_started_at: datetime | None,
+    last_synced_at: datetime | None,
+    now: datetime,
+    budget_per_day: int,
+    min_interval_hours: int,
+) -> tuple[int, datetime | None]:
+    """Derive a connection's remaining sync budget and next eligible sync time.
+
+    Bundles the one extra line of arithmetic ``sync_budget_remaining`` needs
+    with :func:`next_sync_eligible_at`, since both are derived from exactly
+    the same inputs and ``GET /connections`` always wants them together — one
+    function means the two can never drift apart from each other or from
+    :func:`sync_decision` about which inputs matter. The caller gathers the
+    I/O (recent-run counts and timestamps); this function does none.
+
+    Parameters
+    ----------
+    consent_state, runs_last_24h, oldest_run_started_at, last_synced_at, now,
+    budget_per_day, min_interval_hours
+        Forwarded to :func:`next_sync_eligible_at` — see its docstring.
+
+    Returns
+    -------
+    tuple[int, datetime or None]
+        ``(sync_budget_remaining, next_sync_at)``.
+    """
+    budget_remaining = max(0, budget_per_day - runs_last_24h)
+    next_sync_at = next_sync_eligible_at(
+        consent_state=consent_state,
+        runs_last_24h=runs_last_24h,
+        oldest_run_started_at=oldest_run_started_at,
+        last_synced_at=last_synced_at,
+        now=now,
+        budget_per_day=budget_per_day,
+        min_interval_hours=min_interval_hours,
+    )
+    return budget_remaining, next_sync_at

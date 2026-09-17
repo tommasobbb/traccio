@@ -52,7 +52,12 @@ from traccio.domain.models import (
 )
 from traccio.domain.money import CurrencyCode, Money
 from traccio.domain.rules import rule_matches
-from traccio.domain.sync_schedule import SyncDecision, next_sync_eligible_at, sync_decision
+from traccio.domain.sync_schedule import (
+    SyncDecision,
+    next_sync_eligible_at,
+    project_schedule,
+    sync_decision,
+)
 from traccio.domain.tracking import suggest_tracking_start
 
 __all__ = [
@@ -103,6 +108,7 @@ __all__ = [
     "effective_category",
     "event_total",
     "next_sync_eligible_at",
+    "project_schedule",
     "rule_matches",
     "split_meal_voucher_transactions",
     "suggest_tracking_start",

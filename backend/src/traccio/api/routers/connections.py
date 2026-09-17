@@ -58,7 +58,7 @@ from traccio.db.session import get_session
 from traccio.domain.consent import consent_state as derive_consent_state
 from traccio.domain.enums import ConnectionStatus
 from traccio.domain.models import Connection
-from traccio.domain.sync_schedule import next_sync_eligible_at
+from traccio.domain.sync_schedule import project_schedule
 from traccio.providers.base import BankProvider, ProviderError, SyncContext
 from traccio.services.sync import (
     ConnectionNotFoundError,
@@ -417,7 +417,10 @@ def _scheduler_projection(
     Both are ``None`` when the scheduler is disabled — there is nothing
     meaningful to show if nothing is scheduling syncs
     (``ConnectionResponse.from_domain``'s docstring). Derived fresh on every
-    call, never stored (ADR 0006's discipline, same as ``consent_state``).
+    call, never stored (ADR 0006's discipline, same as ``consent_state``). The
+    arithmetic itself is :func:`~traccio.domain.sync_schedule.project_schedule`;
+    this function only gathers the I/O it needs (recent-run counts and
+    timestamps) from the current session.
 
     Parameters
     ----------
@@ -446,8 +449,7 @@ def _scheduler_projection(
     state = derive_consent_state(
         connection, now=now, warning_window_days=settings.consent_warning_window_days
     )
-    budget_remaining = max(0, settings.background_sync_budget_per_day - runs_last_24h)
-    next_sync_at = next_sync_eligible_at(
+    return project_schedule(
         consent_state=state,
         runs_last_24h=runs_last_24h,
         oldest_run_started_at=oldest_run_started_at,
@@ -456,7 +458,6 @@ def _scheduler_projection(
         budget_per_day=settings.background_sync_budget_per_day,
         min_interval_hours=settings.sync_min_interval_hours,
     )
-    return budget_remaining, next_sync_at
 
 
 @router.post("/connections/{connection_id}/reauthorize", response_model=StartConnectionResponse)

@@ -12,7 +12,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from traccio.domain import ConsentState, SyncDecision, next_sync_eligible_at, sync_decision
+from traccio.domain import (
+    ConsentState,
+    SyncDecision,
+    next_sync_eligible_at,
+    project_schedule,
+    sync_decision,
+)
 from traccio.domain.enums import SyncRunOutcome
 
 _NOW = datetime(2026, 8, 24, 12, 0, 0, tzinfo=UTC)
@@ -195,3 +201,52 @@ def test_next_eligible_agrees_with_sync_decision_on_which_gate_blocks() -> None:
     )
     # If interval had won instead, this would equal _NOW + min_interval_hours.
     assert result == oldest + timedelta(hours=24)
+
+
+# --- project_schedule ---
+
+
+def test_project_schedule_full_budget_and_no_next_sync_when_due() -> None:
+    budget_remaining, next_sync_at = project_schedule(
+        consent_state=ConsentState.ACTIVE,
+        runs_last_24h=0,
+        oldest_run_started_at=None,
+        last_synced_at=None,
+        now=_NOW,
+        budget_per_day=_BUDGET_PER_DAY,
+        min_interval_hours=_MIN_INTERVAL_HOURS,
+    )
+    assert budget_remaining == _BUDGET_PER_DAY
+    assert next_sync_at is None
+
+
+def test_project_schedule_remaining_budget_never_negative() -> None:
+    """More recorded runs than the daily budget can happen (a manual sync on
+    top of scheduler runs); the remainder floors at zero, never negative."""
+    budget_remaining, _ = project_schedule(
+        consent_state=ConsentState.ACTIVE,
+        runs_last_24h=_BUDGET_PER_DAY + 3,
+        oldest_run_started_at=_NOW - timedelta(hours=1),
+        last_synced_at=None,
+        now=_NOW,
+        budget_per_day=_BUDGET_PER_DAY,
+        min_interval_hours=_MIN_INTERVAL_HOURS,
+    )
+    assert budget_remaining == 0
+
+
+def test_project_schedule_next_sync_at_agrees_with_next_sync_eligible_at() -> None:
+    """The two halves of the tuple must never disagree about *why* a
+    connection isn't due — both derived from sync_decision internally."""
+    oldest = _NOW - timedelta(hours=20)
+    budget_remaining, next_sync_at = project_schedule(
+        consent_state=ConsentState.ACTIVE,
+        runs_last_24h=_BUDGET_PER_DAY,
+        oldest_run_started_at=oldest,
+        last_synced_at=_NOW,
+        now=_NOW,
+        budget_per_day=_BUDGET_PER_DAY,
+        min_interval_hours=_MIN_INTERVAL_HOURS,
+    )
+    assert budget_remaining == 0
+    assert next_sync_at == oldest + timedelta(hours=24)
