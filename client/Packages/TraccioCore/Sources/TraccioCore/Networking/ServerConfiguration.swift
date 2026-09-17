@@ -38,7 +38,18 @@ public struct ServerConfigurationStore: ServerConfigurationStoring {
     /// Matches the value `APIClient+Dev.swift` hardcoded before ADR 0014, so
     /// a fresh install with nothing configured still points at local
     /// `make run` — zero-config local development is unchanged.
-    public static let defaultBaseURL = URL(string: "http://localhost:8000")!
+    public static let defaultBaseURL: URL = {
+        // `URL(string:)` is failable only because the general initializer
+        // must handle arbitrary, possibly-malformed input; this literal is
+        // fixed and always parses, so a nil here would mean the literal
+        // itself was mistyped — a programmer error to fail loudly on
+        // (`.claude/rules/python.md`'s "fail loudly and early" applied to
+        // Swift), not a force-unwrap of genuinely optional input.
+        guard let url = URL(string: "http://localhost:8000") else {
+            preconditionFailure("hardcoded default base URL failed to parse")
+        }
+        return url
+    }()
 
     public static let shared = ServerConfigurationStore()
 

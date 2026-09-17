@@ -453,11 +453,16 @@ struct AccountsView: View {
 }
 
 extension ConnectionGroup {
+    /// Fixed identity for the single orphaned-accounts group — `UUID(uuid:)`
+    /// takes its 16 bytes directly and, unlike `UUID(uuidString:)`, cannot
+    /// fail to parse, so no force-unwrap is needed to make an all-zero UUID.
+    private static let orphanGroupID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+
     /// Identity for `ForEach`: the connection's id, or a fixed sentinel for
     /// the single orphaned-accounts group (`connection == nil` can only
     /// occur once per list, per `groupByConnection`'s contract).
     fileprivate var groupID: UUID {
-        connection?.id ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        connection?.id ?? Self.orphanGroupID
     }
 }
 
