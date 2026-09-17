@@ -70,7 +70,7 @@ def _load_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event:
     """
     event = get_event(session, user_id=user_id, event_id=event_id)
     if event is None:
-        raise HTTPException(status_code=404, detail="unknown event")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown event")
     return event
 
 
@@ -208,7 +208,7 @@ def update_event_endpoint(
         end_date=body.end_date,
     )
     if updated is None:
-        raise HTTPException(status_code=404, detail="unknown event")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown event")
     session.commit()
     logger.info("events.update", event_id=str(updated.id))
     return _event_response(session, user_id=user_id, event=updated)
@@ -405,9 +405,7 @@ def event_summary(
     categories = list_categories(session, user_id)
     parents = {category.id: category.parent_id for category in categories}
     display = {
-        category.id: CategoryDisplay(
-            name=category.name, color=category.color, icon=category.icon
-        )
+        category.id: CategoryDisplay(name=category.name, color=category.color, icon=category.icon)
         for category in categories
     }
 
@@ -443,7 +441,7 @@ def remove_event(
     """
     deleted = delete_event(session, user_id=user_id, event_id=event_id)
     if deleted is None:
-        raise HTTPException(status_code=404, detail="unknown event")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown event")
     session.commit()
     logger.info("events.delete", event_id=str(event_id))
 
@@ -477,18 +475,22 @@ def assign_transaction(
     _load_event(session, user_id=user_id, event_id=event_id)
     transaction = get_transaction(session, user_id=user_id, transaction_id=body.transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
 
     current = get_transaction_event_id(session, user_id=user_id, transaction_id=transaction.id)
     if current is not None and current != event_id:
-        raise HTTPException(status_code=409, detail="transaction already in another event")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="transaction already in another event"
+        )
 
     # Keep every event single-currency: its total is a sum of amounts in one
     # currency (no FX in Traccio). Every member shares the transaction's currency,
     # so comparing against any existing member is enough.
     members = list_event_members(session, user_id=user_id, event_id=event_id)
     if members and members[0].money.currency != transaction.money.currency:
-        raise HTTPException(status_code=422, detail="mixed_currency")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="mixed_currency"
+        )
 
     assign_transaction_to_event(
         session, user_id=user_id, event_id=event_id, transaction_id=transaction.id
@@ -529,7 +531,9 @@ def unassign_transaction(
     if current != event_id:
         # Either the transaction is unknown/not the caller's (current is None) or
         # it belongs to a different event — in every case it is not a member here.
-        raise HTTPException(status_code=404, detail="transaction not in event")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="transaction not in event"
+        )
 
     unassign_transaction_from_event(
         session, user_id=user_id, event_id=event_id, transaction_id=transaction_id

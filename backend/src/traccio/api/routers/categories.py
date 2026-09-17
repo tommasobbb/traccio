@@ -84,7 +84,7 @@ def _load_category(session: Session, *, user_id: UUID, category_id: UUID) -> Cat
     """
     category = get_category(session, user_id=user_id, category_id=category_id)
     if category is None:
-        raise HTTPException(status_code=404, detail="unknown category")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown category")
     return category
 
 
@@ -119,22 +119,28 @@ def create_category_endpoint(
     try:
         name = normalize_category_name(body.name)
     except CategoryError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     parent: Category | None = None
     if body.parent_id is not None:
         parent = get_category(session, user_id=user_id, category_id=body.parent_id)
         if parent is None:
-            raise HTTPException(status_code=404, detail="unknown parent category")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="unknown parent category"
+            )
         try:
             validate_parent(
                 category_id=None, parent_id=body.parent_id, parent_parent_id=parent.parent_id
             )
         except CategoryError as exc:
-            raise HTTPException(status_code=422, detail=exc.reason) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+            ) from exc
 
     if category_name_exists(session, user_id=user_id, name=name):
-        raise HTTPException(status_code=409, detail="category_name_taken")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="category_name_taken")
 
     color = body.color
     if color is None:
@@ -243,10 +249,12 @@ def rename_category_endpoint(
     try:
         name = normalize_category_name(body.name)
     except CategoryError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     if name != existing.name and category_name_exists(session, user_id=user_id, name=name):
-        raise HTTPException(status_code=409, detail="category_name_taken")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="category_name_taken")
 
     rename_category(session, user_id=user_id, category_id=category_id, name=name)
     session.commit()
@@ -333,15 +341,21 @@ def move_category_endpoint(
     if body.parent_id is not None:
         parent = get_category(session, user_id=user_id, category_id=body.parent_id)
         if parent is None:
-            raise HTTPException(status_code=404, detail="unknown parent category")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="unknown parent category"
+            )
         try:
             validate_parent(
                 category_id=category_id, parent_id=body.parent_id, parent_parent_id=parent.parent_id
             )
         except CategoryError as exc:
-            raise HTTPException(status_code=422, detail=exc.reason) from exc
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+            ) from exc
         if category_has_children(session, user_id=user_id, category_id=category_id):
-            raise HTTPException(status_code=409, detail="category_has_children")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="category_has_children"
+            )
 
     move_category(session, user_id=user_id, category_id=category_id, parent_id=body.parent_id)
     session.commit()
@@ -378,9 +392,9 @@ def remove_category(
     """
     _load_category(session, user_id=user_id, category_id=category_id)
     if category_has_children(session, user_id=user_id, category_id=category_id):
-        raise HTTPException(status_code=409, detail="category_has_children")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="category_has_children")
     if category_is_confirmed_on_any_transaction(session, user_id=user_id, category_id=category_id):
-        raise HTTPException(status_code=409, detail="category_in_use")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="category_in_use")
 
     delete_category(session, user_id=user_id, category_id=category_id)
     session.commit()

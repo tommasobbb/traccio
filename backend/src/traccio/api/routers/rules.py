@@ -57,7 +57,7 @@ def _load_rule(session: Session, *, user_id: UUID, rule_id: UUID) -> Rule:
     """
     rule = get_rule(session, user_id=user_id, rule_id=rule_id)
     if rule is None:
-        raise HTTPException(status_code=404, detail="unknown rule")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown rule")
     return rule
 
 
@@ -90,15 +90,17 @@ def create_rule_endpoint(
     """
     category = get_category(session, user_id=user_id, category_id=body.category_id)
     if category is None:
-        raise HTTPException(status_code=404, detail="unknown category")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown category")
 
     try:
         pattern = normalize_rule_pattern(body.pattern)
     except RuleError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     if rule_exists(session, user_id=user_id, match_kind=body.match_kind, pattern=pattern):
-        raise HTTPException(status_code=409, detail="rule_already_exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="rule_already_exists")
 
     rule = Rule(
         user_id=user_id, category_id=body.category_id, match_kind=body.match_kind, pattern=pattern

@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
@@ -137,7 +137,9 @@ def list_institutions(
     try:
         institutions = provider.list_institutions(country=country)
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail="provider institution lookup failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="provider institution lookup failed"
+        ) from exc
 
     # Log the country and a count only — institution names are public, but
     # there is nothing this handler needs to log beyond that (data-safety
@@ -183,7 +185,9 @@ def start_connection(
             institution=body.institution, country=body.country, redirect_url=redirect_url
         )
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail="provider authorization failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="provider authorization failed"
+        ) from exc
 
     connection = Connection(
         user_id=user_id,
@@ -238,10 +242,14 @@ def connection_callback(
         A small success page for the browser tab.
     """
     if state is None:
-        raise HTTPException(status_code=404, detail="unknown or expired authorization")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown or expired authorization"
+        )
     connection_id = find_pending_connection_id(session, user_id=user_id, auth_state=state)
     if connection_id is None:
-        raise HTTPException(status_code=404, detail="unknown or expired authorization")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown or expired authorization"
+        )
 
     # Only forward the parameters actually present; the adapter validates state
     # and surfaces any bank error.
@@ -258,7 +266,9 @@ def connection_callback(
     try:
         result = provider.complete_authorization(session_reference=state, callback_payload=payload)
     except ProviderError as exc:
-        raise HTTPException(status_code=400, detail="authorization failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="authorization failed"
+        ) from exc
 
     activate_connection(
         session,
@@ -325,13 +335,19 @@ def sync_connection(
             now=datetime.now(UTC),
         )
     except ConnectionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="unknown connection") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown connection"
+        ) from exc
     except ConsentExpiredError as exc:
-        raise HTTPException(status_code=409, detail="consent_expired") from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="consent_expired") from exc
     except CredentialsUnavailableError as exc:
-        raise HTTPException(status_code=404, detail="unknown or inactive connection") from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="unknown or inactive connection"
+        ) from exc
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail="provider sync failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="provider sync failed"
+        ) from exc
 
     session.commit()
 
@@ -479,11 +495,11 @@ def reauthorize_connection(
     """
     connection = get_connection(session, user_id=user_id, connection_id=connection_id)
     if connection is None:
-        raise HTTPException(status_code=404, detail="unknown connection")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown connection")
     if connection.country is None:
         # Created before `country` was persisted; nothing to re-authorize with.
         # The client falls back to POST /connections for a fresh connection.
-        raise HTTPException(status_code=409, detail="country_unknown")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="country_unknown")
 
     redirect_url = get_settings().enable_banking_redirect_url
     try:
@@ -493,7 +509,9 @@ def reauthorize_connection(
             redirect_url=redirect_url,
         )
     except ProviderError as exc:
-        raise HTTPException(status_code=502, detail="provider authorization failed") from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="provider authorization failed"
+        ) from exc
 
     set_connection_auth_state(
         session, user_id=user_id, connection_id=connection_id, auth_state=start.session_reference
@@ -564,7 +582,8 @@ def backfill_connection_logos(
                 institutions = provider.list_institutions(country=country)
             except ProviderError as exc:
                 raise HTTPException(
-                    status_code=502, detail="provider institution lookup failed"
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="provider institution lookup failed",
                 ) from exc
             logos_by_country[country] = {
                 _normalize_institution_name(institution.name): institution.logo

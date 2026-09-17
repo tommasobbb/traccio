@@ -126,10 +126,14 @@ def transactions(
         The requested page of the user's transactions, most recent first.
     """
     if category_id is not None and uncategorized:
-        raise HTTPException(status_code=422, detail="conflicting_category_filter")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="conflicting_category_filter"
+        )
     search_term = normalize_search_term(q)
     if search_term is not None and len(search_term) > MAX_SEARCH_TERM_LENGTH:
-        raise HTTPException(status_code=422, detail="search_too_long")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="search_too_long"
+        )
     category_ids: list[UUID] | None = None
     if category_id is not None:
         # Expand a root into itself + its children (a no-op list if
@@ -208,7 +212,7 @@ def transaction(
     """
     found = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if found is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
 
     # Mirrors the list endpoint's advance-share resolution above, scoped to one
     # row: an advance transaction's effective_amount depends on its own_share,
@@ -259,13 +263,13 @@ def create_manual_transaction_endpoint(
     """
     account = get_account(session, user_id=user_id, account_id=body.account_id)
     if account is None:
-        raise HTTPException(status_code=404, detail="unknown account")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown account")
     if account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="account_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_manual")
     if body.confirmed_category_id is not None:
         category = get_category(session, user_id=user_id, category_id=body.confirmed_category_id)
         if category is None:
-            raise HTTPException(status_code=404, detail="unknown category")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown category")
 
     new_id = uuid4()
     transaction = Transaction(
@@ -322,10 +326,10 @@ def edit_manual_transaction_endpoint(
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     account = get_account(session, user_id=user_id, account_id=transaction.account_id)
     if account is None or account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="transaction_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="transaction_not_manual")
 
     update_manual_transaction(
         session,
@@ -340,7 +344,7 @@ def edit_manual_transaction_endpoint(
     logger.info("transactions.edit_manual", transaction_id=str(transaction_id))
     edited = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if edited is None:  # pragma: no cover - just deleted under us
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     return TransactionResponse.from_domain(edited)
 
 
@@ -369,12 +373,12 @@ def delete_manual_transaction_endpoint(
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     account = get_account(session, user_id=user_id, account_id=transaction.account_id)
     if account is None or account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="transaction_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="transaction_not_manual")
     if transaction_is_linked(session, user_id=user_id, transaction_id=transaction_id):
-        raise HTTPException(status_code=409, detail="transaction_in_use")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="transaction_in_use")
 
     delete_manual_transaction(session, user_id=user_id, transaction_id=transaction_id)
     session.commit()
@@ -412,10 +416,10 @@ def confirm_transaction_category(
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     category = get_category(session, user_id=user_id, category_id=body.category_id)
     if category is None:
-        raise HTTPException(status_code=404, detail="unknown category")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown category")
 
     set_confirmed_category(
         session, user_id=user_id, transaction_id=transaction_id, category_id=body.category_id
@@ -447,7 +451,7 @@ def clear_transaction_category(
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
 
     set_confirmed_category(
         session, user_id=user_id, transaction_id=transaction_id, category_id=None

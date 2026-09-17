@@ -60,7 +60,7 @@ def _load_account(session: Session, *, user_id: UUID, account_id: UUID) -> Accou
     """
     account = get_account(session, user_id=user_id, account_id=account_id)
     if account is None:
-        raise HTTPException(status_code=404, detail="unknown account")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown account")
     return account
 
 
@@ -124,7 +124,9 @@ def create_manual_account_endpoint(
     try:
         alias = normalize_account_alias(body.alias)
     except AccountError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
     # normalize_account_alias only returns None for a None input; the schema
     # types alias as a required str, so a blank one already raised above.
     account = Account(
@@ -173,7 +175,9 @@ def rename_account_endpoint(
     try:
         alias = normalize_account_alias(body.alias)
     except AccountError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     set_account_alias(session, user_id=user_id, account_id=account_id, alias=alias)
     session.commit()
@@ -257,7 +261,7 @@ def set_account_kind_endpoint(
     """
     account = _load_account(session, user_id=user_id, account_id=account_id)
     if account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="account_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_manual")
 
     set_account_kind(session, user_id=user_id, account_id=account_id, kind=body.kind)
     session.commit()
@@ -292,9 +296,9 @@ def delete_manual_account_endpoint(
     """
     account = _load_account(session, user_id=user_id, account_id=account_id)
     if account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="account_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_manual")
     if account_has_transactions(session, user_id=user_id, account_id=account_id):
-        raise HTTPException(status_code=409, detail="account_not_empty")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_empty")
 
     delete_manual_account(session, user_id=user_id, account_id=account_id)
     session.commit()

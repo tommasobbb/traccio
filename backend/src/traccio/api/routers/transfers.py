@@ -69,7 +69,7 @@ def _load_leg(session: Session, *, user_id: UUID, transaction_id: UUID) -> Trans
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     return transaction
 
 
@@ -192,13 +192,17 @@ def confirm_transfer(
     # A transaction belongs to at most one transfer.
     for leg in (outgoing, incoming):
         if transfer_exists_for_transaction(session, user_id=user_id, transaction_id=leg.id):
-            raise HTTPException(status_code=409, detail="transaction already in a transfer")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="transaction already in a transfer"
+            )
 
     try:
         validate_transfer_pair(outgoing, incoming, kind=body.kind)
     except TransferPairError as exc:
         # ``exc.reason`` is a stable, value-free code (no financial data).
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     transfer = Transfer(
         user_id=user_id,
@@ -245,7 +249,9 @@ def reject_transfer(
         The user the transactions belong to.
     """
     if body.outgoing_transaction_id == body.incoming_transaction_id:
-        raise HTTPException(status_code=422, detail="same_transaction")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="same_transaction"
+        )
     outgoing = _load_leg(session, user_id=user_id, transaction_id=body.outgoing_transaction_id)
     incoming = _load_leg(session, user_id=user_id, transaction_id=body.incoming_transaction_id)
     create_transfer_dismissal(
@@ -283,7 +289,7 @@ def remove_transfer(
     """
     transfer = delete_transfer(session, user_id=user_id, transfer_id=transfer_id)
     if transfer is None:
-        raise HTTPException(status_code=404, detail="unknown transfer")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transfer")
     for transaction_id in (transfer.outgoing_transaction_id, transfer.incoming_transaction_id):
         set_transaction_role(
             session, user_id=user_id, transaction_id=transaction_id, role=TransactionRole.PERSONAL

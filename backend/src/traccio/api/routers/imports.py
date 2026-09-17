@@ -73,9 +73,9 @@ def _load_manual_account(session: Session, *, user_id: UUID, account_id: UUID) -
     """Load a manual account owned by the user, or raise the right error."""
     account = get_account(session, user_id=user_id, account_id=account_id)
     if account is None:
-        raise HTTPException(status_code=404, detail="unknown account")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown account")
     if account_source(account) is not AccountSource.MANUAL:
-        raise HTTPException(status_code=409, detail="account_not_manual")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_manual")
     return account
 
 
@@ -90,33 +90,46 @@ def _prepare(body: ImportPreviewRequest, session: Session, user_id: UUID) -> _Pr
     try:
         content = base64.b64decode(body.content_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="invalid_base64") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="invalid_base64"
+        ) from exc
     if len(content) > get_settings().import_max_bytes:
-        raise HTTPException(status_code=413, detail="file_too_large")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="file_too_large")
 
     profile = PROFILES.get(body.profile)
     if profile is None:
-        raise HTTPException(status_code=422, detail="unknown_profile")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="unknown_profile"
+        )
 
     primary = _load_manual_account(session, user_id=user_id, account_id=body.account_id)
     voucher: Account | None = None
     if body.voucher_account_id is not None:
         if body.voucher_account_id == body.account_id:
-            raise HTTPException(status_code=422, detail="voucher_account_same_as_primary")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="voucher_account_same_as_primary",
+            )
         voucher = _load_manual_account(session, user_id=user_id, account_id=body.voucher_account_id)
 
     try:
         header, rows = decode_rows(content, filename=body.filename)
     except ImportDecodeError as exc:
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
     resolution = resolve_columns(header, profile=profile)
     if resolution.missing:
-        raise HTTPException(status_code=422, detail="missing_columns")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="missing_columns"
+        )
 
     parsed = parse_import(remap_rows(rows, resolution.columns), profile=profile)
 
     if any(m.target == TARGET_VOUCHER for m in parsed.movements) and voucher is None:
-        raise HTTPException(status_code=422, detail="voucher_account_required")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="voucher_account_required"
+        )
 
     account_ids = [primary.id] + ([voucher.id] if voucher is not None else [])
     existing = imported_stable_keys(session, user_id=user_id, account_ids=account_ids)

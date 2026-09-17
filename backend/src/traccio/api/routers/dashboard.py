@@ -16,7 +16,7 @@ from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from traccio.api.deps import (
@@ -233,13 +233,17 @@ def dashboard_summary(
         ``compare_start``/``compare_end`` is given.
     """
     if (compare_start is None) != (compare_end is None):
-        raise HTTPException(status_code=422, detail="incomplete_comparison_period")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="incomplete_comparison_period"
+        )
 
     zone: tzinfo
     try:
         zone = ZoneInfo(tz)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=422, detail="unknown_timezone") from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="unknown_timezone"
+        ) from exc
 
     # The tracking-start floor (ADR 0024) is raised into the requested period
     # *here*, so the same clamped start drives both the transaction fetch and

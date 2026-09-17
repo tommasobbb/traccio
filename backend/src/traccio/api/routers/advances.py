@@ -85,7 +85,7 @@ def _load_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) 
     """
     transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
     if transaction is None:
-        raise HTTPException(status_code=404, detail="unknown transaction")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
     return transaction
 
 
@@ -156,7 +156,9 @@ def create_advance_endpoint(
     transaction = _load_transaction(session, user_id=user_id, transaction_id=body.transaction_id)
 
     if advance_exists_for_transaction(session, user_id=user_id, transaction_id=transaction.id):
-        raise HTTPException(status_code=409, detail="transaction already has an advance")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="transaction already has an advance"
+        )
 
     # own_share and participant amounts are always in the transaction's currency.
     currency = transaction.money.currency
@@ -165,7 +167,9 @@ def create_advance_endpoint(
         validate_advance(transaction, own_share)
     except AdvanceError as exc:
         # ``exc.reason`` is a stable, value-free code (no financial data).
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     advance = Advance(
         user_id=user_id,
@@ -253,6 +257,10 @@ def advances(
     for advance in found:
         transaction = transactions_by_id.get(advance.transaction_id)
         if transaction is None:
+            # status_code=404, spelled as a literal: `status` in this
+            # function's scope is the AdvanceStatus query parameter above,
+            # shadowing the fastapi.status module every other 404 in this
+            # file uses.
             raise HTTPException(status_code=404, detail="unknown transaction")
         # Applied here, where the transaction is already in hand: skipping the
         # advance before it reaches ``advance_states`` /
@@ -324,7 +332,7 @@ def advance(
     """
     found = get_advance(session, user_id=user_id, advance_id=advance_id)
     if found is None:
-        raise HTTPException(status_code=404, detail="unknown advance")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown advance")
     transaction = _load_transaction(session, user_id=user_id, transaction_id=found.transaction_id)
     reimbursed, participant_states = _reimbursement_derivations(
         session, user_id=user_id, advance=found
@@ -358,7 +366,7 @@ def remove_advance(
     """
     deleted = delete_advance(session, user_id=user_id, advance_id=advance_id)
     if deleted is None:
-        raise HTTPException(status_code=404, detail="unknown advance")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown advance")
     set_transaction_role(
         session,
         user_id=user_id,
@@ -373,7 +381,7 @@ def _load_advance(session: Session, *, user_id: UUID, advance_id: UUID) -> Advan
     """Load an advance owned by the user, or raise ``404``."""
     advance = get_advance(session, user_id=user_id, advance_id=advance_id)
     if advance is None:
-        raise HTTPException(status_code=404, detail="unknown advance")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown advance")
     return advance
 
 
@@ -427,7 +435,9 @@ def create_reimbursement_endpoint(
     """
     advance = _load_advance(session, user_id=user_id, advance_id=advance_id)
     if advance.status is AdvanceStatus.WRITTEN_OFF:
-        raise HTTPException(status_code=422, detail="advance_written_off")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="advance_written_off"
+        )
 
     currency = advance.own_share.currency
     amount = Money(amount=body.amount, currency=currency)
@@ -440,13 +450,15 @@ def create_reimbursement_endpoint(
     if body.participant_id is not None and not any(
         p.id == body.participant_id for p in advance.participants
     ):
-        raise HTTPException(status_code=404, detail="unknown_participant")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown_participant")
 
     try:
         validate_reimbursement(amount, currency, transaction=linked)
     except ReimbursementError as exc:
         # ``exc.reason`` is a stable, value-free code (no financial data).
-        raise HTTPException(status_code=422, detail=exc.reason) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.reason
+        ) from exc
 
     reimbursement = Reimbursement(
         user_id=user_id,
@@ -541,7 +553,7 @@ def remove_reimbursement(
         session, user_id=user_id, advance_id=advance_id, reimbursement_id=reimbursement_id
     )
     if deleted is None:
-        raise HTTPException(status_code=404, detail="unknown reimbursement")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown reimbursement")
     if deleted.transaction_id is not None:
         set_transaction_role(
             session,
@@ -588,7 +600,9 @@ def write_off_advance(
     )
     state = derive_advance(transaction, advance.own_share, reimbursed, written_off=False)
     if state.outstanding.amount <= 0:
-        raise HTTPException(status_code=422, detail="nothing_outstanding")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="nothing_outstanding"
+        )
 
     set_advance_status(
         session, user_id=user_id, advance_id=advance.id, status=AdvanceStatus.WRITTEN_OFF
