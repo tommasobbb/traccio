@@ -140,7 +140,7 @@ struct AddReimbursementSheet: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     if let date = candidate.effectiveDate {
-                        Text(Self.formatRowDate(date))
+                        Text(TraccioCore.formatDate(date, style: .dayMonthAbbreviatedYear))
                     }
                     Text("·")
                     Circle()
@@ -242,15 +242,6 @@ struct AddReimbursementSheet: View {
     }
 
     // MARK: Submit
-
-    /// Build the formatter locally per call rather than share a mutable
-    /// static — the `Sendable` posture `.claude/rules/swift.md` asks for, and
-    /// what `TransactionsView.title(for:)` already does for its day headers.
-    private static func formatRowDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("d MMM yyyy")
-        return formatter.string(from: date)
-    }
 
     private var parsedAmount: Int? {
         TraccioCore.parseMoneyInput(amountText)

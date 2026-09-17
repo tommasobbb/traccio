@@ -37,7 +37,7 @@ struct TransferSection: View {
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 if let date = counterpart.effectiveDate {
-                    Text(Self.dateFormatter.string(from: date))
+                    Text(TraccioCore.formatDate(date, style: .dayMonthYear))
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkTertiary)
                 }
@@ -68,9 +68,4 @@ struct TransferSection: View {
         .disabled(isUnlinking)
     }
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("d MMMM yyyy")
-        return formatter
-    }()
 }

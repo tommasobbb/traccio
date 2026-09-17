@@ -55,7 +55,7 @@ struct TransferSuggestionCard: View {
     private func legRow(_ leg: TransactionResponse) -> some View {
         HStack {
             if let date = leg.effectiveDate {
-                Text(Self.dateFormatter.string(from: date))
+                Text(TraccioCore.formatDate(date, style: .dayMonth))
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkTertiary)
             }
@@ -84,16 +84,4 @@ struct TransferSuggestionCard: View {
         }
     }
 
-    /// One `DateFormatter` shared by every `TransferSuggestionCard`, not one
-    /// per value — a `static let` is a single instance for the whole type,
-    /// same as at package scope. Safe here only because SwiftUI infers
-    /// `@MainActor` for every `View` conformance, so this non-`Sendable`
-    /// formatter is never actually touched from more than one isolation
-    /// domain; it is not safe by virtue of being `private` or `static` on a
-    /// value type, and does not generalize to a non-`View` type.
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("d MMMM")
-        return formatter
-    }()
 }

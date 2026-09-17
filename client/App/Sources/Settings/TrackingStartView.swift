@@ -293,8 +293,6 @@ struct TrackingStartView: View {
     /// labels. Locale-driven, same half-measure `DashboardView` uses.
     private func monthYear(_ date: CalendarDate) -> String {
         guard let d = date.date() else { return date.wireValue }
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMM yyyy")
-        return formatter.string(from: d)
+        return TraccioCore.formatDate(d, style: .monthYearAbbreviated)
     }
 }

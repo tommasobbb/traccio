@@ -394,9 +394,7 @@ struct TransactionDetailView: View {
 
     private var headerSubtitle: String {
         let dateTime = model.transaction.effectiveDate.map { date -> String in
-            let formatter = DateFormatter()
-            formatter.setLocalizedDateFormatFromTemplate("d MMMM yyyy, HH:mm")
-            return formatter.string(from: date)
+            TraccioCore.formatDate(date, style: .dayMonthYearTime)
         }
         let accountLabel = "\(account?.name ?? "Conto") \(model.transaction.currency)"
         return [dateTime, accountLabel].compactMap { $0 }.joined(separator: " · ")

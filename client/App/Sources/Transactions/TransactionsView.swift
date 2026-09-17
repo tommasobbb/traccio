@@ -604,9 +604,7 @@ struct TransactionsView: View {
         let calendar = Calendar.current
         if calendar.isDateInToday(day) { return "Oggi" }
         if calendar.isDateInYesterday(day) { return "Ieri" }
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("d MMMM")
-        return formatter.string(from: day)
+        return TraccioCore.formatDate(day, style: .dayMonth)
     }
 }
 

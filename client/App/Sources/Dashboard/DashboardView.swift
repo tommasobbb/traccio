@@ -174,27 +174,24 @@ struct DashboardView: View {
     }
 
     /// A display title for `period`, e.g. "agosto 2026" (month), "T3 2026"
-    /// (quarter), "2026" (year) — locale-formatted where `DateFormatter` can
-    /// do that (month, year), and a small Italian-only literal for the
+    /// (quarter), "2026" (year) — `TraccioCore.formatDate` where that can do
+    /// it (month, year), and a small Italian-only literal for the
     /// quarter label ("T" for "Trimestre"), consistent with the client being
     /// officially Italian-only (`client/CLAUDE.md`). Lives here, not on
     /// `CalendarPeriod` itself, per the same "display copy stays in the
     /// view" rule `TransactionPeriodPreset` and `TransactionsView.title(for:)`
     /// already follow.
     private func title(for period: CalendarPeriod) -> String {
-        let formatter = DateFormatter()
         switch period.unit {
         case .month:
-            formatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-            return formatter.string(from: period.start).capitalized
+            return TraccioCore.formatDate(period.start, style: .monthYear).capitalized
         case .quarter:
             let calendar = Calendar.current
             let quarter = (calendar.component(.month, from: period.start) - 1) / 3 + 1
             let year = calendar.component(.year, from: period.start)
             return "T\(quarter) \(year)"
         case .year:
-            formatter.setLocalizedDateFormatFromTemplate("yyyy")
-            return formatter.string(from: period.start)
+            return TraccioCore.formatDate(period.start, style: .year)
         }
     }
 

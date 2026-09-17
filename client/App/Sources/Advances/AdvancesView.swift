@@ -291,7 +291,7 @@ struct AdvancesView: View {
                             .lineLimit(1)
                     }
                     if let bookedAt = advance.bookedAt {
-                        Text(bookedAt.formatted(.dateTime.day().month(.abbreviated)))
+                        Text(TraccioCore.formatDate(bookedAt, style: .dayMonthAbbreviatedYear))
                             .font(Typography.caption)
                             .foregroundStyle(Palette.inkQuaternary)
                     }
