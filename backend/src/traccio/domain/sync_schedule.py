@@ -17,26 +17,12 @@ refuses rather than lets the caller retry into a throttle.
 This module imports nothing outside ``domain/``.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict
 
 from traccio.domain.enums import ConsentState, SyncRunOutcome
-
-
-def _as_aware_utc(value: datetime) -> datetime:
-    """Return ``value``, defaulting a naive value to UTC.
-
-    SQLite (used in dev and by the test suite; PostgreSQL is the eventual
-    production target) discards timezone info on a ``DateTime(timezone=True)``
-    column, so a value stored as UTC comes back naive. Every timestamp in this
-    system is UTC (root ``CLAUDE.md``), so treating a naive value as UTC is the
-    correct reading, not a guess — the same guard
-    :func:`~traccio.domain.consent._expiry_as_aware_utc` applies to
-    ``expires_at``.
-    """
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
+from traccio.domain.utc import as_aware_utc
 
 # A consent is syncable only in these two derived states. Anything else
 # (pending, expiring past the point of no return handled elsewhere, expired,
@@ -127,7 +113,7 @@ def sync_decision(
     if runs_last_24h >= budget_per_day:
         return SyncDecision(due=False, skip_reason=SyncRunOutcome.SKIPPED_BUDGET)
 
-    if last_synced_at is not None and (now - _as_aware_utc(last_synced_at)) < timedelta(
+    if last_synced_at is not None and (now - as_aware_utc(last_synced_at)) < timedelta(
         hours=min_interval_hours
     ):
         return SyncDecision(due=False, skip_reason=SyncRunOutcome.SKIPPED_INTERVAL)
@@ -192,9 +178,9 @@ def next_sync_eligible_at(
     if decision.skip_reason is SyncRunOutcome.SKIPPED_INTERVAL:
         # sync_decision only returns this when last_synced_at is not None.
         assert last_synced_at is not None
-        return _as_aware_utc(last_synced_at) + timedelta(hours=min_interval_hours)
+        return as_aware_utc(last_synced_at) + timedelta(hours=min_interval_hours)
     if decision.skip_reason is SyncRunOutcome.SKIPPED_BUDGET:
         if oldest_run_started_at is None:
             return None
-        return _as_aware_utc(oldest_run_started_at) + timedelta(hours=24)
+        return as_aware_utc(oldest_run_started_at) + timedelta(hours=24)
     return None

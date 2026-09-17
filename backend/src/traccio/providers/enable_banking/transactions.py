@@ -40,7 +40,7 @@ no amount, description, or counterparty ever enters a message.
 """
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -49,6 +49,7 @@ from pydantic import ValidationError
 from traccio.domain import Account, AccountKind, Transaction
 from traccio.domain.enums import KeyStrategy, TransactionStatus
 from traccio.domain.money import Money
+from traccio.domain.utc import as_aware_utc
 from traccio.providers.base import ProviderError
 
 # ISO 20022 credit/debit indicators. DBIT = money out (stored negative),
@@ -220,7 +221,7 @@ def _parse_date(raw: object) -> datetime | None:
         parsed = datetime.fromisoformat(raw)
     except ValueError as exc:
         raise ProviderError("Enable Banking transaction date is not a valid datetime") from exc
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return as_aware_utc(parsed)
 
 
 def _first_date(raw: dict[str, Any], keys: tuple[str, ...]) -> datetime | None:

@@ -34,6 +34,7 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from traccio.domain import Account, AccountKind, ConnectionStatus, Transaction
+from traccio.domain.utc import as_aware_utc
 from traccio.providers.base import (
     AuthorizationResult,
     AuthorizationStart,
@@ -332,4 +333,4 @@ def _parse_valid_until(raw: str) -> datetime:
         parsed = datetime.fromisoformat(raw)
     except (ValueError, TypeError) as exc:
         raise ProviderError("Enable Banking consent expiry is not a valid datetime") from exc
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return as_aware_utc(parsed)

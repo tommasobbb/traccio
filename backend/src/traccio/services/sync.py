@@ -35,7 +35,7 @@ the caller owns the transaction boundary — the router commits after a
 successful call, and so does the scheduler.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -55,24 +55,11 @@ from traccio.db.repositories import (
 from traccio.domain.consent import consent_state
 from traccio.domain.enums import ConsentState
 from traccio.domain.models import Account, Transaction
+from traccio.domain.utc import as_aware_utc
 from traccio.providers.base import BankProvider, SyncContext
 from traccio.services.categorization import suggest_categories
 
 logger = get_logger(__name__)
-
-
-def _as_aware_utc(value: datetime) -> datetime:
-    """Return ``value``, defaulting a naive value to UTC.
-
-    SQLite (used in dev and by the test suite; PostgreSQL is the eventual
-    production target — see ``tasks/backlog.md``) discards timezone info on a
-    ``DateTime(timezone=True)`` column, so a value stored as UTC comes back
-    naive. Every timestamp in this system is UTC (root ``CLAUDE.md``), so
-    treating a naive value as UTC is the correct reading, not a guess — the
-    same guard ``domain/consent.py::_expiry_as_aware_utc`` applies to
-    ``expires_at``.
-    """
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class SyncError(ValueError):
@@ -233,7 +220,7 @@ def sync_connection(
     if connection.last_synced_at is None:
         since = now - timedelta(days=initial_history_days)
     else:
-        since = _as_aware_utc(connection.last_synced_at) - timedelta(days=sync_overlap_days)
+        since = as_aware_utc(connection.last_synced_at) - timedelta(days=sync_overlap_days)
 
     provider_accounts = provider.list_accounts(credentials=credentials, context=context)
     transactions_synced = 0

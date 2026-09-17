@@ -5,7 +5,7 @@ public and identical for every user (``docs/domain.md``'s stated exception,
 same as seeded ``Category`` templates)."""
 
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -20,6 +20,7 @@ from traccio.db.models import (
     FxRateRow,
 )
 from traccio.domain.fx import FxRate
+from traccio.domain.utc import as_aware_utc
 
 
 def _row_to_fx_rate(row: FxRateRow) -> FxRate:
@@ -28,15 +29,12 @@ def _row_to_fx_rate(row: FxRateRow) -> FxRate:
     Parses the exact-decimal-string ``rate`` column into :class:`Decimal`, and
     treats a naive ``fetched_at`` (SQLite drops tzinfo) as UTC.
     """
-    fetched_at = row.fetched_at
-    if fetched_at.tzinfo is None:
-        fetched_at = fetched_at.replace(tzinfo=UTC)
     return FxRate(
         base=row.base,
         quote=row.quote,
         rate_date=row.rate_date,
         rate=Decimal(row.rate),
-        fetched_at=fetched_at,
+        fetched_at=as_aware_utc(row.fetched_at),
     )
 
 
@@ -93,8 +91,7 @@ def latest_fx_rate_fetched_at(session: Session, *, base: str, quote: str) -> dat
     ).one_or_none()
     if row is None:
         return None
-    fetched_at = row.fetched_at
-    return fetched_at if fetched_at.tzinfo is not None else fetched_at.replace(tzinfo=UTC)
+    return as_aware_utc(row.fetched_at)
 
 
 def upsert_fx_rates(session: Session, *, rates: Sequence[FxRate]) -> None:

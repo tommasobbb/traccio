@@ -41,6 +41,7 @@ from traccio.domain.enums import BucketGranularity
 from traccio.domain.models import Transaction
 from traccio.domain.money import CurrencyCode, Money
 from traccio.domain.transaction_time import transaction_when
+from traccio.domain.utc import as_aware_utc
 
 
 def split_meal_voucher_transactions(
@@ -90,8 +91,8 @@ def _bucket_of(
     in the period but excluded from every bucket, or vice versa.
     Every timestamp in this system is UTC (root ``CLAUDE.md``), but a value
     round-tripped through SQLite comes back naive; a naive value is treated as
-    UTC rather than the local zone, per the same guard
-    :func:`traccio.domain.sync_schedule._as_aware_utc` uses. Bucketing itself
+    UTC rather than the local zone, per
+    :func:`~traccio.domain.utc.as_aware_utc`. Bucketing itself
     happens in ``tz`` (not UTC) — at ``MONTH`` granularity a UTC bucketing
     would visibly misplace a day at either edge of a local month. ``None``
     when both dates are unset — there is nothing to bucket.
@@ -99,7 +100,7 @@ def _bucket_of(
     when = transaction_when(transaction)
     if when is None:
         return None
-    aware = when if when.tzinfo is not None else when.replace(tzinfo=UTC)
+    aware = as_aware_utc(when)
     local_day = aware.astimezone(tz).date()
     return _bucket_start(local_day, granularity)
 

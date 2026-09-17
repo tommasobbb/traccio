@@ -18,27 +18,22 @@ background job to stay true and is wrong between runs, while deriving it from
 This module imports nothing outside ``domain/``.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from traccio.domain.enums import ConnectionStatus, ConsentState
 from traccio.domain.models import Connection
+from traccio.domain.utc import as_aware_utc
 
 
 def _expiry_as_aware_utc(connection: Connection) -> datetime | None:
     """Return ``connection.expires_at``, defaulting a naive value to UTC.
 
-    SQLite (used in dev and by the test suite; PostgreSQL is the eventual
-    target — see ``tasks/backlog.md``) discards timezone info on a
-    ``DateTime(timezone=True)`` column, so a value stored as UTC comes back
-    naive. Every timestamp in this system is UTC (root ``CLAUDE.md``:
-    ``datetime.now(UTC)``), so treating a naive value as UTC is the correct
-    reading, not a guess — the same guard the Enable Banking adapter applies
-    when parsing provider dates (``providers/enable_banking/transactions.py``).
+    ``None`` stays ``None``; see :func:`~traccio.domain.utc.as_aware_utc` for
+    the non-optional case every other naive-timestamp read in this codebase
+    shares.
     """
     expires_at = connection.expires_at
-    if expires_at is None or expires_at.tzinfo is not None:
-        return expires_at
-    return expires_at.replace(tzinfo=UTC)
+    return None if expires_at is None else as_aware_utc(expires_at)
 
 
 def consent_state(
