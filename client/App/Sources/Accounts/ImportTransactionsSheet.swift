@@ -25,9 +25,10 @@ struct ImportTransactionsSheet: View {
     @State private var profile: Profile = .satispay
     @State private var primaryAccountID: UUID?
     @State private var voucherAccountID: UUID?
-    @State private var pickedFile: PickedFile?
     @State private var isPickingFile = false
-    @State private var fileError: String?
+    /// Set only when `.fileImporter` itself fails to hand back a URL — file
+    /// read/size failures are `model.fileLoadFailure` instead.
+    @State private var pickerFailed = false
 
     /// The import profiles offered in the UI. The wire keys match the
     /// backend's `PROFILES`.
@@ -40,18 +41,6 @@ struct ImportTransactionsSheet: View {
         /// meal-voucher account.
         var needsVoucherAccount: Bool { self == .satispay }
     }
-
-    /// A file the user chose, already read and base64-encoded so the view
-    /// model stays free of file I/O.
-    private struct PickedFile: Equatable {
-        let name: String
-        let base64: String
-        let byteCount: Int
-    }
-
-    /// Matches `Settings.import_max_bytes` (ADR 0023) so an over-limit file is
-    /// caught here rather than after a wasted round-trip.
-    private static let maxBytes = 2 * 1024 * 1024
 
     var body: some View {
         NavigationStack {
@@ -89,8 +78,11 @@ struct ImportTransactionsSheet: View {
     private var form: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.cardGap) {
-                if let fileError {
-                    Banner(message: fileError)
+                if pickerFailed {
+                    Banner(message: "Non è stato possibile aprire il file.")
+                }
+                if let fileLoadFailure = model.fileLoadFailure {
+                    Banner(message: Self.message(for: fileLoadFailure))
                 }
                 if case .failed(let failure) = model.phase {
                     Banner(message: Self.message(for: failure))
@@ -113,12 +105,12 @@ struct ImportTransactionsSheet: View {
                     } label: {
                         HStack {
                             Image(systemName: "doc.badge.plus")
-                            Text(pickedFile?.name ?? "Scegli un file")
+                            Text(model.pickedFile?.name ?? "Scegli un file")
                                 .lineLimit(1)
                             Spacer()
                         }
                         .font(Typography.body)
-                        .foregroundStyle(pickedFile == nil ? Palette.accent : Palette.ink)
+                        .foregroundStyle(model.pickedFile == nil ? Palette.accent : Palette.ink)
                     }
                     .buttonStyle(.plain)
                 }
@@ -245,13 +237,13 @@ struct ImportTransactionsSheet: View {
     }
 
     private var canPreview: Bool {
-        guard pickedFile != nil, primaryAccountID != nil else { return false }
+        guard model.pickedFile != nil, primaryAccountID != nil else { return false }
         if profile.needsVoucherAccount { return voucherAccountID != nil }
         return true
     }
 
     private func request() -> ImportPreviewRequest? {
-        guard let file = pickedFile, let primary = primaryAccountID else { return nil }
+        guard let file = model.pickedFile, let primary = primaryAccountID else { return nil }
         return ImportPreviewRequest(
             accountID: primary,
             voucherAccountID: profile.needsVoucherAccount ? voucherAccountID : nil,
@@ -272,32 +264,17 @@ struct ImportTransactionsSheet: View {
     }
 
     private func resetPreview() {
-        fileError = nil
         model.reset()
     }
 
     private func handleFileSelection(_ result: Result<URL, any Error>) {
-        resetPreview()
+        pickerFailed = false
+        model.reset()
         switch result {
         case .failure:
-            fileError = "Non è stato possibile aprire il file."
+            pickerFailed = true
         case .success(let url):
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let data = try Data(contentsOf: url)
-                guard data.count <= Self.maxBytes else {
-                    fileError = "Il file è troppo grande."
-                    return
-                }
-                pickedFile = PickedFile(
-                    name: url.lastPathComponent,
-                    base64: data.base64EncodedString(),
-                    byteCount: data.count
-                )
-            } catch {
-                fileError = "Non è stato possibile leggere il file."
-            }
+            Task { await model.loadFile(at: url) }
         }
     }
 
@@ -306,6 +283,13 @@ struct ImportTransactionsSheet: View {
         case .tooLarge: "Il file è troppo grande."
         case .badFile: "Il file non corrisponde al formato scelto."
         case .generic: "Non è stato possibile importare il file. Riprova."
+        }
+    }
+
+    private static func message(for failure: ImportTransactionsViewModel.FileLoadFailure) -> String {
+        switch failure {
+        case .tooLarge: "Il file è troppo grande."
+        case .unreadable: "Non è stato possibile leggere il file."
         }
     }
 
