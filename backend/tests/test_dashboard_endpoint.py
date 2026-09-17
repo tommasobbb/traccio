@@ -688,6 +688,33 @@ def test_summary_converts_a_multi_currency_period_when_fx_is_enabled() -> None:
     ]
 
 
+def test_a_fetched_rate_survives_into_a_later_request_on_a_down_api() -> None:
+    """The fetched-and-cached rate must actually persist across requests.
+
+    build_rate_resolver (services/fx.py) does not commit — the caller owns
+    the transaction boundary, the same convention services/sync.py documents
+    and follows. Each request here gets its own session via get_session
+    (closed, uncommitted work discarded, at the end of the request); if the
+    router forgot to commit after calling it, the rate fetched on the first
+    request would vanish and the second request — against a down API, cache
+    or nothing — would have to withhold the converted total.
+    """
+    dev_user_id = get_settings().dev_user_id
+    engine = _sqlite_engine()
+    _seed_tx(engine, user_id=dev_user_id, amount=-5000, stable_key="EUR-SPEND")
+    _seed_tx(engine, user_id=dev_user_id, amount=-10000, stable_key="USD-SPEND", currency="USD")
+
+    first = _client_with_fx(engine, _fx_ok_transport()).get("/dashboard/summary")
+    assert first.json()["conversion_unavailable"] is None
+
+    second = _client_with_fx(engine, _fx_down_transport()).get("/dashboard/summary")
+
+    body = second.json()
+    assert body["conversion_unavailable"] is None
+    assert body["converted"] is not None
+    assert body["converted"]["summary"]["spending"] == 5000 + 9000
+
+
 def test_summary_withholds_the_converted_total_when_rates_are_unavailable() -> None:
     dev_user_id = get_settings().dev_user_id
     engine = _sqlite_engine()

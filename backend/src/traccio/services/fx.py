@@ -104,7 +104,9 @@ def build_rate_resolver(
     Parameters
     ----------
     session : Session
-        Active database session; this function commits after persisting rates.
+        Active database session. Not committed here — like every function in
+        ``db/repositories.py``, the caller owns the transaction boundary; a
+        newly fetched rate is only persisted once the caller commits.
     client : FrankfurterClient
         The rate API client (its lifetime is the caller's).
     base : str
@@ -174,7 +176,6 @@ def build_rate_resolver(
                     )
             if fetched:
                 upsert_fx_rates(session, rates=fetched)
-                session.commit()
         except FxRateError:
             had_error = True
             logger.warning("fx.fetch_failed", quote=quote)

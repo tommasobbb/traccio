@@ -354,6 +354,10 @@ def dashboard_summary(
         account_display=account_display,
         now=now,
     )
+    # The only write on this otherwise read-only GET: build_rate_resolver may
+    # have cached a newly fetched FX rate (services/fx.py does not commit —
+    # the caller owns the transaction boundary, same convention as sync.py).
+    session.commit()
 
     # The voucher breakout: one more (uncompared) ``summarize`` call over the
     # transactions the split above set aside, never FX-converted (ADR 0029
