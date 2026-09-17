@@ -98,7 +98,7 @@ struct BreakdownRowView: View {
 
     private var percentageText: String {
         guard totalSpending > 0 else { return "0%" }
-        let percentage = Int((Double(row.amount) / Double(totalSpending) * 100).rounded())
+        let percentage = TraccioCore.roundedPercentage(Double(row.amount) / Double(totalSpending))
         return "\(percentage)%"
     }
 

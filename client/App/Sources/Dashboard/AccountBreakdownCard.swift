@@ -83,7 +83,7 @@ struct AccountBreakdownCard: View {
 
     private func percentageText(for account: AccountSummaryResponse) -> String {
         guard totalSpending > 0 else { return "0%" }
-        let percentage = Int((Double(account.spending) / Double(totalSpending) * 100).rounded())
+        let percentage = TraccioCore.roundedPercentage(Double(account.spending) / Double(totalSpending))
         return "\(percentage)%"
     }
 }

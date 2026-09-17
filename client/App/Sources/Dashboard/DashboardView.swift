@@ -383,7 +383,7 @@ struct DashboardView: View {
             )
             return "\(amount) su \(previous)"
         }
-        let percentage = abs(Int((pct * 100).rounded()))
+        let percentage = abs(TraccioCore.roundedPercentage(pct))
         let direction = c.spendingDelta > 0 ? "in più" : "in meno"
         return "\(percentage)% \(direction) di \(previous)"
     }

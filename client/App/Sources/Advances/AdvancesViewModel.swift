@@ -76,7 +76,9 @@ final class AdvancesViewModel {
             state = .loaded(
                 Loaded(
                     response: response,
-                    hasUnattributedReimbursements: Self.hasUnattributedReimbursements(response.summary)
+                    hasUnattributedReimbursements: TraccioCore.hasUnattributedReimbursements(
+                        response.summary
+                    )
                 )
             )
         } catch {
@@ -94,19 +96,5 @@ final class AdvancesViewModel {
         guard newValue != statusFilter else { return }
         statusFilter = newValue
         await load()
-    }
-
-    /// Whether any currency's per-person outstanding sum falls short of its
-    /// per-currency total — the sign of reimbursements attributed to no
-    /// participant (ADR 0026). Pure; total is server-authoritative, this
-    /// only compares the two numbers to decide whether to explain the gap.
-    private static func hasUnattributedReimbursements(_ summary: AdvancesSummaryResponse) -> Bool {
-        let personOutstandingByCurrency = Dictionary(
-            grouping: summary.byPerson, by: \.currency
-        ).mapValues { rows in rows.reduce(0) { $0 + $1.outstanding } }
-
-        return summary.totals.contains { total in
-            (personOutstandingByCurrency[total.currency] ?? 0) < total.outstanding
-        }
     }
 }
