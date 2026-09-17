@@ -23,6 +23,7 @@ from traccio.api.routers import (
     events_router,
     health_router,
     imports_router,
+    reimbursements_router,
     rules_router,
     settings_router,
     transactions_router,
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     protected.include_router(transfers_router)
     protected.include_router(imports_router)
     protected.include_router(advances_router)
+    protected.include_router(reimbursements_router)
     protected.include_router(events_router)
     protected.include_router(categories_router)
     protected.include_router(rules_router)
