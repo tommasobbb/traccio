@@ -27,7 +27,7 @@ above.
 | `domain/`    | Entities, value objects, derivation rules  | nothing                             |
 | `services/`  | Sync, matching, detection, categorization  | `domain`, `db`, `providers`, `core` |
 | `providers/` | Bank adapters                              | `domain`                            |
-| `db/`        | Persistence, repositories                  | `domain`                            |
+| `db/`        | Persistence, repositories                  | `domain`, `core`                    |
 | `api/`       | HTTP routing, request/response schemas     | all of the above                    |
 | `core/`      | Config, logging, crypto, auth              | nothing                             |
 
@@ -44,6 +44,13 @@ duplicating that orchestration once inside `api/` and once in a scheduler
 module. What still holds without exception: `db/`, `providers/`, and `core/`
 never import `services/`, and `services/` never imports `api/` — HTTP
 concerns (status codes, request/response schemas) stay in the router.
+
+`db/session.py` and `db/seed_dev.py` are the two places `db/` imports `core`
+(`core.config.get_settings()`, for the database URL and the dev seed's
+user id) — the same single-source-of-truth reason Alembic's own `env.py`
+reads the DSN from `get_settings()` rather than a second hardcoded value.
+Every other module under `db/` (`models`, `mappers`, `repositories/`) imports
+only `domain`, unchanged.
 
 ## Invariants
 
