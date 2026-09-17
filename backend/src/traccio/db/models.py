@@ -830,7 +830,15 @@ class FxRateRow(Base):
     """
 
     __tablename__ = "fx_rates"
-    __table_args__ = (UniqueConstraint("base", "quote", "rate_date"),)
+    # Named explicitly: NAMING_CONVENTION's "uq" pattern keys off the first
+    # column only (column_0_name), which for a 3-column constraint would
+    # generate "uq_fx_rates_base" — different from the name migration
+    # f6a7b8c9d0e1 already gave this constraint in every deployed database.
+    # A migration's applied DDL is never edited after the fact, so the model
+    # names it explicitly to match instead.
+    __table_args__ = (
+        UniqueConstraint("base", "quote", "rate_date", name="uq_fx_rates_base_quote_rate_date"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
     base: Mapped[str] = mapped_column(String(3))
