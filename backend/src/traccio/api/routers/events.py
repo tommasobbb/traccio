@@ -21,7 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, load_or_404
 from traccio.api.schemas.dashboard import CategoryDisplay
 from traccio.api.schemas.events import (
     AssignTransactionRequest,
@@ -68,10 +68,10 @@ def _load_event(session: Session, *, user_id: UUID, event_id: UUID) -> Event:
     Scoping is enforced by :func:`get_event`, so naming another user's (or an
     unknown) event is indistinguishable from "not found".
     """
-    event = get_event(session, user_id=user_id, event_id=event_id)
-    if event is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown event")
-    return event
+    return load_or_404(
+        lambda: get_event(session, user_id=user_id, event_id=event_id),
+        detail="unknown event",
+    )
 
 
 def _advance_spending_shares(

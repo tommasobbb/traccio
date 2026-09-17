@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, load_or_404
 from traccio.api.schemas.accounts import (
     AccountResponse,
     AccountsResponse,
@@ -58,10 +58,10 @@ def _load_account(session: Session, *, user_id: UUID, account_id: UUID) -> Accou
     naming another user's (or an unknown) account is indistinguishable from
     "not found".
     """
-    account = get_account(session, user_id=user_id, account_id=account_id)
-    if account is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown account")
-    return account
+    return load_or_404(
+        lambda: get_account(session, user_id=user_id, account_id=account_id),
+        detail="unknown account",
+    )
 
 
 @router.get("/accounts", response_model=AccountsResponse)

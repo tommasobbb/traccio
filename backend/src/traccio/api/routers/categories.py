@@ -33,7 +33,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, load_or_404
 from traccio.api.schemas.categories import (
     CategoriesResponse,
     CategoryResponse,
@@ -82,10 +82,10 @@ def _load_category(session: Session, *, user_id: UUID, category_id: UUID) -> Cat
     Scoping is enforced by :func:`get_category`, so naming another user's (or
     an unknown) category is indistinguishable from "not found".
     """
-    category = get_category(session, user_id=user_id, category_id=category_id)
-    if category is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown category")
-    return category
+    return load_or_404(
+        lambda: get_category(session, user_id=user_id, category_id=category_id),
+        detail="unknown category",
+    )
 
 
 @router.post("/categories", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)

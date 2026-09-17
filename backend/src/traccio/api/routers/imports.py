@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, load_or_404
 from traccio.api.schemas.imports import (
     STATUS_ALREADY_IMPORTED,
     STATUS_INVALID,
@@ -71,9 +71,10 @@ class _Prepared(NamedTuple):
 
 def _load_manual_account(session: Session, *, user_id: UUID, account_id: UUID) -> Account:
     """Load a manual account owned by the user, or raise the right error."""
-    account = get_account(session, user_id=user_id, account_id=account_id)
-    if account is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown account")
+    account = load_or_404(
+        lambda: get_account(session, user_id=user_id, account_id=account_id),
+        detail="unknown account",
+    )
     if account_source(account) is not AccountSource.MANUAL:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="account_not_manual")
     return account

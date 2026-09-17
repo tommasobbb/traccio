@@ -22,7 +22,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_tracking_start, current_user_id
+from traccio.api.deps import current_tracking_start, current_user_id, load_or_404
 from traccio.api.schemas.transactions import TransactionResponse
 from traccio.api.schemas.transfers import (
     ConfirmTransferRequest,
@@ -67,10 +67,10 @@ def _load_leg(session: Session, *, user_id: UUID, transaction_id: UUID) -> Trans
     Scoping is enforced by :func:`get_transaction`, so naming another user's (or
     an unknown) transaction is indistinguishable from "not found".
     """
-    transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
-    if transaction is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
-    return transaction
+    return load_or_404(
+        lambda: get_transaction(session, user_id=user_id, transaction_id=transaction_id),
+        detail="unknown transaction",
+    )
 
 
 @router.get("/transfers/suggestions", response_model=TransferSuggestionsResponse)

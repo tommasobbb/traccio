@@ -6,7 +6,7 @@ dependencies they share are declared here instead.
 """
 
 import secrets
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import date
 from typing import Annotated
 from uuid import UUID
@@ -121,6 +121,41 @@ def require_api_token(
             detail="invalid or missing API token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+def load_or_404[T](loader: Callable[[], T | None], *, detail: str) -> T:
+    """Call a user-scoped repository getter, or raise ``404`` if it returns ``None``.
+
+    Every resource router had its own copy of this exact shape — call a
+    ``get_<entity>(session, user_id=..., <entity>_id=...)``, then raise if it
+    came back ``None`` — because scoping by ``user_id`` makes another user's
+    row indistinguishable from an unknown one (the intended behaviour, not an
+    oversight). One generic helper replaces all of them; the caller still
+    picks the getter and the ``404`` detail, since those are the only parts
+    that differ per resource.
+
+    Parameters
+    ----------
+    loader : Callable[[], T | None]
+        A zero-argument callable — typically a lambda wrapping the repository
+        getter with its arguments bound — returning the row or ``None``.
+    detail : str
+        The ``404`` response's ``detail`` message.
+
+    Returns
+    -------
+    T
+        The loaded row.
+
+    Raises
+    ------
+    HTTPException
+        404 if ``loader()`` returns ``None``.
+    """
+    found = loader()
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    return found
 
 
 def build_enable_banking_client() -> EnableBankingClient:

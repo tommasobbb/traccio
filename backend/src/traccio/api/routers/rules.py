@@ -20,7 +20,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_user_id
+from traccio.api.deps import current_user_id, load_or_404
 from traccio.api.schemas.rules import (
     ApplyRulesResponse,
     CreateRuleRequest,
@@ -55,10 +55,10 @@ def _load_rule(session: Session, *, user_id: UUID, rule_id: UUID) -> Rule:
     naming another user's (or an unknown) rule is indistinguishable from "not
     found".
     """
-    rule = get_rule(session, user_id=user_id, rule_id=rule_id)
-    if rule is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown rule")
-    return rule
+    return load_or_404(
+        lambda: get_rule(session, user_id=user_id, rule_id=rule_id),
+        detail="unknown rule",
+    )
 
 
 @router.post("/rules", response_model=RuleResponse, status_code=status.HTTP_201_CREATED)

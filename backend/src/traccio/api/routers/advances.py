@@ -24,7 +24,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from traccio.api.deps import current_tracking_start, current_user_id
+from traccio.api.deps import current_tracking_start, current_user_id, load_or_404
 from traccio.api.schemas.advances import (
     AdvanceResponse,
     AdvancesResponse,
@@ -83,10 +83,10 @@ def _load_transaction(session: Session, *, user_id: UUID, transaction_id: UUID) 
     Scoping is enforced by :func:`get_transaction`, so naming another user's (or
     an unknown) transaction is indistinguishable from "not found".
     """
-    transaction = get_transaction(session, user_id=user_id, transaction_id=transaction_id)
-    if transaction is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown transaction")
-    return transaction
+    return load_or_404(
+        lambda: get_transaction(session, user_id=user_id, transaction_id=transaction_id),
+        detail="unknown transaction",
+    )
 
 
 def _reimbursement_derivations(
@@ -379,10 +379,10 @@ def remove_advance(
 
 def _load_advance(session: Session, *, user_id: UUID, advance_id: UUID) -> Advance:
     """Load an advance owned by the user, or raise ``404``."""
-    advance = get_advance(session, user_id=user_id, advance_id=advance_id)
-    if advance is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="unknown advance")
-    return advance
+    return load_or_404(
+        lambda: get_advance(session, user_id=user_id, advance_id=advance_id),
+        detail="unknown advance",
+    )
 
 
 def _advance_response(session: Session, *, user_id: UUID, advance: Advance) -> AdvanceResponse:
