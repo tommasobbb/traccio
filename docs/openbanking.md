@@ -6,7 +6,7 @@ It is not a tutorial: it records the onboarding procedure and the constraints
 that shape the adapter design.
 
 The provider choice and its rationale live in
-`docs/decisions/0001-scelta-aggregatore.md`. Domain concepts referenced here
+`docs/decisions/0001-aggregator-choice.md`. Domain concepts referenced here
 (`Connection`, consent expiry, sync modes) are defined in `docs/domain.md`.
 
 ## Provider and mode
