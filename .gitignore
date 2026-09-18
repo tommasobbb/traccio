@@ -38,6 +38,8 @@ xcuserdata/
 .env
 .env.*
 !.env.example
+# --- deploy config (a deployer's own app name/region/redirect URL, ADR 0015) ---
+backend/fly.toml
 *.p8
 *.p12
 *.pem

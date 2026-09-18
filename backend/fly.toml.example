@@ -1,0 +1,57 @@
+# Fly.io app config (docs/decisions/0015-deploy-fly-io.md). Copy this file to
+# `fly.toml` (gitignored) and fill in the placeholders below before deploying:
+# `fly launch --no-deploy` first to create the app and attach Postgres, then
+# `fly deploy --config fly.toml` from `backend/`.
+app = "your-traccio-app"  # must be globally unique across all of Fly
+# Fly has no Italy region; fra (Frankfurt) is the closest European hub. Pick
+# whatever region is closest to you (`fly platform regions`).
+primary_region = "fra"
+
+[build]
+
+[env]
+TRACCIO_ENVIRONMENT = "production"
+TRACCIO_LOG_LEVEL = "INFO"
+TRACCIO_LOG_JSON = "true"
+# Must match both this app's own domain and the redirect URL registered in
+# the Enable Banking Control Panel (docs/setup-openbanking.md) — update the
+# host below once you know your app's name.
+TRACCIO_ENABLE_BANKING_REDIRECT_URL = "https://your-traccio-app.fly.dev/connections/callback"
+# Boot-safe default (matches backend/.env.example): the in-process background
+# sync scheduler (ADR 0010) starts disabled. Turn on once you've verified a
+# manual sync works end to end — see docs/setup-openbanking.md.
+TRACCIO_BACKGROUND_SYNC_ENABLED = "false"
+# The dashboard's opt-in converted combined total (ADR 0021). frankfurter.dev
+# needs no key; turn on once you actually use more than one currency.
+TRACCIO_FX_ENABLED = "false"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  # Keep at 1 if you turn on TRACCIO_BACKGROUND_SYNC_ENABLED: the scheduler
+  # only runs while a machine is up, and Fly's default auto-stop would kill
+  # it between requests. Fly's own deploy default also launches a second
+  # machine "for high availability" the moment this is >= 1 — `fly scale
+  # count 1` right after your first deploy avoids paying for (and running
+  # the scheduler on) two machines for a single-user app.
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+[deploy]
+  # Runs once against the release, before traffic switches to the new
+  # machine — the equivalent of the Makefile's `db-upgrade` prerequisite,
+  # never inside the running app process.
+  release_command = "python -m alembic upgrade head"
+
+[checks]
+  [checks.health]
+    type = "http"
+    port = 8080
+    path = "/health"
+    interval = "15s"
+    timeout = "5s"
