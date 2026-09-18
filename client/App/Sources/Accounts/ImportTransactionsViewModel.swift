@@ -22,17 +22,23 @@ final class ImportTransactionsViewModel {
 
     /// Why reading the picked file failed.
     enum FileLoadFailure: Error, Equatable, Sendable {
-        /// Over `maxFileBytes` — caught here rather than after a wasted
-        /// preview round-trip.
+        /// Over `maxFileBytes` — caught here rather than reading an
+        /// arbitrarily large file fully into memory to base64-encode it.
         case tooLarge
         /// The file could not be opened or read.
         case unreadable
     }
 
-    /// Matches `Settings.import_max_bytes` (ADR 0023). `nonisolated`: a plain
-    /// `Int` constant needs no actor isolation, and `read(at:)` (run off the
-    /// main actor in a detached task) reads it.
-    nonisolated static let maxFileBytes = 2 * 1024 * 1024
+    /// A local sanity ceiling, not a mirror of `Settings.import_max_bytes`
+    /// (ADR 0023) — the two used to share a value, which meant raising the
+    /// backend's limit silently left the client still rejecting a file the
+    /// server would have accepted. The server's `413` (`Failure.tooLarge`
+    /// below) is the single source of truth for what's actually too large;
+    /// this constant only guards against reading a pathologically huge file
+    /// into memory before that round-trip. `nonisolated`: a plain `Int`
+    /// constant needs no actor isolation, and `read(at:)` (run off the main
+    /// actor in a detached task) reads it.
+    nonisolated static let maxFileBytes = 50 * 1024 * 1024
 
     /// Where the flow is right now.
     enum Phase: Equatable {
