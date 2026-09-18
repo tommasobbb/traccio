@@ -141,7 +141,7 @@ struct SettingsView: View {
     }
 
     private func settingsRow(title: String, systemImage: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             settingsRowLabel(title: title, systemImage: systemImage)
             Spacer()
             DisclosureChevron()
@@ -154,7 +154,7 @@ struct SettingsView: View {
     /// trailing control it ends in — a `NavigationLink`'s chevron
     /// (`settingsRow`) or, on iOS, a `Toggle` (`biometricLockRow`).
     private func settingsRowLabel(title: String, systemImage: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(Palette.inkSecondary)

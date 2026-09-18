@@ -41,7 +41,7 @@ struct EmptyState: View {
     var action: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Spacing.itemGap) {
             Image(systemName: systemImage)
                 .font(.system(size: 22, weight: .medium))
                 .foregroundStyle(tone.iconForeground)

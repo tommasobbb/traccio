@@ -123,7 +123,7 @@ struct EventsView: View {
     /// from Movimenti (ADR 0008's tone revision): one border, one shadow,
     /// hairline dividers between self-padded rows.
     private func eventListCard(_ events: [EventResponse], eyebrow: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: eyebrow)
             Card(elevation: .resting, contentPadding: 0) {
                 VStack(spacing: 0) {

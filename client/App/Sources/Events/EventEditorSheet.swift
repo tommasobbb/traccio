@@ -91,7 +91,7 @@ struct EventEditorSheet: View {
 
     private var nameCard: some View {
         Card {
-            HStack(spacing: 12) {
+            HStack(spacing: Spacing.itemGap) {
                 EventTile(emoji: emoji, color: color, diameter: 44)
                 TextField("Es. Turchia 2026", text: $nameText)
                     .font(Typography.statFigure)
@@ -115,8 +115,8 @@ struct EventEditorSheet: View {
                     .foregroundStyle(Palette.accent)
                 }
             }
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 6)
-            LazyVGrid(columns: columns, spacing: 8) {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.tightGap), count: 6)
+            LazyVGrid(columns: columns, spacing: Spacing.tightGap) {
                 ForEach(Self.suggestedEmoji, id: \.self) { candidate in
                     Button {
                         emoji = candidate
@@ -162,8 +162,8 @@ struct EventEditorSheet: View {
                         .foregroundStyle(Palette.accent)
                 }
             }
-            let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
-            LazyVGrid(columns: columns, spacing: 12) {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.itemGap), count: 5)
+            LazyVGrid(columns: columns, spacing: Spacing.itemGap) {
                 ForEach(PaletteColor.allCases, id: \.self) { candidate in
                     Button {
                         color = candidate

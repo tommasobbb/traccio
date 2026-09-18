@@ -18,4 +18,14 @@ enum Spacing {
     static let cardPadding: CGFloat = 20
     /// Padding inside a single list-style row (an account row, a category row).
     static let rowPadding: CGFloat = 9
+    /// Gap between adjacent items — a leading icon and its label, two controls
+    /// in a row, cells in a grid. The most common gap in the app.
+    static let itemGap: CGFloat = 12
+    /// A tighter gap than `itemGap` — between stacked lines in a leading text
+    /// block (a title above its subtitle), or between compact controls in a
+    /// dense row.
+    static let tightGap: CGFloat = 8
+    /// Gap between a card's own stacked content sections — `Card`'s default
+    /// spacing between whatever it's handed as content.
+    static let cardSectionGap: CGFloat = 14
 }

@@ -80,7 +80,7 @@ struct EventSections: View {
     }
 
     private func memberRow(_ member: TransactionResponse) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             Text(member.displayDescription ?? member.description)
                 .font(Typography.body)
                 .foregroundStyle(Palette.ink)

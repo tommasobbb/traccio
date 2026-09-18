@@ -16,12 +16,12 @@ struct Banner: View {
     var ctaAction: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: Spacing.itemGap) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(Palette.warning)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Spacing.tightGap) {
                 Text(message)
                     .font(Typography.caption)
                     .fontWeight(.bold)

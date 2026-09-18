@@ -14,7 +14,7 @@ struct EventRow: View {
     let event: EventResponse
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             EventTile(emoji: event.emoji, color: event.color, diameter: 36)
             VStack(alignment: .leading, spacing: 3) {
                 Text(event.name)

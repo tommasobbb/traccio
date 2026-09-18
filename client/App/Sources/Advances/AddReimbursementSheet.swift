@@ -132,7 +132,7 @@ struct AddReimbursementSheet: View {
 
     private func candidateRow(_ candidate: TransactionResponse, isSelected: Bool) -> some View {
         let account = accountsByID[candidate.accountID]
-        return HStack(alignment: .top, spacing: 12) {
+        return HStack(alignment: .top, spacing: Spacing.itemGap) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(candidate.displayDescription ?? candidate.description)
                     .font(Typography.body)
@@ -211,7 +211,7 @@ struct AddReimbursementSheet: View {
     // MARK: Participant
 
     private var participantCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: "Partecipante")
             OptionListCard {
                 OptionRow(

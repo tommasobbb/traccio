@@ -51,7 +51,7 @@ struct MoreView: View {
     }
 
     private func row(title: String, systemImage: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             Image(systemName: systemImage)
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(Palette.inkSecondary)

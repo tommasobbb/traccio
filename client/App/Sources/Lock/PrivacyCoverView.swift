@@ -15,7 +15,7 @@ struct PrivacyCoverView: View {
     var body: some View {
         ZStack {
             Palette.background.ignoresSafeArea()
-            VStack(spacing: 12) {
+            VStack(spacing: Spacing.itemGap) {
                 ZStack {
                     Circle().fill(Palette.neutralFill)
                     Image(systemName: "lock.fill")

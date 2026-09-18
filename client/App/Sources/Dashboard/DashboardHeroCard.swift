@@ -63,7 +63,7 @@ struct DashboardHeroCard: View {
         let spent = summary.byCategory.filter { $0.spending > 0 }
 
         if !segments.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Spacing.tightGap) {
                 GeometryReader { geo in
                     // Each segment positioned by its own fraction rather than
                     // laid out in an `HStack` whose widths (each `max(_, 2)`-
@@ -97,7 +97,7 @@ struct DashboardHeroCard: View {
     /// "Per categoria" card below.
     private func ribbonLegend(_ spent: [CategoryGroupSummaryResponse]) -> some View {
         let shown = Array(spent.prefix(3))
-        return HStack(spacing: 12) {
+        return HStack(spacing: Spacing.itemGap) {
             ForEach(Array(shown.enumerated()), id: \.element.categoryID) { rank, entry in
                 HStack(spacing: 5) {
                     Circle()

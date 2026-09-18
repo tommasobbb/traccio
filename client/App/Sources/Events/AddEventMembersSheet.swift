@@ -67,7 +67,7 @@ struct AddEventMembersSheet: View {
     }
 
     private func candidateRow(_ candidate: TransactionResponse) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             Text(candidate.displayDescription ?? candidate.description)
                 .font(Typography.body)
                 .foregroundStyle(Palette.ink)

@@ -74,7 +74,7 @@ struct FundedPaymentOrientationSheet: View {
             fundingID = leg.id
         } label: {
             Card {
-                HStack(spacing: 12) {
+                HStack(spacing: Spacing.itemGap) {
                     VStack(alignment: .leading, spacing: 4) {
                         EyebrowLabel(text: isChosen ? "Finanzia l'altra" : "Conto")
                         Text(accountsByID[leg.accountID]?.name ?? "Conto")

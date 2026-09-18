@@ -101,7 +101,7 @@ struct ListSkeleton: View {
     var body: some View {
         Card(contentPadding: 0) {
             ForEach(0..<count, id: \.self) { index in
-                HStack(spacing: 12) {
+                HStack(spacing: Spacing.itemGap) {
                     SkeletonBlock(width: 28, height: 28, cornerRadius: Radius.tile)
                     VStack(alignment: .leading, spacing: 6) {
                         SkeletonBlock(width: 180, height: 11)

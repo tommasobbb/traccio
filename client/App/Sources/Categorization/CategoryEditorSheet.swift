@@ -86,8 +86,8 @@ struct CategoryEditorSheet: View {
     }
 
     private var colorGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
-        return LazyVGrid(columns: columns, spacing: 12) {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.itemGap), count: 5)
+        return LazyVGrid(columns: columns, spacing: Spacing.itemGap) {
             ForEach(PaletteColor.allCases, id: \.self) { candidate in
                 Button {
                     color = candidate
@@ -112,14 +112,14 @@ struct CategoryEditorSheet: View {
     /// tiles is not). The section titles and grouping are a presentation
     /// fact, defined next to the SF Symbol mapping in `CategoryIcon.pickerSections`.
     private var iconGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.itemGap), count: 5)
         return VStack(alignment: .leading, spacing: 14) {
             ForEach(CategoryIcon.pickerSections, id: \.title) { section in
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Spacing.tightGap) {
                     Text(section.title)
                         .font(Typography.caption)
                         .foregroundStyle(Palette.inkSecondary)
-                    LazyVGrid(columns: columns, spacing: 12) {
+                    LazyVGrid(columns: columns, spacing: Spacing.itemGap) {
                         ForEach(section.icons, id: \.self) { candidate in
                             Button {
                                 icon = candidate

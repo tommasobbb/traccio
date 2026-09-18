@@ -17,7 +17,7 @@ struct RuleRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Badge(text: matchKindLabel, style: .neutral)

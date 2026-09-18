@@ -119,7 +119,7 @@ struct TransactionRow: View {
     /// tell). A muted row (pending, or a zero-`effectiveAmount` leg) gets a
     /// faint inset fill instead of the old dashed border.
     private var rowContent: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             leadingTile
             VStack(alignment: .leading, spacing: 3) {
                 Text(transaction.displayDescription ?? transaction.description)

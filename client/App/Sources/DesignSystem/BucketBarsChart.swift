@@ -38,7 +38,7 @@ struct BucketBarsChart: View {
     @State private var isDrawn = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             tooltip
             GeometryReader { proxy in
                 HStack(alignment: .bottom, spacing: barSpacing) {
@@ -97,7 +97,7 @@ struct BucketBarsChart: View {
             // an oversized ideal size — a Spacer is deliberately not added
             // here, since this badge is meant to hug its own content, not
             // stretch to fill its row (`tasks/backlog.md`).
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 Text(TraccioCore.formatCalendarDate(bar.start))
                     .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.ink)

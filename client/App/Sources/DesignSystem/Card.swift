@@ -49,7 +49,7 @@ struct Card<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Spacing.cardSectionGap) {
             content
         }
         .padding(contentPadding ?? Spacing.cardPadding)

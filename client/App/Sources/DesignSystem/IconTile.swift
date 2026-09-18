@@ -149,7 +149,7 @@ extension CategoryIcon {
 }
 
 #Preview {
-    HStack(spacing: 12) {
+    HStack(spacing: Spacing.itemGap) {
         IconTile(systemImage: AccountIcon.bank.systemImageName, color: .indigo)
         IconTile(systemImage: AccountIcon.card.systemImageName, color: .purple)
         IconTile(systemImage: AccountIcon.wallet.systemImageName, color: .teal)

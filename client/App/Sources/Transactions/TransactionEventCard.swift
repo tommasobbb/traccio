@@ -71,7 +71,7 @@ struct TransactionEventCard: View {
     }
 
     private func row(event: EventResponse?, isNavigable: Bool) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             if let event {
                 EventTile(emoji: event.emoji, color: event.color, diameter: 32)
             }

@@ -76,7 +76,7 @@ struct CreateRuleSheet: View {
     // MARK: Category
 
     private var categoryCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: "Assegna la categoria")
             if categories.isEmpty {
                 Text("Crea prima una categoria.")

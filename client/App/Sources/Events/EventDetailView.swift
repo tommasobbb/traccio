@@ -123,7 +123,7 @@ struct EventDetailView: View {
     /// total, then a single quiet footnote line.
     private var header: some View {
         Card(elevation: .raised) {
-            HStack(spacing: 12) {
+            HStack(spacing: Spacing.itemGap) {
                 EventTile(emoji: model.event.emoji, color: model.event.color, diameter: 40)
                 Text(model.event.name)
                     .font(Typography.cardTitle)
@@ -199,7 +199,7 @@ struct EventDetailView: View {
                 }
                 VStack(spacing: 0) {
                     ForEach(model.suggestions) { suggestion in
-                        HStack(spacing: 12) {
+                        HStack(spacing: Spacing.itemGap) {
                             Text(suggestion.displayDescription ?? suggestion.description)
                                 .font(Typography.body)
                                 .foregroundStyle(Palette.ink)

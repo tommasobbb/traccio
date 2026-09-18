@@ -207,7 +207,7 @@ struct AccountsView: View {
         Button {
             isPickingInstitution = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .bold))
                 Text("Collega un nuovo conto")
@@ -232,7 +232,7 @@ struct AccountsView: View {
         Button {
             isCreatingManualAccount = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 Image(systemName: "wallet.pass")
                     .font(.system(size: 13, weight: .bold))
                 Text("Crea un conto manuale")
@@ -256,7 +256,7 @@ struct AccountsView: View {
         Button {
             isImportingTransactions = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 Image(systemName: "square.and.arrow.down")
                     .font(.system(size: 13, weight: .bold))
                 Text("Importa movimenti da file")
@@ -331,7 +331,7 @@ struct AccountsView: View {
     }
 
     private func connectionHeader(_ connection: ConnectionResponse) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             BankLogoView(
                 logo: connection.institutionLogo, name: connection.institutionName, size: 40
             )

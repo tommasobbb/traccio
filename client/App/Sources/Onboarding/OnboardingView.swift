@@ -53,7 +53,7 @@ struct OnboardingView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Spacing.itemGap) {
             Image(systemName: "chart.bar.fill")
                 .font(.system(size: 26, weight: .medium))
                 .foregroundStyle(.white)

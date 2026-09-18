@@ -384,7 +384,7 @@ struct TransactionsView: View {
     /// carry their own padding, so the card's `contentPadding` is `0` and its
     /// rounded corners clip the row fills.
     private func dayGroup(_ group: TransactionDayGroup, isLastGroup: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: title(for: group.day))
             Card(elevation: .resting, contentPadding: 0) {
                 VStack(spacing: 0) {

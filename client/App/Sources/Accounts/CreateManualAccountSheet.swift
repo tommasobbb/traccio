@@ -146,8 +146,8 @@ struct CreateManualAccountSheet: View {
     private static let defaultIcon = AccountIcon.cash
 
     private var colorGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
-        return LazyVGrid(columns: columns, spacing: 12) {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.itemGap), count: 5)
+        return LazyVGrid(columns: columns, spacing: Spacing.itemGap) {
             ForEach(PaletteColor.allCases, id: \.self) { candidate in
                 Button {
                     color = candidate
@@ -169,8 +169,8 @@ struct CreateManualAccountSheet: View {
     }
 
     private var iconGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 5)
-        return LazyVGrid(columns: columns, spacing: 12) {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: Spacing.itemGap), count: 5)
+        return LazyVGrid(columns: columns, spacing: Spacing.itemGap) {
             ForEach(AccountIcon.allCases, id: \.self) { candidate in
                 Button {
                     icon = candidate

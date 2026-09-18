@@ -156,7 +156,7 @@ struct TransactionFiltersSheet: View {
             // A wrapping row of pills — the one place in the client where
             // wrapping is intended (a standalone control group in a sheet,
             // not a list line — `docs/design/tokens.md`).
-            FlowRow(spacing: 8) {
+            FlowRow(spacing: Spacing.tightGap) {
                 ForEach(TransactionPeriodPreset.allCases, id: \.self) { preset in
                     let isSelected = period == preset
                     Button { period = preset } label: {
@@ -186,7 +186,7 @@ struct TransactionFiltersSheet: View {
     private func section<Content: View>(
         _ label: String, @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: label)
             content()
         }

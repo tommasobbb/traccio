@@ -209,7 +209,7 @@ struct CategorizationView: View {
     /// rather than acting on a single tap, same posture as
     /// `AdvanceSections`'s destructive actions.
     private func applyFooter(_ data: CategorizationViewModel.Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             if let result = model.lastApplyResult {
                 Text(
                     "\(result.rulesApplied) regole applicate · \(result.matched) movimenti su \(result.matched + result.cleared) hanno un suggerimento"

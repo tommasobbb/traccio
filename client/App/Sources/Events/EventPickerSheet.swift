@@ -42,7 +42,7 @@ struct EventPickerSheet: View {
     }
 
     private var eventsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: "Eventi")
             if events.isEmpty {
                 Text("Non hai ancora nessun evento. Puoi crearne uno da Impostazioni → Eventi.")

@@ -41,7 +41,7 @@ struct AccountBreakdownCard: View {
                 diameter: 28
             )
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.tightGap) {
                     Text(account.accountName ?? "Conto")
                         .font(Typography.body.weight(.semibold))
                         .foregroundStyle(Palette.ink)
@@ -52,7 +52,7 @@ struct AccountBreakdownCard: View {
                         font: Typography.caption.weight(.bold)
                     )
                 }
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.tightGap) {
                     GeometryReader { proxy in
                         Capsule()
                             .fill(Palette.neutralFill)

@@ -19,7 +19,7 @@ struct DashboardPeriodPicker: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 Button(action: onPrevious) {
                     Image(systemName: "chevron.left")
                 }

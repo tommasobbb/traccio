@@ -139,7 +139,7 @@ struct AdvanceSections: View {
     }
 
     private func participantRow(name: String, amount: Int, caption: ParticipantCaption) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             avatar(for: name)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)

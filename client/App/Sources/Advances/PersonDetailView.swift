@@ -170,7 +170,7 @@ struct PersonDetailView: View {
     }
 
     private func advanceRow(_ advance: AdvanceResponse) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(advance.resolvedDescription)
                     .font(Typography.body)

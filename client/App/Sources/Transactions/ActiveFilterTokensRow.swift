@@ -21,7 +21,7 @@ struct ActiveFilterTokensRow: View {
     var body: some View {
         if accountToken != nil || categoryToken != nil || periodToken != nil {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: Spacing.tightGap) {
                     if let accountToken { chip(accountToken) }
                     if let categoryToken { chip(categoryToken) }
                     if let periodToken { chip(periodToken) }

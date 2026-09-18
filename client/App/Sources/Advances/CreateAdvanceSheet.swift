@@ -112,7 +112,7 @@ struct CreateAdvanceSheet: View {
     }
 
     private func participantRow(draft: Binding<Draft>) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Spacing.itemGap) {
             TextField("Nome", text: draft.name)
                 .font(Typography.body)
             TextField("0,00", text: draft.amountText)

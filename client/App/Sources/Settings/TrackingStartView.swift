@@ -72,7 +72,7 @@ struct TrackingStartView: View {
             EyebrowLabel(text: "I tuoi conti")
             timelinePlot(timeline)
             Divider().overlay(Palette.separator)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.tightGap) {
                 Text("Conteggio da")
                     .font(Typography.caption.weight(.semibold))
                     .foregroundStyle(Palette.inkSecondary)
@@ -234,7 +234,7 @@ struct TrackingStartView: View {
 
     private func barRow(_ bar: TrackingTimelineBar) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(color(for: bar))
                     .frame(width: 11, height: 11)

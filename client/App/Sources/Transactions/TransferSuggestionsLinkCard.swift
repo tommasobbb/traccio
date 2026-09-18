@@ -19,7 +19,7 @@ struct TransferSuggestionsLinkCard: View {
             TransfersView(client: client, onUpdate: onUpdate, onDashboardStale: onDashboardStale)
         } label: {
             Card(elevation: .flush, contentPadding: 14) {
-                HStack(spacing: 12) {
+                HStack(spacing: Spacing.itemGap) {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Palette.accent)

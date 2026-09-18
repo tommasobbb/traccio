@@ -14,7 +14,7 @@ struct TransactionSelectionBar: View {
     let onChooseFundedPaymentOrientation: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Spacing.tightGap) {
             if let linkFailureMessage {
                 Banner(message: linkFailureMessage)
             }

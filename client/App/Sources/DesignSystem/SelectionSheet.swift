@@ -30,7 +30,7 @@ struct SelectionSheet<Option: Identifiable>: View {
         Button {
             isPresented = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.tightGap) {
                 if let selectedOption, let glyph = icon(selectedOption) {
                     IconTile(systemImage: glyph.systemImage, color: glyph.color, diameter: 22)
                 }

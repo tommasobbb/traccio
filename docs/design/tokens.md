@@ -518,22 +518,38 @@ with other things.
 Named in Swift as `Spacing.<name>` (`App/Sources/DesignSystem/Spacing.swift`,
 ADR 0017) — same adoption posture as `Radius` above.
 
-| Token              | Value | Swift name           |
-| ------------------- | ----- | --------------------- |
-| Screen gutter        | 20    | `Spacing.gutter`      |
-| Gap between cards    | 16    | `Spacing.cardGap`     |
-| Card internal padding| 20    | `Spacing.cardPadding` |
-| Row internal padding | 9     | `Spacing.rowPadding`  |
+| Token                | Value | Swift name              |
+| --------------------- | ----- | ------------------------ |
+| Screen gutter          | 20    | `Spacing.gutter`         |
+| Gap between cards      | 16    | `Spacing.cardGap`        |
+| Card internal padding  | 20    | `Spacing.cardPadding`    |
+| Row internal padding   | 9     | `Spacing.rowPadding`     |
+| Item gap               | 12    | `Spacing.itemGap`        |
+| Tight gap              | 8     | `Spacing.tightGap`       |
+| Card section gap       | 14    | `Spacing.cardSectionGap` |
 
 **2026-09-15 sweep** (ADR 0031): 27 bare `.padding(20)` call sites moved to
 `.padding(Spacing.gutter)` and 24 `VStack(spacing: 16)` stacks-of-cards moved
 to `Spacing.cardGap`, closing the rest of `tasks/backlog.md` item 14. Left as
-literals, deliberately: values with no matching token, rather than forced
-into the wrong one or given a one-off token for a single call site — a
-colour swatch's 3pt corner, `Card`'s own `contentPadding` overrides (14, an
-explicit per-call override, not a missing token), and the two literals
-`tasks/backlog.md` already named (the hero's `HStack(spacing: 16)`, the FX
-tile's `cornerRadius: 14`).
+literals at the time, deliberately: values with no matching token, rather
+than forced into the wrong one or given a one-off token for a single call
+site — a colour swatch's 3pt corner and the two literals `tasks/backlog.md`
+already named (the hero's `HStack(spacing: 16)`, the FX tile's
+`cornerRadius: 14`).
+
+**2026-09-18 scale expansion**: `Spacing.itemGap` (12) and `Spacing.tightGap`
+(8) name the app's two most-repeated bare `spacing:` values — 42 and 28 call
+sites respectively, out of 158 total across 14 distinct values found in
+`App/Sources`. `Spacing.cardSectionGap` (14) names `Card`'s own default
+content spacing (`Card.swift`), previously a nude `spacing: 14` even though
+every card in the app inherits it. The remaining eleven distinct values
+(0, 2, 3, 4, 5, 6, 10, 16, 18, 20, 22, 24) stay bare literals: each is either
+a true one-off (a swatch's 3pt corner) or a value that recurs but describes
+several genuinely different gaps depending on call site (a compact row's
+`6`, a text stack's `4`) rather than one repeated design decision — naming
+them would force a false single meaning onto values that don't share one.
+Revisit if a future screen's literal turns out to be the same decision
+repeated, not a coincidence of arithmetic.
 
 ## History
 
