@@ -45,12 +45,12 @@ module. What still holds without exception: `db/`, `providers/`, and `core/`
 never import `services/`, and `services/` never imports `api/` — HTTP
 concerns (status codes, request/response schemas) stay in the router.
 
-`db/session.py` and `db/seed_dev.py` are the two places `db/` imports `core`
-(`core.config.get_settings()`, for the database URL and the dev seed's
-user id) — the same single-source-of-truth reason Alembic's own `env.py`
-reads the DSN from `get_settings()` rather than a second hardcoded value.
-Every other module under `db/` (`models`, `mappers`, `repositories/`) imports
-only `domain`, unchanged.
+`db/session.py`, `db/seed_dev.py`, and `db/seed_demo.py` are the places `db/`
+imports `core` (`core.config.get_settings()`, for the database URL and the dev
+seed's user id) — the same single-source-of-truth reason Alembic's own
+`env.py` reads the DSN from `get_settings()` rather than a second hardcoded
+value. Every other module under `db/` (`models`, `mappers`, `repositories/`)
+imports only `domain`, unchanged.
 
 ## Invariants
 

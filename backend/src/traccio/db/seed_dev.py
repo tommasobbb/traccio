@@ -5,7 +5,10 @@ bank data exists (M1). Idempotent — rows have fixed ids and are merged, so
 re-running changes nothing. All values are synthetic (see
 ``.claude/rules/data-safety.md``); this never touches a real bank response.
 
-Run with ``make seed-dev`` (needs a reachable database).
+Run with ``make seed-dev`` (needs a reachable database). ``seed_demo.py``
+(``make demo``) builds a full presentable dataset on top of the same user,
+connection, and accounts this module creates — its ids are public for that
+reason, not just this module's own use.
 """
 
 from datetime import UTC, datetime
@@ -21,9 +24,9 @@ from traccio.domain.enums import AccountKind, ConnectionStatus
 logger = get_logger(__name__)
 
 # Fixed ids so re-seeding merges instead of inserting duplicates.
-_CONNECTION_ID = UUID("00000000-0000-0000-0000-0000000000c1")
-_ACCOUNT_CURRENT_ID = UUID("00000000-0000-0000-0000-0000000000a1")
-_ACCOUNT_SAVINGS_ID = UUID("00000000-0000-0000-0000-0000000000a2")
+CONNECTION_ID = UUID("00000000-0000-0000-0000-0000000000c1")
+ACCOUNT_CURRENT_ID = UUID("00000000-0000-0000-0000-0000000000a1")
+ACCOUNT_SAVINGS_ID = UUID("00000000-0000-0000-0000-0000000000a2")
 
 
 def seed_dev() -> None:
@@ -36,7 +39,7 @@ def seed_dev() -> None:
         session.merge(UserRow(id=user_id, created_at=now))
         session.merge(
             ConnectionRow(
-                id=_CONNECTION_ID,
+                id=CONNECTION_ID,
                 user_id=user_id,
                 provider="dev_seed",
                 institution_name="TEST BANK 01",
@@ -47,9 +50,9 @@ def seed_dev() -> None:
         )
         session.merge(
             AccountRow(
-                id=_ACCOUNT_CURRENT_ID,
+                id=ACCOUNT_CURRENT_ID,
                 user_id=user_id,
-                connection_id=_CONNECTION_ID,
+                connection_id=CONNECTION_ID,
                 kind=AccountKind.CURRENT,
                 currency="EUR",
                 identification_hash="dev-acct-current-01",
@@ -59,9 +62,9 @@ def seed_dev() -> None:
         )
         session.merge(
             AccountRow(
-                id=_ACCOUNT_SAVINGS_ID,
+                id=ACCOUNT_SAVINGS_ID,
                 user_id=user_id,
-                connection_id=_CONNECTION_ID,
+                connection_id=CONNECTION_ID,
                 kind=AccountKind.SAVINGS,
                 currency="EUR",
                 identification_hash="dev-acct-savings-01",

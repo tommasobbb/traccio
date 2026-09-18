@@ -67,6 +67,9 @@ db-upgrade: ## Apply migrations up to head
 seed-dev: db-upgrade ## Populate the DB with the dev user and a few synthetic accounts
 	cd $(BACKEND) && uv run python -m traccio.db.seed_dev
 
+demo: db-upgrade ## Populate the DB with a full synthetic dataset for a demo run
+	cd $(BACKEND) && uv run python -m traccio.db.seed_demo
+
 xcode: ## Regenerate the Xcode project from Project.yml
 	cd client && xcodegen generate
 
@@ -76,4 +79,4 @@ icon: ## Regenerate the app icon and launch mark from the tokens (scripts/gen-ap
 openapi: ## Export the OpenAPI schema to docs/api/openapi.json
 	cd $(BACKEND) && uv run python -m traccio.api.export_openapi ../docs/api/openapi.json
 
-.PHONY: help setup reset-venv run run-tls eb-aspsps eb-connections eb-census repair-empty-fields test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev xcode icon openapi
+.PHONY: help setup reset-venv run run-tls eb-aspsps eb-connections eb-census repair-empty-fields test test-backend test-core test-app lint fmt db-revision db-upgrade seed-dev demo xcode icon openapi

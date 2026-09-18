@@ -30,8 +30,10 @@ class Settings(BaseSettings):
         Emit JSON logs (production) when ``True``, human-readable console
         output (development) when ``False``.
     database_url : str
-        PostgreSQL DSN. Declared now but unused until persistence lands; kept
-        here so ``.env.example`` stays a complete reference.
+        SQLAlchemy database DSN. Defaults to a local SQLite file so the app
+        boots with no server to install or run — a real deployment (Fly.io,
+        ``docs/decisions/0015-deploy-fly-io.md``) points this at PostgreSQL
+        instead via an env var, never by changing this default.
     db_pool_size : int
         Persistent connections the app engine's pool keeps open
         (``db/session.py``). SQLAlchemy's own default is 5; named here so a
@@ -200,8 +202,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # JSON logs in production, human-readable console output in development.
     log_json: bool = False
-    # Declared now, unused until persistence lands; keeps .env.example useful.
-    database_url: str = "postgresql+psycopg://localhost/traccio"
+    # SQLite by default so the app boots with nothing to install; point this at
+    # PostgreSQL (e.g. postgresql+psycopg://localhost/traccio) for production.
+    database_url: str = "sqlite:///./dev.db"
     # Connection-pool sizing for the app engine (db/session.py). Defaults match
     # SQLAlchemy's own; raise or lower per deployment without a code change.
     # pool_pre_ping trades one lightweight query per checkout for immunity to a
