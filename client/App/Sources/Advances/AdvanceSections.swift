@@ -140,7 +140,7 @@ struct AdvanceSections: View {
 
     private func participantRow(name: String, amount: Int, caption: ParticipantCaption) -> some View {
         HStack(spacing: Spacing.itemGap) {
-            avatar(for: name)
+            InitialsAvatar(name: name)
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(Typography.body.weight(.semibold))
@@ -179,21 +179,6 @@ struct AdvanceSections: View {
         }
     }
 
-    /// A participant's initials disc. Neutral ink-on-fill — an avatar is
-    /// identity, not a control (`docs/design/tokens.md`'s "Accent dosage").
-    private func avatar(for name: String) -> some View {
-        Text(initials(for: name))
-            .font(Typography.caption.weight(.bold))
-            .foregroundStyle(Palette.inkSecondary)
-            .frame(width: 36, height: 36)
-            .background(Palette.neutralFill)
-            .clipShape(Circle())
-    }
-
-    private func initials(for name: String) -> String {
-        guard let first = name.first else { return "?" }
-        return String(first).uppercased()
-    }
 
     // MARK: Reimbursements
 

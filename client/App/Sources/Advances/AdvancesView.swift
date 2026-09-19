@@ -94,6 +94,11 @@ struct AdvancesView: View {
         }
     }
 
+    /// The only empty card in the app with no way forward from itself
+    /// (`EventsView.emptyCard` ends in a `PillButton`) — an advance has no
+    /// standalone creation flow, it only ever starts from a transaction row's
+    /// own action, so the pointer names that gesture instead of offering a
+    /// button this screen can't back.
     private var emptyCard: some View {
         Card {
             EyebrowLabel(text: "Anticipi")
@@ -102,34 +107,63 @@ struct AdvancesView: View {
             )
             .font(Typography.caption)
             .foregroundStyle(Palette.inkSecondary)
+            Divider().overlay(Palette.separatorSubtle)
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.tightGap) {
+                Image(systemName: "arrow.turn.right.up")
+                    .font(.system(size: 12, weight: .semibold))
+                (Text("Vai su Movimenti, apri un movimento e scegli ")
+                    + Text("Segna come anticipo").fontWeight(.semibold))
+                    .font(Typography.caption)
+            }
+            .foregroundStyle(Palette.inkTertiary)
         }
     }
 
     // MARK: - Summary
 
+    /// The screen's `.raised` protagonist — the only one on the screen, same
+    /// as the dashboard hero and `PersonDetailView`'s own summary card, whose
+    /// anatomy (figure, `ProgressBar`, Atteso/Rientrato pair) this copies
+    /// rather than reinventing (2026-09-19: this card, and the two lists
+    /// below it, used to be flat text with no figure worth registering at a
+    /// glance — exactly the anatomy the drill-down one tap away already had).
     private func totalsCard(_ totals: [ReceivableTotalResponse]) -> some View {
-        Card {
+        Card(elevation: .raised) {
             EyebrowLabel(text: "Da ricevere")
-            VStack(spacing: 0) {
-                ForEach(totals) { total in
-                    HStack(alignment: .firstTextBaseline) {
-                        AmountText(
-                            amount: total.outstanding,
-                            currencyCode: total.currency,
-                            kind: .income,
-                            font: Typography.heroFigure
-                        )
-                        Spacer()
-                        Text(countLabel(total.openAdvances, one: "anticipo aperto", many: "anticipi aperti"))
-                            .font(Typography.caption)
-                            .foregroundStyle(Palette.inkSecondary)
-                    }
-                    .padding(.vertical, 8)
-                    if total.id != totals.last?.id {
-                        Divider().overlay(Palette.separator)
-                    }
+            ForEach(totals) { total in
+                totalBlock(total)
+                if total.id != totals.last?.id {
+                    Divider().overlay(Palette.separator)
                 }
             }
+        }
+    }
+
+    /// One currency's block — the typical case is a single currency, so this
+    /// is almost always the entire card's body. Unlike `PersonDetailView`'s
+    /// equivalent, there's no "Saldato" branch for a zero figure: this is an
+    /// aggregate across every advance in the currency, and a zero total here
+    /// doesn't mean there's nothing left to look at below (some may still be
+    /// open in another currency, or the count is simply zero for now).
+    private func totalBlock(_ total: ReceivableTotalResponse) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.cardSectionGap) {
+            AmountText(
+                amount: total.outstanding,
+                currencyCode: total.currency,
+                kind: .income,
+                font: Typography.heroFigure
+            )
+            ProgressBar(fraction: total.reimbursedFraction)
+            HStack {
+                advanceFigureColumn(label: "Atteso", amount: total.expected, currency: total.currency)
+                Spacer()
+                advanceFigureColumn(
+                    label: "Rientrato", amount: total.reimbursed, currency: total.currency
+                )
+            }
+            Text(countLabel(total.openAdvances, one: "anticipo aperto", many: "anticipi aperti"))
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
         }
     }
 
@@ -173,16 +207,25 @@ struct AdvancesView: View {
         }
     }
 
+    /// Leading `InitialsAvatar` plus a narrow `ProgressBar` under the name —
+    /// this and `advanceRow` below used to be the only rows in the app with
+    /// no leading element at all (2026-09-19).
     private func personRow(_ person: PersonSummaryResponse) -> some View {
         HStack(spacing: Spacing.itemGap) {
-            VStack(alignment: .leading, spacing: 2) {
+            InitialsAvatar(name: person.name)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(person.name)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                Text(countLabel(person.advanceCount, one: "anticipo", many: "anticipi"))
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
+                HStack(spacing: 6) {
+                    ProgressBar(fraction: person.reimbursedFraction, height: 4)
+                        .frame(width: 64)
+                    Text(countLabel(person.advanceCount, one: "anticipo", many: "anticipi"))
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.inkTertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
             if person.outstanding == 0 {
@@ -196,8 +239,9 @@ struct AdvancesView: View {
             }
             DisclosureChevron()
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, Spacing.rowPadding)
         .contentShape(Rectangle())
+        .rowScrollTransition()
     }
 
     // MARK: - Advances list
@@ -267,13 +311,18 @@ struct AdvancesView: View {
 
     private func advanceRow(_ advance: AdvanceResponse) -> some View {
         HStack(spacing: Spacing.itemGap) {
+            advanceLeadingAvatar(advance)
             VStack(alignment: .leading, spacing: 3) {
                 Text(advance.resolvedDescription)
                     .font(Typography.body)
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    if let names = participantNames(advance) {
+                    // Omitted for exactly one participant — the avatar already
+                    // names them, and "per Marco" next to "MR" is a repeat
+                    // (`docs/design/tokens.md`'s "Text never wraps": drop a
+                    // word redundant with something already on screen).
+                    if advance.participants.count > 1, let names = participantNames(advance) {
                         Text(names)
                             .font(Typography.caption)
                             .foregroundStyle(Palette.inkTertiary)
@@ -283,10 +332,11 @@ struct AdvancesView: View {
                         Text(TraccioCore.formatDate(bookedAt, style: .dayMonthAbbreviatedYear))
                             .font(Typography.caption)
                             .foregroundStyle(Palette.inkQuaternary)
+                            .lineLimit(1)
                     }
                 }
             }
-            Spacer()
+            Spacer(minLength: Spacing.tightGap)
             VStack(alignment: .trailing, spacing: 3) {
                 AmountText(
                     amount: advance.outstanding,
@@ -298,8 +348,27 @@ struct AdvancesView: View {
                 }
             }
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, Spacing.rowPadding)
         .contentShape(Rectangle())
+        .rowScrollTransition()
+    }
+
+    /// A single participant's `InitialsAvatar`, or a neutral group glyph for
+    /// zero or several — the same leading-element idiom `personRow` and
+    /// every other list in the app already use, which this row and
+    /// `personRow` were the last two missing (2026-09-19).
+    @ViewBuilder
+    private func advanceLeadingAvatar(_ advance: AdvanceResponse) -> some View {
+        if advance.participants.count == 1, let only = advance.participants.first {
+            InitialsAvatar(name: only.name)
+        } else {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Palette.inkSecondary)
+                .frame(width: 36, height: 36)
+                .background(Palette.neutralFill)
+                .clipShape(Circle())
+        }
     }
 
     // MARK: - Small helpers (presentation only)

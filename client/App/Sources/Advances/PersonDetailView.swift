@@ -104,30 +104,18 @@ struct PersonDetailView: View {
                     font: Typography.heroFigure
                 )
             }
-            ProgressBar(fraction: fraction(person))
+            ProgressBar(fraction: person.reimbursedFraction)
             HStack {
-                figure(label: "Atteso", amount: person.expected, currency: person.currency)
+                advanceFigureColumn(label: "Atteso", amount: person.expected, currency: person.currency)
                 Spacer()
-                figure(label: "Rientrato", amount: person.reimbursed, currency: person.currency)
+                advanceFigureColumn(
+                    label: "Rientrato", amount: person.reimbursed, currency: person.currency
+                )
             }
             Text(countLabel(person.advanceCount, one: "anticipo", many: "anticipi"))
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkTertiary)
         }
-    }
-
-    private func figure(label: String, amount: Int, currency: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-            AmountText(amount: amount, currencyCode: currency, kind: .notCounted, font: Typography.caption)
-        }
-    }
-
-    private func fraction(_ person: PersonSummaryResponse) -> Double {
-        guard person.expected > 0 else { return person.outstanding == 0 ? 1 : 0 }
-        return Double(person.reimbursed) / Double(person.expected)
     }
 
     // MARK: - Advances
