@@ -13,7 +13,10 @@ struct AdvanceSummaryTests {
     }
 
     private func total(currency: String, outstanding: Int) -> ReceivableTotalResponse {
-        ReceivableTotalResponse(currency: currency, outstanding: outstanding, openAdvances: 1)
+        ReceivableTotalResponse(
+            currency: currency, outstanding: outstanding, expected: outstanding, reimbursed: 0,
+            openAdvances: 1
+        )
     }
 
     @Test func isFalseWhenPerPersonOutstandingMatchesTheTotal() {

@@ -41,7 +41,11 @@ struct PersonDetailViewModelTests {
     private static func summary(_ people: [PersonSummaryResponse]) -> AdvancesSummaryResponse {
         AdvancesSummaryResponse(
             byPerson: people,
-            totals: [ReceivableTotalResponse(currency: "EUR", outstanding: 3000, openAdvances: 2)]
+            totals: [
+                ReceivableTotalResponse(
+                    currency: "EUR", outstanding: 3000, expected: 3000, reimbursed: 0, openAdvances: 2
+                )
+            ]
         )
     }
 

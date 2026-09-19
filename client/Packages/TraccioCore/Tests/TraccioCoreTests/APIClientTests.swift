@@ -1008,7 +1008,7 @@ struct APIClientTests {
                 "reimbursed": 0, "outstanding": 3600, "advance_count": 1 }
             ],
             "totals": [
-              { "currency": "EUR", "outstanding": 3600, "open_advances": 1 }
+              { "currency": "EUR", "outstanding": 3600, "expected": 3600, "reimbursed": 0, "open_advances": 1 }
             ]
           },
           "advances": [

@@ -104,7 +104,8 @@ struct AdvancesViewModelTests {
             ],
             totals: [
                 ReceivableTotalResponse(
-                    currency: "EUR", outstanding: totalOutstanding, openAdvances: 1
+                    currency: "EUR", outstanding: totalOutstanding, expected: 4000,
+                    reimbursed: 4000 - totalOutstanding, openAdvances: 1
                 )
             ]
         )

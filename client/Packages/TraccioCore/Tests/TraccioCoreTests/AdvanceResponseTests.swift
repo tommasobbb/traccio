@@ -36,7 +36,7 @@ struct AdvanceResponseTests {
               }
             ],
             "totals": [
-              { "currency": "EUR", "outstanding": 1800, "open_advances": 1 }
+              { "currency": "EUR", "outstanding": 1800, "expected": 1800, "reimbursed": 0, "open_advances": 1 }
             ]
           },
           "advances": [
