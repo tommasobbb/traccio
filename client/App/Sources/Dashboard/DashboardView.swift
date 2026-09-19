@@ -173,7 +173,7 @@ struct DashboardView: View {
     private func statsCard(_ summary: CurrencySummaryResponse, caption: String?) -> some View {
         DashboardStatsCard(
             summary: summary,
-            previousPeriodTitle: model.period.previous().displayTitle,
+            previousPeriodTitle: model.period.previous().displayTitleInline,
             caption: caption
         )
     }

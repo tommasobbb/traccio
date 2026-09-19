@@ -20,10 +20,21 @@ import TraccioCore
 /// show a pair of stats. The month-over-month delta had the same type scale
 /// as a footnote; a comparison the owner actually wants to register at a
 /// glance needs to read at more than 13pt.
+///
+/// **Revised again 2026-09-19 (third batch this day):** the comparison moved
+/// out of the equal-width column grid onto its own full-width row above it.
+/// Three `.frame(maxWidth: .infinity)` columns gave the comparison (a
+/// direction arrow + a figure + "su Agosto 2026") the same third of the card
+/// as "movimenti" — on a 390pt device that's ~90pt, not enough for either the
+/// figure or the label, so both truncated ("+ 67…" / "su Agosto 2…"). This is
+/// the column-grid version of the "Text never wraps" section's `.fixedSize`
+/// warning in `docs/design/tokens.md`: giving every sibling an equal fixed
+/// share works only when at least one of them can actually shrink to fit.
 struct DashboardStatsCard: View {
     let summary: CurrencySummaryResponse
-    /// The previous period's display title, for the delta column's label —
-    /// computed by the caller (`DashboardView`) via `CalendarPeriod.displayTitle`.
+    /// The previous period's display title, for the comparison row's label —
+    /// computed by the caller (`DashboardView`) via `CalendarPeriod.displayTitleInline`
+    /// (lowercase, since it reads inline after "su").
     let previousPeriodTitle: String
     /// The line under the columns — "Convertito in EUR ai tassi BCE · dd/MM" or
     /// "Totale combinato non disponibile al momento." — or `nil` when neither
@@ -33,6 +44,10 @@ struct DashboardStatsCard: View {
     var body: some View {
         Card(elevation: .flush) {
             VStack(alignment: .leading, spacing: Spacing.cardSectionGap) {
+                if let comparison = summary.comparison {
+                    comparisonRow(comparison)
+                    Divider().overlay(Palette.separatorSubtle)
+                }
                 columns
                 if let caption {
                     Divider().overlay(Palette.separatorSubtle)
@@ -46,19 +61,35 @@ struct DashboardStatsCard: View {
         }
     }
 
-    /// Up to three columns, each optional except the movement count: a
-    /// first period in the app's lifetime has no `comparison`, and a period
-    /// with zero elapsed days has no `averageDailySpending`. The volume
-    /// column is always last, so a trailing divider after either optional
-    /// column is always correct without tracking which column is actually
-    /// last.
+    /// The month-over-month comparison, full-width above the columns — see
+    /// this type's 2026-09-19 doc comment for why it left the column grid.
+    private func comparisonRow(_ c: ComparisonSummaryResponse) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: comparisonImage(c))
+                    .font(.system(size: 13, weight: .bold))
+                Text(comparisonFigureText(c, currency: summary.currency))
+                    .font(Typography.statFigure)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .foregroundStyle(comparisonColor(c))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            Text("su \(previousPeriodTitle)")
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+                .lineLimit(1)
+        }
+    }
+
+    /// Up to two columns, both optional: a period with zero elapsed days has
+    /// no `averageDailySpending`, and the volume column is always shown. A
+    /// trailing divider after the average column is always correct since the
+    /// volume column always follows it when present.
     @ViewBuilder
     private var columns: some View {
         HStack(alignment: .top, spacing: 0) {
-            if let comparison = summary.comparison {
-                comparisonColumn(comparison)
-                columnDivider
-            }
             if let averageDailySpending = summary.averageDailySpending {
                 averageColumn(averageDailySpending)
                 columnDivider
@@ -76,7 +107,7 @@ struct DashboardStatsCard: View {
 
     /// One column: a `Typography.statFigure`-scale figure over a caption
     /// label, matching the hero's Entrate/Netto pair. `.minimumScaleFactor`
-    /// on the figure and `.lineLimit(1)` on both keep three columns from
+    /// on the figure and `.lineLimit(1)` on both keep two columns from
     /// overflowing the card at large Dynamic Type sizes.
     private func column<Figure: View>(
         label: String, @ViewBuilder figure: () -> Figure
@@ -91,20 +122,6 @@ struct DashboardStatsCard: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func comparisonColumn(_ c: ComparisonSummaryResponse) -> some View {
-        column(label: "su \(previousPeriodTitle)") {
-            HStack(spacing: 4) {
-                Image(systemName: comparisonImage(c))
-                    .font(.system(size: 13, weight: .bold))
-                Text(comparisonFigureText(c, currency: summary.currency))
-                    .font(Typography.statFigure)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-            }
-            .foregroundStyle(comparisonColor(c))
-        }
     }
 
     private func averageColumn(_ amount: Int) -> some View {

@@ -24,4 +24,18 @@ extension CalendarPeriod {
             return TraccioCore.formatDate(start, style: .year)
         }
     }
+
+    /// `displayTitle`, lowercase for `.month` — for use inline after a lowercase
+    /// preposition ("su agosto 2026"), where the capitalized standalone form
+    /// (`displayTitle`, used by `DashboardPeriodPicker`) would read as a title
+    /// mid-sentence. `.quarter`/`.year` are unchanged: "T3 2026"/"2026" carry
+    /// no capitalization to lower.
+    var displayTitleInline: String {
+        switch unit {
+        case .month:
+            return TraccioCore.formatDate(start, style: .monthYear)
+        case .quarter, .year:
+            return displayTitle
+        }
+    }
 }
