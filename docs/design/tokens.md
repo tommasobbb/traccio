@@ -439,6 +439,13 @@ own smaller caption-label layout).
   its view stays alive rolls its digits instead of snapping. On Panoramica
   the `stateTag` folds in the headline spend total, so a period change lands
   inside an animation transaction.
+- **Long-press for a row's secondary actions.** Added for Movimenti's row
+  context menu (ADR 0036, 2026-09-19) — the client's first use of
+  `.contextMenu`; before this, no view used `.contextMenu`,
+  `.swipeActions`, or `onLongPressGesture` anywhere. Entries use
+  `Label(_, systemImage:)` like every other `Menu` in the app (ADR 0030 §4)
+  and are shown only when they apply to the row, rather than disabled —
+  an inapplicable action simply isn't listed.
 
 ## Radii
 
