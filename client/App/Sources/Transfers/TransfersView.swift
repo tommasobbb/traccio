@@ -51,12 +51,22 @@ struct TransfersView: View {
             .refreshable { await model.load() }
     }
 
-    @ViewBuilder
+    /// One stable `ScrollView` across every state — see
+    /// `TransactionsView.content`'s doc comment for why a per-case
+    /// `ScrollView` (or, here, no `ScrollView` at all in the loading state)
+    /// breaks `.refreshable`.
     private var content: some View {
+        ScrollView {
+            innerContent
+                .padding(Spacing.gutter)
+        }
+    }
+
+    @ViewBuilder
+    private var innerContent: some View {
         switch model.state {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ListSkeleton()
         case .loaded(let pairs) where pairs.isEmpty:
             EmptyState(
                 systemImage: "arrow.left.arrow.right", title: "Nessun trasferimento da confermare"
@@ -76,22 +86,19 @@ struct TransfersView: View {
     }
 
     private func list(_ pairs: [TransferSuggestionPair]) -> some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                if model.actionFailure != nil {
-                    Banner(message: "Non è stato possibile completare l'azione. Riprova.")
-                }
-                ForEach(pairs) { pair in
-                    TransferSuggestionCard(
-                        pair: pair,
-                        accountsByID: model.accountsByID,
-                        isUpdating: model.isUpdating,
-                        onConfirm: { Task { await model.confirm(pair) } },
-                        onReject: { Task { await model.reject(pair) } }
-                    )
-                }
+        VStack(spacing: 14) {
+            if model.actionFailure != nil {
+                Banner(message: "Non è stato possibile completare l'azione. Riprova.")
             }
-            .padding(Spacing.gutter)
+            ForEach(pairs) { pair in
+                TransferSuggestionCard(
+                    pair: pair,
+                    accountsByID: model.accountsByID,
+                    isUpdating: model.isUpdating,
+                    onConfirm: { Task { await model.confirm(pair) } },
+                    onReject: { Task { await model.reject(pair) } }
+                )
+            }
         }
     }
 }

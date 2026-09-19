@@ -92,13 +92,16 @@ final class CategorizationViewModel {
     /// A failure in *either* fetch surfaces as `.failed` — see the type's
     /// docstring for why categories are not best-effort on this screen.
     func load() async {
-        state = .loading
+        state.beginLoading()
         do {
             async let categoriesResult = client.categories()
             let rules = try await client.rules()
             let categories = try await categoriesResult
             state = .loaded(Content(rules: rules, categories: categories))
         } catch {
+            // A cancelled request is not a failure — see
+            // `TransactionsViewModel.loadPage()`'s identical guard.
+            guard !error.isCancellationError else { return }
             state = .failed
         }
     }

@@ -82,12 +82,15 @@ final class TransfersViewModel {
     /// fetch `accounts()` is best-effort and does not fail the screen — see
     /// `accountsByID`.
     func load() async {
-        state = .loading
+        state.beginLoading()
 
         let suggestions: [TransferSuggestionResponse]
         do {
             suggestions = try await client.transferSuggestions()
         } catch {
+            // A cancelled request is not a failure — see
+            // `TransactionsViewModel.loadPage()`'s identical guard.
+            guard !error.isCancellationError else { return }
             state = .failed
             return
         }

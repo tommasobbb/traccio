@@ -63,12 +63,7 @@ final class AdvancesViewModel {
     /// visible while refetching (e.g. after a filter change) rather than
     /// flashing a spinner.
     func load() async {
-        switch state {
-        case .idle, .failed:
-            state = .loading
-        case .loading, .loaded:
-            break
-        }
+        state.beginLoading()
 
         let filter = statusFilter
         do {
@@ -82,6 +77,9 @@ final class AdvancesViewModel {
                 )
             )
         } catch {
+            // A cancelled request is not a failure — see
+            // `TransactionsViewModel.loadPage()`'s identical guard.
+            guard !error.isCancellationError else { return }
             state = .failed
         }
     }
