@@ -18,7 +18,6 @@ struct TransactionDetailLoader: View {
     private let onUpdate: (TransactionResponse) -> Void
     private let onAdvanceChange: (AdvanceResponse?) -> Void
     private let onDashboardStale: () -> Void
-    private let onDelete: (UUID) -> Void
 
     /// Create the loader.
     ///
@@ -32,7 +31,7 @@ struct TransactionDetailLoader: View {
     ///     without a second lookup. `nil` for a plain transaction.
     /// client:
     ///     The API client, shared with the pushed detail screen.
-    /// onUpdate / onAdvanceChange / onDashboardStale / onDelete:
+    /// onUpdate / onAdvanceChange / onDashboardStale:
     ///     Forwarded to `TransactionDetailView` unchanged — the calling list
     ///     reloads itself from these.
     init(
@@ -41,8 +40,7 @@ struct TransactionDetailLoader: View {
         client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
-        onDashboardStale: @escaping () -> Void = {},
-        onDelete: @escaping (UUID) -> Void = { _ in }
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         _model = State(wrappedValue: Model(transactionID: transactionID, client: client))
         self.advance = advance
@@ -50,7 +48,6 @@ struct TransactionDetailLoader: View {
         self.onUpdate = onUpdate
         self.onAdvanceChange = onAdvanceChange
         self.onDashboardStale = onDashboardStale
-        self.onDelete = onDelete
     }
 
     var body: some View {
@@ -84,8 +81,7 @@ struct TransactionDetailLoader: View {
                 client: client,
                 onUpdate: onUpdate,
                 onAdvanceChange: onAdvanceChange,
-                onDashboardStale: onDashboardStale,
-                onDelete: onDelete
+                onDashboardStale: onDashboardStale
             )
         case .failed:
             EmptyState(

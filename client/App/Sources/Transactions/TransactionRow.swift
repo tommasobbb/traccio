@@ -8,11 +8,14 @@ import TraccioCore
 /// The row is a `NavigationLink` to `TransactionDetailView`
 /// (`docs/design/canvas/TransactionDetail.dc.html`) — an advance-role row
 /// gets its "quota" caption here and the split/participants/reimbursements
-/// cards there once the advance lookup resolves. The leading tile is a
-/// second, narrower tap target laid over the link
-/// (`docs/decisions/0036-movimenti-row-actions.md`): tapping it opens
-/// `CategoryPickerSheet` directly, the two-tap categorization path — tapping
-/// anywhere else on the row still pushes to the detail screen.
+/// cards there once the advance lookup resolves. Three gestures share the
+/// row (`docs/decisions/0036-movimenti-row-actions.md`): the leading tile is
+/// a second, narrower tap target laid over the link that opens
+/// `CategoryPickerSheet` directly — the two-tap categorization path; tapping
+/// anywhere else still pushes to the detail screen; a long-press opens
+/// `.contextMenu` with the row's other actions (mark as advance, link as
+/// transfer, and — on a manual account — edit/delete), each shown only when
+/// applicable.
 struct TransactionRow: View {
     let transaction: TransactionResponse
     /// The caller's categories, threaded to `TransactionDetailView`'s picker.
@@ -50,18 +53,15 @@ struct TransactionRow: View {
     /// change the dashboard's totals, so the caller can invalidate
     /// `DataFreshness.Scope.dashboard`.
     let onDashboardStale: () -> Void
-    /// Called with this transaction's id after it is deleted from the detail
-    /// screen (a manual movement, ADR 0020), so
-    /// `TransactionsViewModel.remove(id:)` can drop the row.
-    let onDelete: (UUID) -> Void
-    /// Called when the leading tile is tapped, to open `CategoryPickerSheet`
-    /// for this row (`docs/decisions/0036-movimenti-row-actions.md`) — the
-    /// two-tap categorization path. Absent in selection mode, where the tile
-    /// is already a checkbox.
-    let onCategorize: (TransactionResponse) -> Void
+    /// The row's other actions — the leading tile's tap and the context
+    /// menu's entries — grouped so this initializer doesn't grow yet another
+    /// individual closure parameter per action
+    /// (`docs/decisions/0036-movimenti-row-actions.md`).
+    let actions: Actions
     /// When non-`nil`, the row is in transfer-pairing selection mode: it
     /// renders a leading checkbox and toggles selection on tap instead of
-    /// navigating to the detail screen (`docs/domain.md` §Transfer).
+    /// navigating to the detail screen (`docs/domain.md` §Transfer). The
+    /// context menu and leading-tile tap target are both absent in this mode.
     var selection: Selection? = nil
     /// Shared with `TransactionsView` so the push to `TransactionDetailView`
     /// zooms from this row's own frame instead of sliding in
@@ -77,6 +77,29 @@ struct TransactionRow: View {
         /// different currency, not `personal`, or two are already picked).
         let isSelectable: Bool
         let onToggle: () -> Void
+    }
+
+    /// The row's actions outside the plain tap-to-open-detail gesture —
+    /// the leading tile's tap target and every `.contextMenu` entry.
+    struct Actions {
+        /// Opens `CategoryPickerSheet` for this row — the two-tap
+        /// categorization path, both the leading-tile tap and the context
+        /// menu's "Categorizza".
+        let onCategorize: (TransactionResponse) -> Void
+        /// Opens `CreateAdvanceSheet` for this row — the context menu's
+        /// "Segna come anticipo", shown only when
+        /// `TraccioCore.canBecomeAdvance(_:)`.
+        let onMarkAsAdvance: (TransactionResponse) -> Void
+        /// Enters transfer-pairing selection mode with this row as the
+        /// anchor — the context menu's "Collega a…", shown only when
+        /// `TraccioCore.canStartTransferLink(_:)`.
+        let onLinkFrom: (TransactionResponse) -> Void
+        /// Opens `EditManualTransactionSheet` for this row — the context
+        /// menu's "Modifica", shown only on a manual account.
+        let onEdit: (TransactionResponse) -> Void
+        /// Confirms and deletes this row — the context menu's "Elimina",
+        /// shown only on a manual account.
+        let onDelete: (TransactionResponse) -> Void
     }
 
     var body: some View {
@@ -99,8 +122,7 @@ struct TransactionRow: View {
                         client: client,
                         onUpdate: onUpdate,
                         onAdvanceChange: onAdvanceUpdate,
-                        onDashboardStale: onDashboardStale,
-                        onDelete: onDelete
+                        onDashboardStale: onDashboardStale
                     )
                     #if os(iOS)
                     .navigationTransition(.zoom(sourceID: transaction.id, in: namespace))
@@ -110,6 +132,7 @@ struct TransactionRow: View {
                 }
                 .buttonStyle(.pressableRow)
                 .matchedTransitionSource(id: transaction.id, in: namespace)
+                .contextMenu { contextMenuContent }
                 .overlay(alignment: .leading) { categorizeTapTarget }
             }
         }
@@ -125,7 +148,7 @@ struct TransactionRow: View {
     /// categorization path: this tap opens `CategoryPickerSheet`, the rest of
     /// the row still pushes to `TransactionDetailView`.
     private var categorizeTapTarget: some View {
-        Button(action: { onCategorize(transaction) }) {
+        Button(action: { actions.onCategorize(transaction) }) {
             Color.clear
         }
         .buttonStyle(.plain)
@@ -135,6 +158,53 @@ struct TransactionRow: View {
         // target on it.
         .padding(.leading, 8)
         .accessibilityLabel(categorizeAccessibilityLabel)
+    }
+
+    /// The long-press menu's entries (`docs/decisions/0036-movimenti-row-actions.md`),
+    /// each shown only when it applies to this row: "Categorizza" always,
+    /// "Segna come anticipo" when `TraccioCore.canBecomeAdvance(_:)`,
+    /// "Collega a…" when `TraccioCore.canStartTransferLink(_:)`, and
+    /// "Modifica"/"Elimina" only on a manual account (ADR 0020).
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        Button {
+            actions.onCategorize(transaction)
+        } label: {
+            Label("Categorizza", systemImage: "tag")
+        }
+        if TraccioCore.canBecomeAdvance(transaction) {
+            Button {
+                actions.onMarkAsAdvance(transaction)
+            } label: {
+                Label("Segna come anticipo", systemImage: "square.stack.3d.up.fill")
+            }
+        }
+        if TraccioCore.canStartTransferLink(transaction) {
+            Button {
+                actions.onLinkFrom(transaction)
+            } label: {
+                Label("Collega a…", systemImage: "arrow.triangle.merge")
+            }
+        }
+        if isManualAccount {
+            Button {
+                actions.onEdit(transaction)
+            } label: {
+                Label("Modifica", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                actions.onDelete(transaction)
+            } label: {
+                Label("Elimina", systemImage: "trash")
+            }
+        }
+    }
+
+    /// Whether this row's account is manual — gates "Modifica"/"Elimina" in
+    /// the context menu, same rule `TransactionDetailView.isManual` used
+    /// before those actions moved to the row (ADR 0020).
+    private var isManualAccount: Bool {
+        accountsByID[transaction.accountID]?.source == .manual
     }
 
     private var categorizeAccessibilityLabel: String {

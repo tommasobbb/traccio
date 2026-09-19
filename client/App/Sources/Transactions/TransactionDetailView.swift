@@ -1,11 +1,13 @@
 import SwiftUI
 import TraccioCore
 
-/// "Dettaglio movimento" — reached by tapping a Movimenti row. Categorizing
-/// now happens from the row's leading tile instead of this pushed screen
-/// (`docs/decisions/0036-movimenti-row-actions.md`); marking as advance,
-/// editing, and deleting a manual movement are moving the same way in a
-/// follow-up and still live here for now.
+/// "Dettaglio movimento" — reached by tapping a Movimenti row. Categorizing,
+/// marking as an advance, and editing/deleting a manual movement all happen
+/// from the row's leading tile or its context menu instead of this pushed
+/// screen now (`docs/decisions/0036-movimenti-row-actions.md`) — this screen
+/// is a read-mostly detail plus the sections that genuinely belong to it:
+/// event, an *existing* advance's split/participants/reimbursements, and a
+/// confirmed transfer's counterpart.
 ///
 /// `TransactionDetailViewModel` re-fetches the row from the backend after
 /// every write rather than deriving the new state here (the backend owns
@@ -16,32 +18,23 @@ import TraccioCore
 /// The header and advance cards previously lived in a dedicated
 /// `AdvanceDetailView`; that view is now `AdvanceSections`, embedded here only
 /// for a transaction whose advance resolved (`model.advance`, kept in the
-/// view model rather than a fixed `let` — creating or deleting the advance
-/// right here changes it, unlike the category-confirmation flow's other side
-/// effects). An eligible transaction with no advance
-/// (`TraccioCore.canBecomeAdvance(_:)`) instead gets a "Segna come anticipo"
-/// card presenting `CreateAdvanceSheet`. A transaction whose `role ==
-/// .transfer` and whose transfer resolved additionally gets `TransferSection`
-/// — the counterpart leg and an "Annulla collegamento" action. No mockup
-/// covers the advance-creation flow or the transfer card
-/// (`docs/design/canvas/TransactionDetail.dc.html` only covers the
-/// already-created advance case), so both are built from existing
+/// view model rather than a fixed `let` — deleting/writing off/reopening the
+/// advance right here changes it). A transaction whose `role == .transfer`
+/// and whose transfer resolved additionally gets `TransferSection` — the
+/// counterpart leg and an "Annulla collegamento" action. No mockup covers the
+/// transfer card (`docs/design/canvas/TransactionDetail.dc.html` only covers
+/// the already-created advance case), so it is built from existing
 /// tokens/components (`Card`, `Badge`, `EyebrowLabel`, `PillButton`,
 /// `Banner`) rather than a new design pass.
 ///
 /// `TransactionHeaderCard` and `TransactionEventCard` each live in their own
 /// file next to this one — this view wires them to
 /// `TransactionDetailViewModel` and lays them out alongside
-/// `AdvanceSections`/`TransferSection` (already separate) and the two small
-/// manual-movement/mark-as-advance cards kept inline here.
+/// `AdvanceSections`/`TransferSection` (already separate).
 struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
-    @State private var isPresentingCreateAdvanceSheet = false
     @State private var isPresentingAddReimbursementSheet = false
     @State private var isPresentingEventPickerSheet = false
-    @State private var isPresentingEditSheet = false
-    @State private var isConfirmingDelete = false
-    @Environment(\.dismiss) private var dismiss
     /// The account this transaction belongs to, for the header's currency
     /// line. Best-effort, so `nil` degrades to a generic label rather than
     /// hiding the header.
@@ -107,14 +100,13 @@ struct TransactionDetailView: View {
         client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
-        onDashboardStale: @escaping () -> Void = {},
-        onDelete: @escaping (UUID) -> Void = { _ in }
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
                 transaction: transaction, advance: advance, categories: categories, transfer: transfer,
                 client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange,
-                onDashboardStale: onDashboardStale, onDelete: onDelete
+                onDashboardStale: onDashboardStale
             )
         )
         self.account = account
@@ -157,8 +149,6 @@ struct TransactionDetailView: View {
                             Task { await model.deleteReimbursement(reimbursement) }
                         }
                     )
-                } else if TraccioCore.canBecomeAdvance(model.transaction) {
-                    markAsAdvanceCard
                 }
                 if model.transfer != nil {
                     TransferSection(
@@ -166,9 +156,6 @@ struct TransactionDetailView: View {
                         isUnlinking: model.isUpdating,
                         onUnlink: { Task { await model.unlinkTransfer() } }
                     )
-                }
-                if isManual {
-                    manualActionsCard
                 }
             }
             .padding(Spacing.gutter)
@@ -180,23 +167,6 @@ struct TransactionDetailView: View {
             await model.loadCategoriesIfNeeded()
             await model.loadTransferIfNeeded()
             await model.loadReimbursements()
-        }
-        .sheet(isPresented: $isPresentingCreateAdvanceSheet) {
-            CreateAdvanceSheet(
-                transaction: model.transaction,
-                isCreating: model.isUpdating,
-                failureMessage: model.actionFailure != nil
-                    ? "Non è stato possibile creare l'anticipo. Riprova." : nil,
-                onCreate: { ownShare, participants in
-                    Task {
-                        await model.createAdvance(ownShare: ownShare, participants: participants)
-                        if model.actionFailure == nil {
-                            isPresentingCreateAdvanceSheet = false
-                        }
-                    }
-                },
-                onCancel: { isPresentingCreateAdvanceSheet = false }
-            )
         }
         .sheet(isPresented: $isPresentingAddReimbursementSheet) {
             AddReimbursementSheet(
@@ -237,86 +207,6 @@ struct TransactionDetailView: View {
                 onCancel: { isPresentingEventPickerSheet = false }
             )
         }
-        .sheet(isPresented: $isPresentingEditSheet) {
-            EditManualTransactionSheet(
-                transaction: model.transaction,
-                isSaving: model.isUpdating,
-                failureMessage: model.actionFailure != nil
-                    ? "Non è stato possibile salvare il movimento. Riprova." : nil,
-                onSave: { amount, currency, valueDate, description in
-                    Task {
-                        await model.editManualTransaction(
-                            amount: amount, currency: currency, valueDate: valueDate,
-                            description: description
-                        )
-                        if model.actionFailure == nil {
-                            isPresentingEditSheet = false
-                        }
-                    }
-                },
-                onCancel: { isPresentingEditSheet = false }
-            )
-        }
-        .confirmationDialog(
-            "Eliminare questo movimento?",
-            isPresented: $isConfirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Elimina", role: .destructive) {
-                Task {
-                    await model.deleteManualTransaction()
-                    if model.actionFailure == nil { dismiss() }
-                }
-            }
-            Button("Annulla", role: .cancel) {}
-        } message: {
-            Text("L'operazione non è reversibile.")
-        }
-    }
-
-    // MARK: Manual movement actions (ADR 0020)
-
-    /// Whether this row is on a manual account and so can be edited/deleted.
-    private var isManual: Bool {
-        account?.source == .manual
-    }
-
-    private var manualActionsCard: some View {
-        Card {
-            EyebrowLabel(text: "Movimento manuale")
-            Text("Questo movimento è stato inserito a mano e puoi modificarlo o eliminarlo.")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
-            HStack(spacing: 10) {
-                PillButton(title: "Modifica", action: { isPresentingEditSheet = true })
-                Button(role: .destructive) {
-                    isConfirmingDelete = true
-                } label: {
-                    Text("Elimina")
-                        .font(Typography.body.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Palette.warning)
-            }
-            .disabled(model.isUpdating)
-        }
-    }
-
-    // MARK: Advance
-
-    private var markAsAdvanceCard: some View {
-        Card {
-            EyebrowLabel(text: "Anticipo")
-            Text("Hai pagato per qualcun altro su questo movimento?")
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkSecondary)
-            PillButton(
-                title: "Segna come anticipo",
-                action: { isPresentingCreateAdvanceSheet = true }
-            )
-        }
     }
 
     /// The effective category's display name, resolved against
@@ -337,8 +227,6 @@ struct TransactionDetailView: View {
         case nil: nil
         case .transactionInAnotherEvent: "Il movimento è già assegnato a un altro evento."
         case .mixedCurrency: "Questo movimento ha una valuta diversa da quella dell'evento."
-        case .transactionInUse:
-            "Il movimento è collegato a un trasferimento o a un anticipo. Scollegalo prima di eliminarlo."
         case .generic: "Non è stato possibile completare l'operazione. Riprova."
         }
     }

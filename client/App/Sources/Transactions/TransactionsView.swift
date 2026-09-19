@@ -2,11 +2,14 @@ import SwiftUI
 import TraccioCore
 
 /// The Movimenti screen — the transaction list backing every M2 feature
-/// (transfers, advances, reimbursements, categories) that has no other entry
-/// point in the client yet. Every row links to `TransactionDetailView`, where
-/// a category can be confirmed or cleared (see `TransactionRow`) — the
-/// client's first write-with-a-body flow. A card at the top of the list
-/// links to `TransfersView` whenever there is at least one transfer
+/// (transfers, advances, reimbursements, categories). Each row carries its
+/// own actions now (`docs/decisions/0036-movimenti-row-actions.md`): a tap on
+/// the leading tile confirms/clears a category via `CategoryPickerSheet`, a
+/// long-press opens a context menu (mark as advance, link as transfer, and —
+/// on a manual account — edit/delete), and tapping the rest of the row still
+/// pushes to `TransactionDetailView` for the sections that belong there
+/// (event, an *existing* advance, a confirmed transfer). A card at the top of
+/// the list links to `TransfersView` whenever there is at least one transfer
 /// suggestion to confirm or reject.
 ///
 /// Follows `docs/design/canvas/TransactionsV2.dc.html` (Fase B redesign):
@@ -55,15 +58,26 @@ struct TransactionsView: View {
     /// because this view owns the write and its outcome, same as every other
     /// sheet's dismissal.
     @State private var isPresentingCreateRuleSheet = false
+    /// The row awaiting a delete confirmation, from the context menu's
+    /// "Elimina" — separate from `rowAction` since `.confirmationDialog`'s
+    /// button always dismisses on tap, so it can't stay open through a
+    /// failed delete the way a `.sheet(item:)` can; `deleteFailureMessage`
+    /// carries the outcome to a follow-up `.alert` instead.
+    @State private var deleteTarget: TransactionResponse?
+    @State private var deleteFailureMessage: String?
 
-    /// One row-level action awaiting a sheet or dialog, keyed by the
-    /// transaction it targets.
+    /// One row-level action presented as a sheet, keyed by the transaction it
+    /// targets (`docs/decisions/0036-movimenti-row-actions.md`). Delete is
+    /// not one of these — see `deleteTarget`.
     enum RowAction: Identifiable {
         case categorize(TransactionResponse)
+        case advance(TransactionResponse)
+        case edit(TransactionResponse)
 
         var id: UUID {
             switch self {
-            case .categorize(let transaction): transaction.id
+            case .categorize(let transaction), .advance(let transaction), .edit(let transaction):
+                transaction.id
             }
         }
     }
@@ -176,7 +190,76 @@ struct TransactionsView: View {
                             }
                         }
                     )
+                case .advance(let transaction):
+                    CreateAdvanceSheet(
+                        transaction: transaction,
+                        isCreating: model.isUpdatingRow,
+                        failureMessage: rowActionFailureMessage != nil
+                            ? "Non è stato possibile creare l'anticipo. Riprova." : nil,
+                        onCreate: { ownShare, participants in
+                            Task {
+                                if await model.createAdvance(
+                                    ownShare: ownShare, participants: participants, for: transaction.id
+                                ) {
+                                    freshness.markStale([.dashboard])
+                                    rowAction = nil
+                                }
+                            }
+                        },
+                        onCancel: { rowAction = nil }
+                    )
+                case .edit(let transaction):
+                    EditManualTransactionSheet(
+                        transaction: transaction,
+                        isSaving: model.isUpdatingRow,
+                        failureMessage: rowActionFailureMessage != nil
+                            ? "Non è stato possibile salvare il movimento. Riprova." : nil,
+                        onSave: { amount, currency, valueDate, description in
+                            Task {
+                                if await model.editManualTransaction(
+                                    transactionID: transaction.id, amount: amount, currency: currency,
+                                    valueDate: valueDate, description: description
+                                ) {
+                                    freshness.markStale([.dashboard])
+                                    rowAction = nil
+                                }
+                            }
+                        },
+                        onCancel: { rowAction = nil }
+                    )
                 }
+            }
+            .confirmationDialog(
+                "Eliminare questo movimento?",
+                isPresented: Binding(
+                    get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: deleteTarget
+            ) { transaction in
+                Button("Elimina", role: .destructive) {
+                    Task {
+                        if await model.deleteManualTransaction(transaction.id) {
+                            freshness.markStale([.dashboard])
+                        } else {
+                            deleteFailureMessage = rowDeleteFailureMessage
+                        }
+                        deleteTarget = nil
+                    }
+                }
+                Button("Annulla", role: .cancel) {}
+            } message: { _ in
+                Text("L'operazione non è reversibile.")
+            }
+            .alert(
+                "Impossibile eliminare",
+                isPresented: Binding(
+                    get: { deleteFailureMessage != nil }, set: { if !$0 { deleteFailureMessage = nil } }
+                )
+            ) {
+                Button("OK") {}
+            } message: {
+                Text(deleteFailureMessage ?? "")
             }
             .sheet(isPresented: $isChoosingFundedPaymentOrientation) {
                 let selected = model.selectedTransactions
@@ -212,21 +295,14 @@ struct TransactionsView: View {
                 Button("Fine") { model.exitSelection() }
             }
         } else {
-            // The toolbar is "•••" overflow, a filter button, and "+": the
-            // transfer count moved to a card at the top of the list (more
-            // discoverable than a mute glyph that vanishes at zero), and
-            // "Collega trasferimento" is a secondary action, not a peer of "+".
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        model.enterSelection()
-                    } label: {
-                        Label("Collega trasferimento", systemImage: "arrow.triangle.merge")
-                    }
-                } label: {
-                    Label("Altro", systemImage: "ellipsis")
-                }
-            }
+            // The toolbar is a filter button and "+": the transfer count
+            // moved to a card at the top of the list (more discoverable than
+            // a mute glyph that vanishes at zero), and "Collega trasferimento"
+            // moved into the row's own context menu as "Collega a…"
+            // (`docs/decisions/0036-movimenti-row-actions.md`) — the old
+            // "•••" overflow `Menu` had exactly that one entry, a
+            // service menu dressed as a primary action.
+            //
             // One entry point for all three filter dimensions. `.fill` when
             // anything is filtered; the active filters themselves show as
             // removable tokens under the search field (`filterRow`).
@@ -244,9 +320,9 @@ struct TransactionsView: View {
                 }
                 .animation(.easeInOut(duration: 0.2), value: hasActiveFilters)
             }
-            // A fixed spacer splits "Altro"/"Filtri" from "+" into two glass
-            // capsules instead of one merged group — "+" is the primary
-            // creation action and reads as such on its own
+            // A fixed spacer splits "Filtri" from "+" into two glass capsules
+            // instead of one merged group — "+" is the primary creation
+            // action and reads as such on its own
             // (`docs/decisions/0031-visual-coherence-pass.md`).
             ToolbarSpacer(.fixed, placement: .primaryAction)
             ToolbarItem(placement: .primaryAction) {
@@ -307,6 +383,17 @@ struct TransactionsView: View {
         case .duplicateRule: "Esiste già una regola identica."
         case nil, .generic, .transactionInUse: nil
         }
+    }
+
+    /// The follow-up `.alert`'s copy after a failed delete — the
+    /// `.confirmationDialog` itself already dismissed on the button tap, so
+    /// this is the only place left to say why (`deleteFailureMessage`).
+    /// `.transactionInUse` names the specific, recoverable cause; anything
+    /// else falls back to a generic retry.
+    private var rowDeleteFailureMessage: String {
+        model.rowActionFailure == .transactionInUse
+            ? "Il movimento è collegato a un trasferimento o a un anticipo. Scollegalo prima di eliminarlo."
+            : "Non è stato possibile eliminare il movimento. Riprova."
     }
 
     // MARK: Active-filter tokens
@@ -495,11 +582,27 @@ struct TransactionsView: View {
                             onUpdate: { model.replace($0) },
                             onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
                             onDashboardStale: { freshness.markStale([.dashboard]) },
-                            onDelete: { model.remove(id: $0) },
-                            onCategorize: { transaction in
-                                model.clearRowActionFailure()
-                                rowAction = .categorize(transaction)
-                            },
+                            actions: TransactionRow.Actions(
+                                onCategorize: { transaction in
+                                    model.clearRowActionFailure()
+                                    rowAction = .categorize(transaction)
+                                },
+                                onMarkAsAdvance: { transaction in
+                                    model.clearRowActionFailure()
+                                    rowAction = .advance(transaction)
+                                },
+                                onLinkFrom: { transaction in
+                                    model.enterSelection(anchor: transaction.id)
+                                },
+                                onEdit: { transaction in
+                                    model.clearRowActionFailure()
+                                    rowAction = .edit(transaction)
+                                },
+                                onDelete: { transaction in
+                                    model.clearRowActionFailure()
+                                    deleteTarget = transaction
+                                }
+                            ),
                             selection: rowSelection(for: transaction),
                             namespace: transitionNamespace
                         )

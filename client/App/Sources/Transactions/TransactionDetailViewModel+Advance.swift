@@ -1,51 +1,12 @@
 import Foundation
 import TraccioCore
 
-/// Creating, deleting, writing off, and reopening this transaction's advance.
+/// Deleting, writing off, and reopening this transaction's advance — all
+/// actions on an *existing* advance, reached from `AdvanceSections` on this
+/// pushed screen. Creating one moved to `TransactionsViewModel+RowActions.swift`
+/// when marking a row as an advance became a row-level action
+/// (`docs/decisions/0036-movimenti-row-actions.md`).
 extension TransactionDetailViewModel {
-    /// Create an advance on this transaction — the explicit user action from
-    /// `CreateAdvanceSheet`.
-    ///
-    /// On success, both the created advance and the refreshed transaction
-    /// (its `role` is now `advance`, `effectiveAmount` now `ownShare`) are
-    /// published, and both `onUpdate`/`onAdvanceChange` fire so the caller
-    /// can update the Movimenti row and `advancesByTransactionID` alike.
-    /// Unlike `performUpdate`, this also needs the created advance itself
-    /// (not part of `TransactionResponse`), so it does not reuse that
-    /// helper.
-    ///
-    /// Parameters
-    /// ----------
-    /// ownShare:
-    ///     The user's declared share, a positive magnitude in the
-    ///     transaction's currency. The backend validates the range; an
-    ///     out-of-range value surfaces as `actionFailure`.
-    /// participants:
-    ///     People who owe the user back; may be empty.
-    func createAdvance(ownShare: Int, participants: [ParticipantRequest]) async {
-        guard !isUpdating else { return }
-        isUpdating = true
-        defer { isUpdating = false }
-        actionFailure = nil
-
-        do {
-            let created = try await client.createAdvance(
-                CreateAdvanceRequest(
-                    transactionID: transaction.id, ownShare: ownShare, participants: participants
-                )
-            )
-            let refreshed = try await client.transaction(id: transaction.id)
-            transaction = refreshed
-            advance = created
-            onUpdate(refreshed)
-            onAdvanceChange(created)
-            onDashboardStale()
-            successTick += 1
-        } catch {
-            actionFailure = .generic
-        }
-    }
-
     /// Delete this transaction's advance, reverting it to `personal`.
     ///
     /// A no-op without an advance. On success, both the refreshed transaction

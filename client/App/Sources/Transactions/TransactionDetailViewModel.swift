@@ -2,10 +2,11 @@ import Foundation
 import Observation
 import TraccioCore
 
-/// Drives `TransactionDetailView`: the event, advance, transfer, and
-/// manual-movement actions that stay on this pushed screen. Category
-/// confirm/clear moved to `TransactionsViewModel` — see
-/// `docs/decisions/0036-movimenti-row-actions.md` — this type keeps only a
+/// Drives `TransactionDetailView`: the event, transfer, reimbursement, and
+/// *existing*-advance actions that stay on this pushed screen. Categorizing,
+/// marking as an advance, and editing/deleting a manual movement all moved to
+/// `TransactionsViewModel` once they became row-level actions
+/// (`docs/decisions/0036-movimenti-row-actions.md`) — this type keeps only a
 /// read-only `categories` list, to resolve the header's category name.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
@@ -17,16 +18,16 @@ import TraccioCore
 /// (`docs/engineering.md`).
 ///
 /// The type is split by concern across `TransactionDetailViewModel+*.swift`
-/// in this directory (category, manual edit, transfer, advance,
-/// reimbursement, event), the same pattern `APIClient+*.swift` uses in
-/// `TraccioCore`. Splitting a class across files means Swift's `private`
-/// (file-scoped) cannot protect these members from the rest of the app
-/// target the way it protects `APIClient`'s transport internals from other
-/// modules — so, exactly as `APIClient`'s `baseURL`/`apiToken`/`session` are
-/// `internal` rather than `private` for the same reason, the state below and
-/// the shared `performUpdate` helper are `internal`. Treat them as this
-/// type's private implementation: only its own extensions read or write
-/// them; every other caller goes through the methods declared there.
+/// in this directory (transfer, advance, reimbursement, event, and the
+/// single `loadCategoriesIfNeeded()` left in `+Category.swift`), the same
+/// pattern `APIClient+*.swift` uses in `TraccioCore`. Splitting a class
+/// across files means Swift's `private` (file-scoped) cannot protect these
+/// members from the rest of the app target the way it protects `APIClient`'s
+/// transport internals from other modules — so, exactly as `APIClient`'s
+/// `baseURL`/`apiToken`/`session` are `internal` rather than `private` for
+/// the same reason, the state below is `internal`. Treat it as this type's
+/// private implementation: only its own extensions read or write it; every
+/// other caller goes through the methods declared there.
 @MainActor
 @Observable
 final class TransactionDetailViewModel {
@@ -41,10 +42,6 @@ final class TransactionDetailViewModel {
         /// `422` from the same endpoint — the event and this transaction
         /// don't share a currency.
         case mixedCurrency
-        /// `409 transaction_in_use` from `DELETE /transactions/{id}` — the
-        /// manual movement is a leg of a transfer, advance, or reimbursement
-        /// and must be unlinked first (ADR 0020).
-        case transactionInUse
     }
 
     /// This transaction's advance's recorded reimbursements, oldest first —
@@ -135,11 +132,6 @@ final class TransactionDetailViewModel {
     /// `DataFreshness`) bumps `.dashboard` so Panoramica re-fetches rather
     /// than showing a now-stale total — see `DataFreshness`'s doc comment.
     let onDashboardStale: () -> Void
-    /// Invoked with this transaction's id after a successful
-    /// `deleteManualTransaction()` (ADR 0020), so the caller
-    /// (`TransactionsViewModel.remove(id:)`) can drop the row; the view then
-    /// dismisses itself.
-    let onDelete: (UUID) -> Void
 
     /// Create the view model.
     ///
@@ -178,8 +170,7 @@ final class TransactionDetailViewModel {
         client: any APIClientProtocol = APIClient.current,
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
-        onDashboardStale: @escaping () -> Void = {},
-        onDelete: @escaping (UUID) -> Void = { _ in }
+        onDashboardStale: @escaping () -> Void = {}
     ) {
         self.transaction = transaction
         self.advance = advance
@@ -189,38 +180,5 @@ final class TransactionDetailViewModel {
         self.onUpdate = onUpdate
         self.onAdvanceChange = onAdvanceChange
         self.onDashboardStale = onDashboardStale
-        self.onDelete = onDelete
-    }
-
-    /// Shared shape for `confirm(categoryID:)`, `clearCategory()`
-    /// (`TransactionDetailViewModel+Category.swift`), and
-    /// `editManualTransaction(...)`
-    /// (`TransactionDetailViewModel+ManualEdit.swift`): guard against
-    /// overlap, run the write, re-fetch the row on success, publish it, and
-    /// notify `onUpdate` — or record `actionFailure` and leave `transaction`
-    /// untouched on failure.
-    ///
-    /// Parameters
-    /// ----------
-    /// write:
-    ///     The write to perform, given the client and this transaction's id.
-    func performUpdate(
-        _ write: (any APIClientProtocol, UUID) async throws -> Void
-    ) async {
-        guard !isUpdating else { return }
-        isUpdating = true
-        defer { isUpdating = false }
-        actionFailure = nil
-
-        do {
-            try await write(client, transaction.id)
-            let refreshed = try await client.transaction(id: transaction.id)
-            transaction = refreshed
-            onUpdate(refreshed)
-            onDashboardStale()
-            successTick += 1
-        } catch {
-            actionFailure = .generic
-        }
     }
 }

@@ -253,8 +253,7 @@ struct AdvancesView: View {
                 client: client,
                 onUpdate: { _ in Task { await model.load() } },
                 onAdvanceChange: { _ in Task { await model.load() } },
-                onDashboardStale: { freshness.markStale([.dashboard, .transactions]) },
-                onDelete: { _ in Task { await model.load() } }
+                onDashboardStale: { freshness.markStale([.dashboard, .transactions]) }
             )
             #if os(iOS)
             .navigationTransition(.zoom(sourceID: advance.id, in: transitionNamespace))

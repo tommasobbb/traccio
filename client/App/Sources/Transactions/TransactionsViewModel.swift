@@ -323,6 +323,20 @@ final class TransactionsViewModel {
         linkFailure = nil
     }
 
+    /// Enter selection mode with one row already picked — "Collega a…" from
+    /// a row's context menu (`docs/decisions/0036-movimenti-row-actions.md`),
+    /// which starts from a specific anchor instead of an empty selection.
+    ///
+    /// Parameters
+    /// ----------
+    /// anchor:
+    ///     The row to pre-select; the user picks its counterpart next.
+    func enterSelection(anchor: UUID) {
+        isSelecting = true
+        selectedIDs = [anchor]
+        linkFailure = nil
+    }
+
     /// Leave selection mode, discarding any partial selection.
     func exitSelection() {
         isSelecting = false

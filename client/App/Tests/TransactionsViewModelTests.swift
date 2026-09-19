@@ -730,4 +730,115 @@ struct TransactionsViewModelTests {
         #expect(model.successTick == 0)
     }
 
+    // MARK: Row actions — mark as advance, manual edit/delete (ADR 0020)
+
+    @Test func createAdvanceSucceedsRefetchesReplacesTheRowAndUpdatesTheAdvanceMap() async throws {
+        let original = Self.makeTransaction()
+        let created = Self.makeAdvance(transactionID: original.id)
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setCreateAdvanceResult(created)
+        await client.setTransaction(Self.makeTransaction(id: original.id))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.createAdvance(
+            ownShare: 1800, participants: [ParticipantRequest(name: "Marco", expectedAmount: 1800)],
+            for: original.id
+        )
+
+        #expect(ok)
+        #expect(model.rowActionFailure == nil)
+        #expect(model.successTick == 1)
+        #expect(model.advancesByTransactionID[original.id]?.id == created.id)
+        let recorded = await client.createdAdvanceRequests
+        #expect(recorded.count == 1)
+    }
+
+    @Test func createAdvanceFailureRecordsGenericAndNeverUpdatesTheAdvanceMap() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setCreateAdvanceError(FakeAPIError())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.createAdvance(ownShare: 1800, participants: [], for: original.id)
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .generic)
+        #expect(model.advancesByTransactionID[original.id] == nil)
+    }
+
+    @Test func editManualTransactionRefetchesAndReplacesTheRow() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setEditManualTransactionResult(Self.makeTransaction(id: original.id))
+        await client.setTransaction(Self.makeTransaction(id: original.id))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.editManualTransaction(
+            transactionID: original.id, amount: -1600, currency: "EUR",
+            valueDate: Date(timeIntervalSince1970: 1_755_000_000), description: "TEST CASH 01 v2"
+        )
+
+        #expect(ok)
+        let recorded = await client.editedManualTransactions
+        #expect(recorded.first?.id == original.id)
+        #expect(recorded.first?.amount == -1600)
+    }
+
+    @Test func deleteManualTransactionSucceedsDropsTheRowAndBumpsSuccessTick() async throws {
+        let first = Self.makeTransaction()
+        let second = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([first, second])
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.deleteManualTransaction(first.id)
+
+        #expect(ok)
+        #expect(model.successTick == 1)
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.map(\.id) == [second.id])
+        let recorded = await client.deletedManualTransactionIDs
+        #expect(recorded == [first.id])
+    }
+
+    @Test func deleteManualTransactionOn409SurfacesTransactionInUseAndKeepsTheRow() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setDeleteManualTransactionError(APIError.badStatus(409))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.deleteManualTransaction(original.id)
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .transactionInUse)
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.map(\.id) == [original.id])
+    }
+
+    // MARK: Row actions — selection anchor
+
+    @Test func enterSelectionWithAnchorStartsWithThatRowAlreadySelected() async throws {
+        let model = TransactionsViewModel(client: FakeAPIClient(), pageSize: 50)
+        let anchor = UUID()
+
+        model.enterSelection(anchor: anchor)
+
+        #expect(model.isSelecting)
+        #expect(model.selectedIDs == [anchor])
+    }
 }

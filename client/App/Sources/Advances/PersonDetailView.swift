@@ -149,8 +149,7 @@ struct PersonDetailView: View {
                                 client: client,
                                 onUpdate: { _ in changed() },
                                 onAdvanceChange: { _ in changed() },
-                                onDashboardStale: onDashboardStale,
-                                onDelete: { _ in changed() }
+                                onDashboardStale: onDashboardStale
                             )
                             #if os(iOS)
                             .navigationTransition(.zoom(sourceID: advance.id, in: transitionNamespace))
