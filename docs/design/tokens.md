@@ -515,6 +515,16 @@ list ragged and is nearly always worse than an ellipsis. Concretely:
 - A control that toggles into a row (the transfer-pairing checkbox)
   **replaces** an existing element of the same footprint rather than being
   inserted beside one — inserting shifts every sibling and forces a wrap.
+- A **status line built by string interpolation** (Conti's connection status,
+  a dot plus "Attivo · sincronizzato…") is exactly as prone to this as any
+  other row — a `Text` with no `lineLimit` at all wrapped across three lines
+  once a scheduler suffix was appended to it (fixed 2026-09-19, "History"
+  below), and the dot floated to the middle of the block instead of sitting
+  on the first line. `.lineLimit(1)` plus shortening the string itself
+  (abbreviate units, drop a word that's redundant with a colour/icon
+  already on screen) is the fix — the same two levers as everywhere else in
+  this section, just applied to an interpolated string instead of a static
+  label.
 
 Multi-line is fine for a standalone paragraph (an `EmptyState` description, a
 card's explanatory sentence) — the rule is about anything laid out in a line
@@ -720,3 +730,72 @@ Three independent fixes, client-only, no backend:
 
 Still owed (`tasks/backlog.md`): the on-device visual pass for all three,
 same standing gap this file has tracked since 2026-09-08.
+
+**Pull-to-refresh no longer self-inflicts a failure; Conti wordmark; stats
+card columns, 2026-09-19 (second batch this day).** Four independent fixes
+found in real daily use, three client-only and one backend:
+
+- **Pull-to-refresh cancellation.** Movimenti, Conti, and Trasferimenti each
+  built a *different* `ScrollView` per load state (or, on Trasferimenti, no
+  `ScrollView` at all while loading) — so a `.refreshable` pull, which
+  transitions the state to `.loading`, tore down the very scroll view
+  hosting its own `.refreshable` Task and cancelled it mid-request. The
+  cancellation surfaced as `URLError.cancelled` → `APIError.transport` → an
+  unconditional `state = .failed`, i.e. "impossibile caricare i movimenti"
+  on a request that was never actually broken. Fixed two ways, both needed:
+  one stable `ScrollView` per screen across every state (the pattern
+  `AdvancesView` already had), and `LoadState.beginLoading()` (`TraccioCore`)
+  so a refetch of already-`.loaded` content never drops back to `.loading`
+  in the first place. `APIError.isCancellation` / `Error.isCancellationError`
+  are new — the first place in the client any cancellation is distinguished
+  from a real failure.
+- **Conti's institution mark is a wordmark now, not an icon.** Enable
+  Banking's logos are ~4.5:1 wide (`docs/openbanking.md`); squeezed into the
+  48pt square tile from the recompose above, one rendered ~35pt wide by
+  **7.6pt tall** — the container wasn't too small, the shape was wrong for
+  the content. `BankLogoView.Style` now has two cases: `.tile` (unchanged,
+  still what `StartConnectionSheet`'s fixed-width picker rows use) and
+  `.wordmark(height:maxWidth:)`, at its own aspect ratio, standing in for
+  the institution's name text entirely rather than sitting beside it. A new
+  `Palette.logoPlate` colorset (fixed white in both appearances — externally
+  branded content, not part of the app's own light/dark system) sits behind
+  it, since a dark wordmark disappears on a `#1C1C1E` dark card. No
+  lettermark fallback for this style: missing or failed logo falls back to
+  the institution's own name in `Typography.cardTitle`, exactly what Conti
+  showed before logos existed. A user-set account alias (when different from
+  the institution name) still gets its own line under the mark — the one
+  piece of information the wordmark can't carry.
+- **Conti's status line stopped wrapping.** One interpolated string —
+  "Attivo · sincronizzato 3 ore fa · automatica, prossima tra 1 ora", ~64
+  characters — in a ~150pt column, no `lineLimit`: it wrapped across three
+  lines and the status dot floated to the middle of the block instead of
+  sitting on its first line. Fixed per this section's own rule: `.lineLimit(1)`
+  on the `Text`, the state word dropped entirely for `.active` (the dot
+  already says "fine" — showing it only for a problem state is also when a
+  wrap most needs to be prevented, since that's the state worth reading),
+  and a new `TraccioCore.relativeTimeShort` (`.abbreviated` instead of
+  `.full` — "3 h fa" / "tra 1 h") replacing the spelled-out unit everywhere
+  in this row. Typical line now: "Sincronizzato 3 h fa · auto tra 1 h",
+  ~38 characters.
+- **`DashboardStatsCard` moved from caption text to figure columns.** The
+  month-over-month delta and the day/movement/category stats were entirely
+  `Typography.caption` (13pt) — the comparison the owner most wants to
+  register at a glance had the same type scale as a footnote. Now three
+  `Typography.statFigure` columns over caption labels, separated by hairline
+  dividers — the same idiom as the hero's own Entrate/Netto pair
+  (`DashboardHeroCard.swift`), not a new one. The category count is dropped
+  (already legible in the "Per categoria" card below); the card stays
+  `.flush`, one step under the hero, and the delta keeps its existing colour
+  rule (`warning` for spending up, `ink` — never red — otherwise). `DashboardView.stateTag`
+  now folds in the transaction count alongside spend, so the volume column's
+  digit-roll fires even on the rare period whose total spend happens to
+  match the previous one.
+- **Backend: the background sync budget was counting skips, and had been
+  deadlocking itself for days in production** — see
+  `docs/decisions/0037-sync-budget-counts-fetches-not-skips.md`. Not a
+  design fix, but the reason "sincronizzazione automatica" read as never
+  having worked.
+
+Still owed: the on-device visual pass for the wordmark (in particular the
+`logoPlate` treatment in dark mode) and the stats-card columns at large
+Dynamic Type sizes — folds into the same standing item as the batch above.
