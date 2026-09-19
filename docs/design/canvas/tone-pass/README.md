@@ -16,4 +16,4 @@ values are in `docs/design/tokens.md`; the ADR records the *why*
 
 `.dc.html` mechanics and the re-seed / re-publish workflow are the same as
 `../README.md` describes. Every figure here is synthetic
-(`.claude/rules/data-safety.md`).
+(see `engineering.md`'s data safety section).

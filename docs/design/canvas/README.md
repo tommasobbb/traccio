@@ -41,5 +41,5 @@ prose copies of what's authoritative here, not the other way around.
 ## Data safety
 
 Every figure in these mockups is synthetic (round amounts, invented merchant
-names) per `.claude/rules/data-safety.md`. Keep it that way in any edit —
+names) per `engineering.md`'s data safety section. Keep it that way in any edit —
 these files are published to a viewable page.

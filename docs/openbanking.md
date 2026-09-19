@@ -1,9 +1,9 @@
 # Open Banking — Enable Banking
 
 Operational reference for Traccio's bank connectivity. Read this before
-touching anything under `backend/src/traccio/providers/` (root `CLAUDE.md`).
-It is not a tutorial: it records the onboarding procedure and the constraints
-that shape the adapter design.
+touching anything under `backend/src/traccio/providers/`. It is not a
+tutorial: it records the onboarding procedure and the constraints that shape
+the adapter design.
 
 The provider choice and its rationale live in
 `docs/decisions/0001-aggregator-choice.md`. Domain concepts referenced here
@@ -133,7 +133,7 @@ The adapter normalizes each into a provider-agnostic `ProviderAccount`; the
   masquerading as a current account.
 - **Display name.** The bank's proprietary `product` name is used as
   `Account.name`. The `AccountResource.name` field is the **account-holder
-  name** — personal data — and is never stored or logged (`.claude/rules/data-safety.md`).
+  name** — personal data — and is never stored or logged (see `engineering.md`'s data safety section).
 
 ## Transaction retrieval
 
@@ -172,7 +172,7 @@ lands with the background scheduler.
   call sites (`docs/domain.md`: "a purchase is stored negative, for every account
   type").
 - **Amount → integer cents.** The `amount` is a decimal *string* (e.g. `"12.34"`),
-  parsed with `Decimal` and scaled ×100 — never through `float` (root `CLAUDE.md`).
+  parsed with `Decimal` and scaled ×100 — never through `float`.
   M1 targets two-decimal currencies (EUR, GBP, …); an amount with sub-cent
   precision is **refused** rather than rounded. A zero- or three-decimal currency
   (JPY, BHD) would need its own scale and is a future item.
@@ -210,7 +210,7 @@ settlement — but a sync **never** overwrites the user/detection-owned `role` o
 ## Credential handling
 
 The `<application-id>.pem` private key is a secret and is treated like one
-(see `.claude/rules/data-safety.md`):
+(see `engineering.md`'s data safety section):
 
 - **Never committed.** The key file is gitignored; it never lands in the repo,
   a fixture, a test snapshot, or the OpenAPI schema.
@@ -246,7 +246,7 @@ not reach the Mac backend, so that will use an **Apple Universal Link** (an
 `https` URL on a domain we control, e.g. GitHub Pages, hosting the
 `apple-app-site-association` file) or a backend-hosted `https` callback. Bank
 authorization always runs in the **system browser**, never an in-app WebView:
-bank SCA apps often fail to open from a WebView (`client/CLAUDE.md`).
+bank SCA apps often fail to open from a WebView (see `engineering.md`).
 
 ## Operational constraints
 
@@ -300,7 +300,7 @@ negative), its stable transaction identity (`entry_reference`, else a derived
 hash), and its date semantics (`booked_at` vs `value_date`).
 
 Use synthetic/masked values only — never paste a real bank response, even
-redacted (`.claude/rules/data-safety.md`).
+redacted (see `engineering.md`'s data safety section).
 
 | Bank | Card accounts exposed | Description readability | Notable fields / quirks |
 | ---- | --------------------- | ----------------------- | ----------------------- |

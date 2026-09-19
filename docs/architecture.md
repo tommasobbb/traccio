@@ -135,18 +135,15 @@ per response shape, each with a decoding test covering the negative cases
 test rather than surfacing as a runtime surprise. A real generator
 (`swift-openapi-generator` or similar) is a top-level dependency and a
 build-plugin step, deliberately not added while there are few enough models
-per slice to hand-maintain (`client/CLAUDE.md`).
+per slice to hand-maintain (`engineering.md`).
 
-**Local storage is a read cache, not a source of truth.** The client
-persists what it fetched so the app opens instantly and reads offline. It
-never computes derived values and never resolves conflicts: on refresh, the
-server response replaces the cache. User actions are sent to the server and
-the result is what gets stored.
-
-Actions taken offline are refused rather than queued, for now. A write queue
-is the planned escape hatch if this proves annoying in practice (see
-`tasks/backlog.md`, M3) — it layers on top of the read cache without
-changing it.
+**No local read cache.** Every screen fetches fresh from the backend; there
+is no offline persistence of financial data to resolve or go stale. The only
+local state is the server URL and API token (Keychain) and a biometric-lock
+preference (a plain, non-financial `Bool` in `UserDefaults`). Actions taken
+offline are refused, not queued — see `engineering.md` for the reasoning and
+`tasks/backlog.md` for the open question of whether an offline write queue
+is ever worth adding.
 
 ## Security
 
@@ -160,7 +157,7 @@ Keychain.
 Authorization redirects use the system browser. Never an in-app WebView:
 bank SCA apps often fail to open from one (see `openbanking.md`).
 
-See `.claude/rules/data-safety.md` for what must never reach logs.
+See `engineering.md`'s "Data safety" section for what must never reach logs.
 
 ## Deliberately absent
 
