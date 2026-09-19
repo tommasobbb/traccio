@@ -221,6 +221,14 @@ which this is not); with no emoji, it falls back to a plain `IconTile`
 theme-dynamic colour, so it resolves in both appearances without a separate
 dark value — the `Palette.separator` technique.
 
+**`InitialsAvatar`** (`App/Sources/DesignSystem/InitialsAvatar.swift`, shared
+2026-09-19, promoted from a private helper `AdvanceSections` used to roll on
+its own): a person's initials — up to two letters ("Marco Rossi" → "MR"), one
+for a single-word name — on `Palette.neutralFill`, `inkSecondary` text. Same
+"identity, not a control" posture as `PaletteColor`: never the accent, never a
+per-person colour (there's no per-person appearance token, unlike accounts and
+categories — a participant isn't an entity the user customizes).
+
 ## Separators and elevation
 
 | Token             | Value                              | Use                        |
@@ -525,6 +533,29 @@ list ragged and is nearly always worse than an ellipsis. Concretely:
   already on screen) is the fix — the same two levers as everywhere else in
   this section, just applied to an interpolated string instead of a static
   label.
+  - **Two deliberate single-line rows are not the same bug as one wrapped
+    line.** Conti's status row (second 2026-09-19 revision, same day) puts
+    the scheduler's own state on its own `Text`, under the sync-state line,
+    each independently `.lineLimit(1)`. That is not a relapse into the wrap
+    this rule forbids — the wrap the dot-floating bug produced was one
+    string breaking mid-sentence at an arbitrary point; two named facts (last
+    sync, next sync) each getting the room to say the whole thing is the
+    fix this section already prescribes, just laid out vertically instead of
+    packed into one interpolated string that has nowhere left to abbreviate.
+  - **A column grid divides width the same way `.fixedSize` does — badly,
+    once every column is fixed-share.** `DashboardStatsCard`'s three-column
+    layout (`.frame(maxWidth: .infinity)` per column) gave the comparison
+    column — an arrow, a percentage, and "su Agosto 2026" — the same
+    equal third as "movimenti", which truncated both the figure and the
+    label at ordinary device widths. This is the same failure as the fixed-
+    tag bullet above, just expressed as N equal flexible shares instead of N
+    fixed intrinsic ones: giving every sibling an identical budget only works
+    when at least one of them can actually live inside it. The fix was the
+    same lever this section already names for a row that must fit — pull the
+    one variable-length piece (the comparison) onto its own full-width row,
+    and let the remaining, genuinely short figures (a daily average, a
+    movement count) share the equal-width grid that's actually sized for
+    them.
 
 Multi-line is fine for a standalone paragraph (an `EmptyState` description, a
 card's explanatory sentence) — the rule is about anything laid out in a line
@@ -799,3 +830,48 @@ found in real daily use, three client-only and one backend:
 Still owed: the on-device visual pass for the wordmark (in particular the
 `logoPlate` treatment in dark mode) and the stats-card columns at large
 Dynamic Type sizes — folds into the same standing item as the batch above.
+
+**Readability pass — Panoramica, Conti, Eventi, Anticipi, 2026-09-19 (third
+batch this day).** Four independent fixes found in real daily use, all
+client-side except one additive backend field:
+
+- **`DashboardStatsCard`'s comparison column left the equal-width grid.**
+  Three `.frame(maxWidth: .infinity)` columns gave the comparison (an arrow,
+  a percentage, and "su Agosto 2026") the same third of the card as
+  "movimenti" — not enough width for either the figure or the label, so both
+  truncated. The comparison is now a full-width row above the two-column
+  grid it left behind (`averageColumn`/`volumeColumn` only); see "Text never
+  wraps" above. `CalendarPeriod` gains `displayTitleInline`, lowercase for
+  `.month` ("su agosto 2026" reading inline after "su", vs. `displayTitle`'s
+  "Agosto 2026" standalone in the period picker).
+- **Conti: more room under the wordmark, the scheduler line stopped
+  truncating.** The `VStack` holding a connection's wordmark and status line
+  moved from a bare `spacing: 4` to `Spacing.tightGap` (8) — the two read as
+  glued together at 4. The scheduler suffix (" · auto tra 1 h") used to be
+  appended to the same `.lineLimit(1)` status line and truncated to "auto
+  in…"; it's now its own second line, `automaticSyncLine`, said in full
+  ("Sincronizzazione automatica tra 1 h") — see "Text never wraps" above for
+  why two named single-line facts isn't the wrap this section forbids.
+- **`EventRow`'s title moved onto its own full-width line.** The old
+  anatomy shared one line between the title and the amount, with
+  `.layoutPriority` telling the title to give first — so a name like
+  "Amsterdam 2026" truncated whenever its own subtitle (member count + date
+  range) was wide enough to set the block's width. The title now sits above
+  a second line holding the subtitle and the amount; no `.layoutPriority`
+  needed once they're not sharing a line, and the row's vertical padding
+  goes from a bare `6` to `Spacing.itemGap` (12), matching every other row in
+  the app. The disclosure chevron is dropped — a two-line block has nowhere
+  natural to center one, and `TransactionRow`'s equivalent row has never had
+  one either.
+- **Anticipi's list screen inherits its own detail screen's treatment** —
+  see `docs/decisions/0038-anticipi-list-inherits-detail-treatment.md` for
+  the full account. In short: the totals card becomes the screen's one
+  `.raised` protagonist (figure, `ProgressBar`, Atteso/Rientrato pair, the
+  same anatomy `PersonDetailView` already had one tap away); both row lists
+  gain a leading `InitialsAvatar` (promoted from a private `AdvanceSections`
+  helper — see "Appearance tokens" above); the backend's `ReceivableTotal`
+  gains `expected`/`reimbursed` so the totals card's bar has a real
+  numerator/denominator without the client summing anything itself.
+
+Still owed: the on-device visual pass for all four screens, same standing
+item as every batch above.
