@@ -57,7 +57,7 @@ struct CreateManualAccountSheet: View {
                         Picker("Tipo", selection: $kind) {
                             ForEach(kindOptions, id: \.self) { candidate in
                                 Label(
-                                    Self.label(for: candidate),
+                                    candidate.displayLabel,
                                     systemImage: AccountIcon.default(for: candidate).systemImageName
                                 )
                                 .tag(candidate)
@@ -110,17 +110,6 @@ struct CreateManualAccountSheet: View {
                     Button("Crea", action: submit).disabled(isSaving || !canSubmit)
                 }
             }
-        }
-    }
-
-    private static func label(for kind: AccountKind) -> String {
-        switch kind {
-        case .cash: "Contanti"
-        case .wallet: "Wallet"
-        case .savings: "Risparmio"
-        case .current: "Corrente"
-        case .card: "Carta"
-        case .voucher: "Buoni pasto"
         }
     }
 

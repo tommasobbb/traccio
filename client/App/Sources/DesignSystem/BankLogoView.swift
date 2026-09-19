@@ -13,8 +13,13 @@ struct BankLogoView: View {
     let logo: String?
     let name: String
     var size: CGFloat = 40
+    /// Overrides the proportional `size * 0.3` squircle — needed when a call
+    /// site's `size` doesn't land on a radius token at that ratio (Conti's
+    /// 48pt header mark uses `Radius.row` explicitly rather than the 14.4pt
+    /// `48 * 0.3` would compute). `nil` keeps the proportional default.
+    var cornerRadius: CGFloat?
 
-    private var cornerRadius: CGFloat { size * 0.3 }
+    private var resolvedCornerRadius: CGFloat { cornerRadius ?? size * 0.3 }
 
     var body: some View {
         Group {
@@ -37,7 +42,7 @@ struct BankLogoView: View {
         }
         .frame(width: size, height: size)
         .background(Palette.neutralFill)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: resolvedCornerRadius, style: .continuous))
         .accessibilityLabel(name)
     }
 

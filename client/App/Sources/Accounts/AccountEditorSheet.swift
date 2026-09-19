@@ -89,7 +89,7 @@ struct AccountEditorSheet: View {
                             Picker("Tipo", selection: $kind) {
                                 ForEach(kindOptions, id: \.self) { candidate in
                                     Label(
-                                        Self.label(for: candidate),
+                                        candidate.displayLabel,
                                         systemImage: AccountIcon.default(for: candidate).systemImageName
                                     )
                                     .tag(candidate)
@@ -202,17 +202,6 @@ struct AccountEditorSheet: View {
     private var trimmedAlias: String? {
         let trimmed = aliasText.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private static func label(for kind: AccountKind) -> String {
-        switch kind {
-        case .cash: "Contanti"
-        case .wallet: "Wallet"
-        case .savings: "Risparmio"
-        case .current: "Corrente"
-        case .card: "Carta"
-        case .voucher: "Buoni pasto"
-        }
     }
 
     private func submit() {

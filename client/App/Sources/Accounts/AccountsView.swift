@@ -5,7 +5,9 @@ import TraccioCore
 /// consent-expiry warning the roadmap's M3 item calls for, and the client's
 /// first write actions: a manual per-connection sync and re-authorization.
 ///
-/// Follows `docs/design/canvas/Accounts.dc.html`.
+/// Adds/imports move here from three dashed cards
+/// (`docs/design/canvas/Accounts.dc.html`'s `.add-card`, since retired) into
+/// two toolbar buttons — see `toolbarContent`.
 struct AccountsView: View {
     @State private var model = AccountsViewModel()
     @State private var editingAccount: AccountResponse?
@@ -24,6 +26,7 @@ struct AccountsView: View {
                 .sensoryFeedback(.error, trigger: model.actionFailure)
                 .animation(.easeInOut(duration: 0.2), value: model.state.tag)
                 .refreshable { await model.load() }
+                .toolbar { toolbarContent }
         }
         .task { await model.load() }
         .onChange(of: scenePhase) { _, newPhase in
@@ -123,6 +126,42 @@ struct AccountsView: View {
     /// locked M3 product decision, not a client limitation to lift later.
     private static let institutionCountry = "IT"
 
+    // MARK: Toolbar
+
+    /// Replaces the three dashed "Collega/Crea/Importa" cards that used to
+    /// sit under the list. "Importa movimenti" is always shown — even with
+    /// zero manual accounts — since `ImportTransactionsSheet` already has its
+    /// own empty state explaining that case; a toolbar button that
+    /// appears/disappears with data state is worse than a sheet that
+    /// explains itself.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                isImportingTransactions = true
+            } label: {
+                Label("Importa movimenti", systemImage: "square.and.arrow.down")
+            }
+        }
+        ToolbarSpacer(.fixed, placement: .primaryAction)
+        ToolbarItem(placement: .primaryAction) {
+            Menu {
+                Button {
+                    isPickingInstitution = true
+                } label: {
+                    Label("Collega un nuovo conto", systemImage: "building.columns")
+                }
+                Button {
+                    isCreatingManualAccount = true
+                } label: {
+                    Label("Crea un conto manuale", systemImage: "wallet.pass")
+                }
+            } label: {
+                Label("Aggiungi conto", systemImage: "plus")
+            }
+        }
+    }
+
     private func startConnection(_ institution: InstitutionResponse) async {
         guard let url = await model.startConnection(institution) else { return }
         isPickingInstitution = false
@@ -191,86 +230,9 @@ struct AccountsView: View {
                 ForEach(groups, id: \.groupID) { group in
                     connectionCard(group)
                 }
-                addConnectionCard
-                addManualAccountCard
-                if model.accounts.contains(where: { $0.source == .manual }) {
-                    importTransactionsCard
-                }
             }
             .padding(Spacing.gutter)
         }
-    }
-
-    /// The dashed "Collega un nuovo conto" entry point, per
-    /// `docs/design/canvas/Accounts.dc.html`'s `.add-card`.
-    private var addConnectionCard: some View {
-        Button {
-            isPickingInstitution = true
-        } label: {
-            HStack(spacing: Spacing.tightGap) {
-                Image(systemName: "plus")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Collega un nuovo conto")
-                    .font(Typography.caption.weight(.bold))
-            }
-            .foregroundStyle(Palette.inkSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-            )
-        }
-        .buttonStyle(.pressable)
-    }
-
-    /// The dashed "Crea un conto manuale" entry point (ADR 0020) — a cash
-    /// float or an investment pass-through, tracked by hand with no bank
-    /// behind it. Sits directly below "Collega un nuovo conto"; same shape,
-    /// different glyph.
-    private var addManualAccountCard: some View {
-        Button {
-            isCreatingManualAccount = true
-        } label: {
-            HStack(spacing: Spacing.tightGap) {
-                Image(systemName: "wallet.pass")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Crea un conto manuale")
-                    .font(Typography.caption.weight(.bold))
-            }
-            .foregroundStyle(Palette.inkSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-            )
-        }
-        .buttonStyle(.pressable)
-    }
-
-    /// "Importa movimenti da file" (ADR 0023) — bring a Satispay export or a
-    /// CSV onto a manual account. Shown only when a manual account exists to
-    /// receive the movements; same dashed shape as the two cards above.
-    private var importTransactionsCard: some View {
-        Button {
-            isImportingTransactions = true
-        } label: {
-            HStack(spacing: Spacing.tightGap) {
-                Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Importa movimenti da file")
-                    .font(Typography.caption.weight(.bold))
-            }
-            .foregroundStyle(Palette.inkSecondary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .overlay(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                    .strokeBorder(Palette.separator, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-            )
-        }
-        .buttonStyle(.pressable)
     }
 
     /// Copy for a failed manual sync or re-authorization
@@ -308,9 +270,17 @@ struct AccountsView: View {
 
     // MARK: Connection card
 
+    /// Dispatches on account count. A connection with exactly one account
+    /// collapses header+row into a single flat card, so the account's name
+    /// — often literally the bank's own name again (e.g. Revolut's own
+    /// account name is "Revolut") — never repeats the header above it. A
+    /// connection with several accounts keeps the header; its rows switch
+    /// to `accountRow`'s alias-or-kind label for the same reason.
     private func connectionCard(_ group: ConnectionGroup) -> some View {
         Card {
-            if let connection = group.connection {
+            if let connection = group.connection, group.accounts.count == 1 {
+                collapsedSingleAccountCard(connection, group.accounts[0])
+            } else if let connection = group.connection {
                 connectionHeader(connection)
                 if !group.accounts.isEmpty {
                     Divider().overlay(Palette.separatorSubtle)
@@ -330,32 +300,87 @@ struct AccountsView: View {
         }
     }
 
+    /// The institution logo's size in this screen's headers and its
+    /// collapsed single-account card — 1.5× the 32pt `IconTile` the account
+    /// rows below use, so the mark reads as their visual parent.
+    /// `Radius.row` (not the proportional `size * 0.3` default) keeps the
+    /// squircle on a token.
+    private static let institutionLogoSize: CGFloat = 48
+
     private func connectionHeader(_ connection: ConnectionResponse) -> some View {
         HStack(spacing: Spacing.itemGap) {
             BankLogoView(
-                logo: connection.institutionLogo, name: connection.institutionName, size: 40
+                logo: connection.institutionLogo, name: connection.institutionName,
+                size: Self.institutionLogoSize, cornerRadius: Radius.row
             )
             VStack(alignment: .leading, spacing: 2) {
                 Text(connection.institutionName)
                     .font(Typography.cardTitle)
                     .foregroundStyle(Palette.ink)
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(statusDotColor(for: connection.consentState))
-                        .frame(width: 7, height: 7)
-                    Text(statusLine(for: connection))
-                        .font(Typography.caption)
-                        .foregroundStyle(Palette.inkTertiary)
-                }
+                statusRow(connection)
             }
             Spacer()
-            IconButton(
-                systemImage: "arrow.triangle.2.circlepath",
-                accessibilityLabel: "Sincronizza \(connection.institutionName)",
-                isLoading: model.syncing.contains(connection.id),
-                action: { Task { await model.sync(connectionID: connection.id) } }
-            )
+            syncButton(connection)
         }
+    }
+
+    /// A connection with exactly one account: logo, account name (alias if
+    /// set, else the institution name — never the header's name repeated
+    /// underneath), status, and currency in one tappable strip that opens
+    /// `AccountEditorSheet`, plus the sync control beside it. The sync
+    /// button sits outside the `Button` — a `Button` can't nest another
+    /// `Button` — so this is two siblings in an `HStack`, not one row.
+    private func collapsedSingleAccountCard(
+        _ connection: ConnectionResponse, _ account: AccountResponse
+    ) -> some View {
+        let title = account.alias ?? connection.institutionName
+        return HStack(spacing: Spacing.itemGap) {
+            Button {
+                editingAccount = account
+            } label: {
+                HStack(spacing: Spacing.itemGap) {
+                    BankLogoView(
+                        logo: connection.institutionLogo, name: connection.institutionName,
+                        size: Self.institutionLogoSize, cornerRadius: Radius.row
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(Typography.cardTitle)
+                            .foregroundStyle(Palette.ink)
+                        statusRow(connection)
+                    }
+                    Spacer(minLength: Spacing.tightGap)
+                    Text(account.currency)
+                        .font(Typography.caption.weight(.semibold))
+                        .foregroundStyle(Palette.inkTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.pressableRow)
+            .accessibilityLabel("\(title) — modifica conto")
+
+            syncButton(connection)
+        }
+    }
+
+    private func statusRow(_ connection: ConnectionResponse) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(statusDotColor(for: connection.consentState))
+                .frame(width: 7, height: 7)
+            Text(statusLine(for: connection))
+                .font(Typography.caption)
+                .foregroundStyle(Palette.inkTertiary)
+        }
+    }
+
+    private func syncButton(_ connection: ConnectionResponse) -> some View {
+        IconButton(
+            systemImage: "arrow.triangle.2.circlepath",
+            accessibilityLabel: "Sincronizza \(connection.institutionName)",
+            isLoading: model.syncing.contains(connection.id),
+            action: { Task { await model.sync(connectionID: connection.id) } }
+        )
     }
 
     private func statusDotColor(for state: ConsentState) -> Color {
@@ -427,7 +452,7 @@ struct AccountsView: View {
                     systemImage: account.tileIcon.systemImageName,
                     color: account.tileColor
                 )
-                Text(account.displayName ?? "Conto")
+                Text(account.alias ?? account.kind.displayLabel)
                     .font(Typography.body.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                 Spacer()

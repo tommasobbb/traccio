@@ -25,6 +25,25 @@ extension AccountIcon {
     }
 }
 
+extension AccountKind {
+    /// The Italian label this kind renders with — the "Tipo" pickers' copy,
+    /// lifted out of two byte-identical private duplicates in
+    /// `CreateManualAccountSheet` and `AccountEditorSheet` so `AccountsView`
+    /// can also use it, to differentiate two accounts of the same bank on
+    /// the Conti row (e.g. "Carta" / "Corrente") instead of repeating the
+    /// bank's own name.
+    var displayLabel: String {
+        switch self {
+        case .cash: "Contanti"
+        case .wallet: "Wallet"
+        case .savings: "Risparmio"
+        case .current: "Corrente"
+        case .card: "Carta"
+        case .voucher: "Buoni pasto"
+        }
+    }
+}
+
 extension AccountResponse {
     /// The icon this account renders with: the user's choice, or the
     /// `kind`-keyed fallback above.
