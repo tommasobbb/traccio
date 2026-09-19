@@ -31,4 +31,28 @@ extension TraccioCore {
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: now)
     }
+
+    /// The abbreviated sibling of `relativeTime(from:to:locale:)` — "3 h fa"/
+    /// "tra 1 h" instead of "3 ore fa"/"tra 1 ora".
+    ///
+    /// For a status line sharing a single line with other text (Conti's
+    /// connection status, `docs/design/tokens.md`'s "Text never wraps"),
+    /// where `.full`'s extra length is exactly what forces a wrap.
+    ///
+    /// Parameters
+    /// ----------
+    /// date, now, locale
+    ///     Same as `relativeTime(from:to:locale:)`.
+    ///
+    /// Returns
+    /// -------
+    /// A short, abbreviated, localized relative-time string.
+    public static func relativeTimeShort(from date: Date, to now: Date, locale: Locale = .current)
+        -> String
+    {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
 }

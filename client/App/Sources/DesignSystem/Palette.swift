@@ -23,6 +23,12 @@ enum Palette {
     /// (`docs/decisions/0030-liquid-glass-chrome.md`) has something neutral
     /// to refract, not to give the screen its own tint.
     static let backgroundElevated = Color("BackgroundElevated", bundle: .main)
+    /// A fixed white plate under a bank's wordmark logo (`BankLogoView`'s
+    /// `.wordmark` style) — most Enable Banking marks are dark-on-transparent
+    /// and disappear on a `#1C1C1E` dark card. Deliberately not theme-aware
+    /// like every other surface here: the logo is externally-branded content,
+    /// not part of the app's own light/dark system.
+    static let logoPlate = Color("LogoPlate", bundle: .main)
 
     /// The screen background: a vertical gradient from `background` to
     /// `backgroundElevated`. Not a reprise of the accent-band rejections

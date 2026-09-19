@@ -179,14 +179,21 @@ struct AccountsView: View {
         }
     }
 
-    @ViewBuilder
+    /// One stable `ScrollView` across every state — see
+    /// `TransactionsView.content`'s doc comment for why a per-case
+    /// `ScrollView` breaks `.refreshable`.
     private var content: some View {
+        ScrollView {
+            innerContent
+                .padding(Spacing.gutter)
+        }
+    }
+
+    @ViewBuilder
+    private var innerContent: some View {
         switch model.state {
         case .idle, .loading:
-            ScrollView {
-                ListSkeleton(count: 4)
-                    .padding(Spacing.gutter)
-            }
+            ListSkeleton(count: 4)
         case .loaded(let connections) where connections.isEmpty && model.accounts.isEmpty:
             EmptyState(
                 systemImage: "creditcard",
@@ -214,24 +221,21 @@ struct AccountsView: View {
         let attentionNeeded = connections.filter {
             $0.consentState == .expiringSoon || $0.consentState == .expired
         }
-        return ScrollView {
-            LazyVStack(spacing: 14) {
-                if let actionFailure = model.actionFailure {
-                    Banner(message: actionFailureMessage(actionFailure))
-                }
-                ForEach(attentionNeeded) { connection in
-                    Banner(
-                        message: warningMessage(for: connection),
-                        ctaTitle: "Rinnova ora",
-                        isCTALoading: model.reauthorizing.contains(connection.id),
-                        ctaAction: { Task { await reauthorize(connection.id) } }
-                    )
-                }
-                ForEach(groups, id: \.groupID) { group in
-                    connectionCard(group)
-                }
+        return LazyVStack(spacing: 14) {
+            if let actionFailure = model.actionFailure {
+                Banner(message: actionFailureMessage(actionFailure))
             }
-            .padding(Spacing.gutter)
+            ForEach(attentionNeeded) { connection in
+                Banner(
+                    message: warningMessage(for: connection),
+                    ctaTitle: "Rinnova ora",
+                    isCTALoading: model.reauthorizing.contains(connection.id),
+                    ctaAction: { Task { await reauthorize(connection.id) } }
+                )
+            }
+            ForEach(groups, id: \.groupID) { group in
+                connectionCard(group)
+            }
         }
     }
 
@@ -300,23 +304,20 @@ struct AccountsView: View {
         }
     }
 
-    /// The institution logo's size in this screen's headers and its
-    /// collapsed single-account card — 1.5× the 32pt `IconTile` the account
-    /// rows below use, so the mark reads as their visual parent.
-    /// `Radius.row` (not the proportional `size * 0.3` default) keeps the
-    /// squircle on a token.
-    private static let institutionLogoSize: CGFloat = 48
+    /// The institution wordmark's footprint in this screen's headers and its
+    /// collapsed single-account card — its own aspect ratio, not squeezed
+    /// into a square (`BankLogoView.Style.wordmark`), since Enable Banking's
+    /// marks are ~4.5:1 wide (`docs/openbanking.md`).
+    private static let wordmarkHeight: CGFloat = 24
+    private static let wordmarkMaxWidth: CGFloat = 180
 
     private func connectionHeader(_ connection: ConnectionResponse) -> some View {
         HStack(spacing: Spacing.itemGap) {
-            BankLogoView(
-                logo: connection.institutionLogo, name: connection.institutionName,
-                size: Self.institutionLogoSize, cornerRadius: Radius.row
-            )
-            VStack(alignment: .leading, spacing: 2) {
-                Text(connection.institutionName)
-                    .font(Typography.cardTitle)
-                    .foregroundStyle(Palette.ink)
+            VStack(alignment: .leading, spacing: 4) {
+                BankLogoView(
+                    logo: connection.institutionLogo, name: connection.institutionName,
+                    style: .wordmark(height: Self.wordmarkHeight, maxWidth: Self.wordmarkMaxWidth)
+                )
                 statusRow(connection)
             }
             Spacer()
@@ -324,12 +325,15 @@ struct AccountsView: View {
         }
     }
 
-    /// A connection with exactly one account: logo, account name (alias if
-    /// set, else the institution name — never the header's name repeated
-    /// underneath), status, and currency in one tappable strip that opens
-    /// `AccountEditorSheet`, plus the sync control beside it. The sync
-    /// button sits outside the `Button` — a `Button` can't nest another
-    /// `Button` — so this is two siblings in an `HStack`, not one row.
+    /// A connection with exactly one account: the institution's own wordmark
+    /// stands in for its name (`BankLogoView.Style.wordmark`) — the header
+    /// name is never repeated underneath. When the account carries a user
+    /// alias, that is genuinely new information (not a repeat of the
+    /// institution's name), so it still gets its own line under the mark;
+    /// with no alias, the wordmark alone identifies the account, same as
+    /// `connectionHeader` above. Status and currency follow, plus the sync
+    /// control beside it — outside the `Button`, since a `Button` can't nest
+    /// another `Button`, so this is two siblings in an `HStack`, not one row.
     private func collapsedSingleAccountCard(
         _ connection: ConnectionResponse, _ account: AccountResponse
     ) -> some View {
@@ -339,14 +343,17 @@ struct AccountsView: View {
                 editingAccount = account
             } label: {
                 HStack(spacing: Spacing.itemGap) {
-                    BankLogoView(
-                        logo: connection.institutionLogo, name: connection.institutionName,
-                        size: Self.institutionLogoSize, cornerRadius: Radius.row
-                    )
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(Typography.cardTitle)
-                            .foregroundStyle(Palette.ink)
+                    VStack(alignment: .leading, spacing: 4) {
+                        BankLogoView(
+                            logo: connection.institutionLogo, name: connection.institutionName,
+                            style: .wordmark(height: Self.wordmarkHeight, maxWidth: Self.wordmarkMaxWidth)
+                        )
+                        if let alias = account.alias {
+                            Text(alias)
+                                .font(Typography.caption.weight(.semibold))
+                                .foregroundStyle(Palette.inkSecondary)
+                                .lineLimit(1)
+                        }
                         statusRow(connection)
                     }
                     Spacer(minLength: Spacing.tightGap)
@@ -368,9 +375,15 @@ struct AccountsView: View {
             Circle()
                 .fill(statusDotColor(for: connection.consentState))
                 .frame(width: 7, height: 7)
+            // Single-line, always — a status line that wraps floats the dot
+            // above beside the middle of a multi-line block instead of its
+            // first line (`docs/design/tokens.md`'s "Text never wraps"). A
+            // very long institution/alias name truncates with an ellipsis
+            // instead, never a second line.
             Text(statusLine(for: connection))
                 .font(Typography.caption)
                 .foregroundStyle(Palette.inkTertiary)
+                .lineLimit(1)
         }
     }
 
@@ -392,23 +405,39 @@ struct AccountsView: View {
         }
     }
 
+    /// The status word only appears when there is something to flag —
+    /// `statusRow`'s dot already carries "everything's fine" for `.active`,
+    /// and the word made the line the longest exactly in the common case
+    /// (`docs/design/tokens.md`'s "Text never wraps" — a `.lineLimit(1)` line
+    /// truncates the very information a problem state needs to show).
+    /// Abbreviated relative times (`relativeTimeShort`, "3 h fa" not "3 ore
+    /// fa") and a short "auto" suffix keep the common case well inside one
+    /// line at Conti's actual card width.
     private func statusLine(for connection: ConnectionResponse) -> String {
-        let stateLabel: String
-        switch connection.consentState {
-        case .active: stateLabel = "Attivo"
-        case .expiringSoon: stateLabel = "In scadenza"
-        case .expired: stateLabel = "Scaduto"
-        case .revoked: stateLabel = "Revocato"
-        case .error: stateLabel = "Errore"
-        case .pending: stateLabel = "In attesa"
-        }
         let syncLabel: String
         if let lastSyncedAt = connection.lastSyncedAt {
-            syncLabel = "sincronizzato \(TraccioCore.relativeTime(from: lastSyncedAt, to: Date()))"
+            let relative = TraccioCore.relativeTimeShort(from: lastSyncedAt, to: Date())
+            syncLabel = "Sincronizzato \(relative)"
         } else {
-            syncLabel = "mai sincronizzato"
+            syncLabel = "Mai sincronizzato"
         }
-        return "\(stateLabel) · \(syncLabel)\(automaticSyncSuffix(for: connection))"
+        guard let stateLabel = problemStateLabel(for: connection.consentState) else {
+            return "\(syncLabel)\(automaticSyncSuffix(for: connection))"
+        }
+        return "\(stateLabel) · \(syncLabel.lowercased())\(automaticSyncSuffix(for: connection))"
+    }
+
+    /// `nil` for `.active` — the dot alone says "fine"; every other state
+    /// still names itself, since that's exactly the case worth reading.
+    private func problemStateLabel(for state: ConsentState) -> String? {
+        switch state {
+        case .active: nil
+        case .expiringSoon: "In scadenza"
+        case .expired: "Scaduto"
+        case .revoked: "Revocato"
+        case .error: "Errore"
+        case .pending: "In attesa"
+        }
     }
 
     /// The scheduler's own state, appended to `statusLine(for:)`. Every
@@ -419,15 +448,15 @@ struct AccountsView: View {
     private func automaticSyncSuffix(for connection: ConnectionResponse) -> String {
         guard connection.backgroundSyncEnabled else { return "" }
         if let nextSyncAt = connection.nextSyncAt {
-            let relative = TraccioCore.relativeTime(from: nextSyncAt, to: Date())
-            return " · automatica, prossima \(relative)"
+            let relative = TraccioCore.relativeTimeShort(from: nextSyncAt, to: Date())
+            return " · auto \(relative)"
         }
         // nextSyncAt is nil while background_sync_enabled is true either
         // because it's already due (the next tick will sync it) or its
         // consent needs re-authorization rather than time to pass — the
         // consent-warning banner above already covers the latter, so a
         // single "in coda" reading is honest for both without guessing which.
-        return " · automatica, in coda"
+        return " · auto in coda"
     }
 
     // MARK: Accounts

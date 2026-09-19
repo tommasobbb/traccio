@@ -121,7 +121,7 @@ final class AccountsViewModel {
     /// empty rather than failing the whole screen: a card showing a consent
     /// warning with no account rows is still worth rendering.
     func load() async {
-        state = .loading
+        state.beginLoading()
         async let accountsResult = client.accounts()
         async let settingsResult = client.settings()
 
@@ -130,6 +130,10 @@ final class AccountsViewModel {
             state = .loaded(connections)
             await backfillLogosIfNeeded(connections)
         } catch {
+            // A cancelled request (pull-to-refresh's Task, cancelled by the
+            // scenePhase-driven reload racing it) is not a failure — see
+            // `TransactionsViewModel.loadPage()`'s identical guard.
+            guard !error.isCancellationError else { return }
             state = .failed
             return
         }

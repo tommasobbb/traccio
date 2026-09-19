@@ -31,4 +31,27 @@ struct RelativeTimeTests {
         )
         #expect(!text.isEmpty)
     }
+
+    @Test func shortFormAbbreviatesTheUnitInItalian() {
+        let anHourAgo = Self.now.addingTimeInterval(-60 * 60)
+        let full = TraccioCore.relativeTime(
+            from: anHourAgo, to: Self.now, locale: Locale(identifier: "it_IT")
+        )
+        let short = TraccioCore.relativeTimeShort(
+            from: anHourAgo, to: Self.now, locale: Locale(identifier: "it_IT")
+        )
+        // "1 ora fa" vs "1 h fa" — shorter, and drops the spelled-out unit
+        // that forced a Conti status line to wrap across three lines.
+        #expect(short.count < full.count)
+        #expect(!short.localizedCaseInsensitiveContains("ora"))
+    }
+
+    @Test func shortFormDescribesAFutureInstant() {
+        let inOneHour = Self.now.addingTimeInterval(60 * 60)
+        let text = TraccioCore.relativeTimeShort(
+            from: inOneHour, to: Self.now, locale: Locale(identifier: "it_IT")
+        )
+        #expect(!text.isEmpty)
+        #expect(!text.localizedCaseInsensitiveContains("ora"))
+    }
 }
