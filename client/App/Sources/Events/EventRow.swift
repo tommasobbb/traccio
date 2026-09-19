@@ -10,24 +10,34 @@ import TraccioCore
 /// `Text` with `.lineLimit(1)` rather than several `Text`s sharing an
 /// `HStack` with none — the latter was the row's actual bug, not just the
 /// date formatter (`docs/design/tokens.md`'s "Text never wraps").
+///
+/// **Revised 2026-09-19**: the name moved to a full-width line of its own,
+/// above the subtitle/amount line, instead of sharing a row with the amount.
+/// The old anatomy gave the amount `.layoutPriority(1)` against the title
+/// block's `.layoutPriority(0)` — the title was the one thing that had to
+/// give, which meant "Amsterdam 2026" truncated the moment its subtitle
+/// ("N movimenti · date range") was wide enough to set the block's width.
+/// No `.layoutPriority` is needed now that the name has its own line; the
+/// chevron is gone too — a two-line block would center it awkwardly, and
+/// `TransactionRow`'s equivalent row has no chevron either, relying on
+/// `.pressableRow` + the zoom transition for the tap affordance.
 struct EventRow: View {
     let event: EventResponse
 
     var body: some View {
         HStack(spacing: Spacing.itemGap) {
-            EventTile(emoji: event.emoji, color: event.color, diameter: 36)
-            VStack(alignment: .leading, spacing: 3) {
+            EventTile(emoji: event.emoji, color: event.color, diameter: 44)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(event.name)
                     .font(Typography.body.weight(.semibold))
                     .foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                subtitle
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    subtitle
+                    Spacer(minLength: Spacing.tightGap)
+                    amountColumn
+                }
             }
-            .layoutPriority(0)
-            Spacer(minLength: 8)
-            amountColumn
-                .layoutPriority(1)
-            DisclosureChevron()
         }
         .rowScrollTransition()
     }

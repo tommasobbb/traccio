@@ -144,7 +144,7 @@ struct EventsView: View {
                         } label: {
                             EventRow(event: event)
                                 .padding(.horizontal, Spacing.cardPadding)
-                                .padding(.vertical, 6)
+                                .padding(.vertical, Spacing.itemGap)
                         }
                         .buttonStyle(.pressableRow)
                         .matchedTransitionSource(id: event.id, in: transitionNamespace)
