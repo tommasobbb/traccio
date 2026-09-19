@@ -684,3 +684,32 @@ triad (`brandNight`/`brandLime`/`brandCream`) is withdrawn outright — see
 "Panoramica hero" and "Accent dosage" above — not tuned or extended; the
 color question beyond the accent is reopened with no default assumed.
 `design: .rounded` typography is unaffected.
+
+**Conti recompose · Panoramica stats card · Categorie one-CTA, 2026-09-19.**
+Three independent fixes, client-only, no backend:
+- **Conti**: the three dashed "Collega/Crea/Importa" cards move into two
+  toolbar buttons (an upload icon, and a "+" `Menu` for the two add flows) —
+  the first screen to lose the dashed-card idiom this file's glass section
+  used to describe as Conti's own. A connection with exactly one account now
+  collapses header+row into a single card, so the account name never repeats
+  the connection header above it; a multi-account connection's rows show
+  alias-or-kind ("Carta"/"Corrente") instead of the bank's own raw account
+  name. Institution logos 40pt → 48pt, pinned to `Radius.row` rather than the
+  proportional `size * 0.3`.
+- **Panoramica**: `DashboardHeroFootnote` (a bare, `.lineLimit(1)`-truncated
+  `HStack` on the background) and the loose FX/"totale non disponibile"
+  caption both retire into `DashboardStatsCard`, a `.flush` `Card` directly
+  under the `.raised` hero — one elevation step down keeps the hierarchy
+  hero-first without a colour band. Nothing truncates now: the comparison
+  line and the stats line each wrap on their own terms.
+- **Categorie e regole**: the screen's three stacked accent `PillButton`s
+  (a real "Accent dosage" violation — more than one primary CTA per screen)
+  collapse to one: creation moves to a toolbar `Menu`, and "Applica regole"
+  — the screen's only actual *commit* — is the sole surviving in-card accent
+  action, rendered only once there's a rule to apply. Drag-and-drop
+  reparenting reuses the exact dashed-border idiom Conti's cards just
+  retired, for the "rendi principale" drop zone — the one place a
+  provisional, dashed target is still the right shape.
+
+Still owed (`tasks/backlog.md`): the on-device visual pass for all three,
+same standing gap this file has tracked since 2026-09-08.
