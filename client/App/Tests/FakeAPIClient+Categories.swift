@@ -84,6 +84,7 @@ extension FakeAPIClient {
     }
 
     func categories() async throws -> [CategoryResponse] {
+        categoriesFetchCount += 1
         if let categoriesError { throw categoriesError }
         return categoriesToReturn
     }

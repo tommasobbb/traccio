@@ -306,6 +306,222 @@ struct CategorizationViewModelTests {
         #expect(notified == 1)
     }
 
+    // MARK: updateCategory
+
+    @Test func updateCategoryIssuesBothWritesAndReloadsOnce() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let original = Self.makeCategory(name: "Alimentari", color: .slate)
+        await client.setCategories([original])
+        await client.setRenameCategoryResult(Self.makeCategory(name: "Spesa", color: .slate))
+        await client.setCategoryAppearanceResult(Self.makeCategory(name: "Spesa", color: .green))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await client.setCategories([Self.makeCategory(name: "Spesa", color: .green)])
+        await model.updateCategory(original, name: "Spesa", color: .green, icon: nil)
+
+        #expect(model.actionFailure == nil)
+        #expect(
+            await client.renamedCategories == [
+                FakeAPIClient.RecordedRename(id: Self.categoryID, name: "Spesa")
+            ]
+        )
+        #expect(
+            await client.categoryAppearanceUpdates == [
+                FakeAPIClient.RecordedCategoryAppearance(id: Self.categoryID, color: .green, icon: nil)
+            ]
+        )
+        #expect(await client.categoriesFetchCount == 2)
+    }
+
+    @Test func updateCategorySkipsRenameWhenNameUnchanged() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let original = Self.makeCategory(name: "Alimentari", color: .slate)
+        await client.setCategories([original])
+        await client.setCategoryAppearanceResult(Self.makeCategory(name: "Alimentari", color: .green))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.updateCategory(original, name: "Alimentari", color: .green, icon: nil)
+
+        #expect(await client.renamedCategories.isEmpty)
+        #expect(await client.categoryAppearanceUpdates.count == 1)
+    }
+
+    @Test func updateCategorySkipsAppearanceWhenUnchanged() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let original = Self.makeCategory(name: "Alimentari", color: .slate)
+        await client.setCategories([original])
+        await client.setRenameCategoryResult(Self.makeCategory(name: "Spesa", color: .slate))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.updateCategory(original, name: "Spesa", color: .slate, icon: original.icon)
+
+        #expect(await client.categoryAppearanceUpdates.isEmpty)
+        #expect(await client.renamedCategories.count == 1)
+    }
+
+    @Test func updateCategoryStopsAtRenameFailureAndLeavesAppearanceUntouched() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let original = Self.makeCategory(name: "Alimentari", color: .slate)
+        await client.setCategories([original])
+        await client.setRenameCategoryError(APIError.badStatus(409))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.updateCategory(original, name: "Spesa", color: .green, icon: nil)
+
+        #expect(model.actionFailure == .nameTaken)
+        #expect(await client.categoryAppearanceUpdates.isEmpty)
+    }
+
+    // MARK: moveCategory
+
+    @Test func moveCategoryCallsMoveAndNotifiesFreshness() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let root = Self.makeCategory(name: "Casa")
+        let child = Self.makeCategory(id: UUID(), name: "Affitto", parentID: root.id)
+        let otherRoot = Self.makeCategory(id: UUID(), name: "Trasporti")
+        await client.setCategories([root, child, otherRoot])
+        await client.setMoveCategoryResult(
+            Self.makeCategory(id: child.id, name: "Affitto", parentID: otherRoot.id)
+        )
+        var notified = 0
+        let model = CategorizationViewModel(client: client, onSuggestionsChanged: { notified += 1 })
+        await model.load()
+
+        await model.moveCategory(id: child.id, parentID: otherRoot.id)
+
+        #expect(
+            await client.movedCategories == [
+                FakeAPIClient.RecordedCategoryMove(id: child.id, parentID: otherRoot.id)
+            ]
+        )
+        #expect(notified == 1)
+        #expect(model.actionFailure == nil)
+    }
+
+    @Test func moveCategoryToRootSendsNilParent() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        let root = Self.makeCategory(name: "Casa")
+        let child = Self.makeCategory(id: UUID(), name: "Affitto", parentID: root.id)
+        await client.setCategories([root, child])
+        await client.setMoveCategoryResult(Self.makeCategory(id: child.id, name: "Affitto"))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.moveCategory(id: child.id, parentID: nil)
+
+        #expect(
+            await client.movedCategories == [
+                FakeAPIClient.RecordedCategoryMove(id: child.id, parentID: nil)
+            ]
+        )
+    }
+
+    @Test func moveCategoryMaps409ToCategoryHasChildren() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        await client.setCategories([Self.makeCategory()])
+        await client.setMoveCategoryError(APIError.badStatus(409))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.moveCategory(id: Self.categoryID, parentID: UUID())
+
+        #expect(model.actionFailure == .categoryHasChildren)
+    }
+
+    @Test func moveCategoryMaps422ToInvalidMove() async throws {
+        let client = FakeAPIClient()
+        await client.setRules([])
+        await client.setCategories([Self.makeCategory()])
+        await client.setMoveCategoryError(APIError.badStatus(422))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.moveCategory(id: Self.categoryID, parentID: UUID())
+
+        #expect(model.actionFailure == .invalidMove)
+    }
+
+    // MARK: updateRule
+
+    @Test func updateRuleDeletesBeforeCreatingSoAnUnchangedPatternDoesNotConflict() async throws {
+        let client = FakeAPIClient()
+        let original = Self.makeRule(pattern: "TEST MERCHANT 01")
+        await client.setRules([original])
+        await client.setCategories([Self.makeCategory()])
+        let newCategoryID = UUID()
+        await client.setCreateRuleResult(Self.makeRule(id: UUID(), pattern: "TEST MERCHANT 01"))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        // Same (matchKind, pattern) as the original, only the category
+        // changes — the case create-first would `409` on, since the
+        // backend's duplicate check ignores the category.
+        await client.setRules([Self.makeRule(id: Self.ruleID, pattern: "TEST MERCHANT 01")])
+        await model.updateRule(
+            original, categoryID: newCategoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(await client.ruleCallLog == ["delete", "create"])
+        #expect(await client.deletedRuleIDs == [Self.ruleID])
+        let recorded = await client.createdRuleRequests
+        #expect(recorded.count == 1)
+        #expect(recorded[0].categoryID == newCategoryID)
+        #expect(recorded[0].matchKind == .contains)
+        #expect(recorded[0].pattern == "TEST MERCHANT 01")
+        #expect(model.actionFailure == nil)
+    }
+
+    @Test func updateRuleRecreatesOriginalWhenCreateFails() async throws {
+        let client = FakeAPIClient()
+        let original = Self.makeRule(pattern: "TEST MERCHANT 01")
+        await client.setRules([original])
+        await client.setCategories([Self.makeCategory()])
+        await client.setCreateRuleError(APIError.badStatus(409))
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.updateRule(
+            original, categoryID: Self.categoryID, matchKind: .contains,
+            pattern: "TEST MERCHANT 01 SUBSCRIPTION"
+        )
+
+        // Both the real create and the compensating recreate fail (the fake's
+        // error is sticky), so neither lands in `createdRuleRequests` — that
+        // array only records a *successful* call. `ruleCallLog` is what
+        // proves both were attempted, in order.
+        #expect(await client.ruleCallLog == ["delete", "create", "create"])
+        #expect(await client.deletedRuleIDs == [Self.ruleID])
+        #expect(model.actionFailure == .duplicateRule)
+    }
+
+    @Test func updateRuleIsNoOpWhenNothingChanged() async throws {
+        let client = FakeAPIClient()
+        let original = Self.makeRule(pattern: "TEST MERCHANT 01")
+        await client.setRules([original])
+        await client.setCategories([Self.makeCategory()])
+        let model = CategorizationViewModel(client: client)
+        await model.load()
+
+        await model.updateRule(
+            original, categoryID: original.categoryID, matchKind: original.matchKind,
+            pattern: original.pattern
+        )
+
+        #expect(await client.ruleCallLog.isEmpty)
+        #expect(await client.rulesFetchCount == 1)
+    }
+
     @Test func aSecondWriteWhileUpdatingIsIgnored() async throws {
         let client = FakeAPIClient()
         await client.setRules([])

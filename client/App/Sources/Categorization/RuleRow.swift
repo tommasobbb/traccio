@@ -2,10 +2,14 @@ import SwiftUI
 import TraccioCore
 
 /// One rule in `CategorizationView`'s Regole card: its predicate, its
-/// pattern, the category it resolves to, and a delete action.
+/// pattern, the category it resolves to, and an edit/delete overflow menu.
 ///
 /// Pure presentation — no view model. The resolved category name is passed
 /// in rather than looked up here, since the row has no client of its own.
+/// The trailing control is a `Menu`, not a plain delete `IconButton`, since
+/// it now offers two actions and a `Button` can't nest another `Button` —
+/// same constraint Conti's collapsed single-account card works around by
+/// keeping its sync control as a sibling, not a child, of the row's `Button`.
 struct RuleRow: View {
     let rule: RuleResponse
     /// The rule's target category name, resolved by the caller against the
@@ -14,6 +18,7 @@ struct RuleRow: View {
     /// rather than hiding the row.
     let categoryName: String?
     let isDeleting: Bool
+    let onEdit: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -31,12 +36,18 @@ struct RuleRow: View {
                     .foregroundStyle(Palette.inkTertiary)
             }
             Spacer(minLength: 8)
-            IconButton(
-                systemImage: "trash",
-                accessibilityLabel: "Elimina regola",
-                isLoading: isDeleting,
-                action: onDelete
-            )
+            Menu {
+                Button(action: onEdit) {
+                    Label("Modifica", systemImage: "pencil")
+                }
+                Button(role: .destructive, action: onDelete) {
+                    Label("Elimina", systemImage: "trash")
+                }
+            } label: {
+                IconButtonLabel(systemImage: "ellipsis", isLoading: isDeleting)
+            }
+            .disabled(isDeleting)
+            .accessibilityLabel("Azioni regola")
         }
         .padding(.vertical, 6)
         .rowScrollTransition()

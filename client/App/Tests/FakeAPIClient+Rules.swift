@@ -38,6 +38,7 @@ extension FakeAPIClient {
     }
 
     func createRule(_ request: CreateRuleRequest) async throws -> RuleResponse {
+        ruleCallLog.append("create")
         if let createRuleError { throw createRuleError }
         createdRuleRequests.append(request)
         guard let createRuleToReturn else { throw NotConfigured() }
@@ -45,6 +46,7 @@ extension FakeAPIClient {
     }
 
     func deleteRule(id: UUID) async throws {
+        ruleCallLog.append("delete")
         if let deleteRuleError { throw deleteRuleError }
         deletedRuleIDs.append(id)
     }

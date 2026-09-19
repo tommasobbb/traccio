@@ -1,8 +1,9 @@
 import SwiftUI
 import TraccioCore
 
-/// "Nuova regola" — the form presented from `CategorizationView` to create a
-/// categorization rule.
+/// "Nuova regola" / "Modifica regola" — one sheet for both, since they differ
+/// only in title, prefill, and what write the caller triggers on submit;
+/// mirrors `CategoryEditorSheet.Mode`'s shape for the same reason.
 ///
 /// No mockup covers this screen (`docs/design/canvas/` has no Categorie/
 /// Regole artboard), so it is built from existing tokens/components — same
@@ -11,14 +12,25 @@ import TraccioCore
 /// duplication — the backend's `422`/`409` are the real checks
 /// (`docs/engineering.md`: the backend owns every derived value; the same
 /// reasoning extends to validation the backend already performs).
-struct CreateRuleSheet: View {
+struct RuleEditorSheet: View {
+    /// Which write this sheet drives. Modeled as an enum rather than an
+    /// optional `RuleResponse` plus a boolean flag, so "editing nothing" is
+    /// unrepresentable (`docs/engineering.md`) — same rationale as
+    /// `CategoryEditorSheet.Mode`.
+    enum Mode {
+        case create
+        case edit(RuleResponse)
+    }
+
+    let mode: Mode
     let categories: [CategoryResponse]
-    var isCreating: Bool
+    var isSaving: Bool
     /// A message describing why the last attempt failed, or `nil`.
     var failureMessage: String?
     /// Called with the chosen category, predicate, and trimmed pattern once
-    /// the user submits a valid form.
-    let onCreate: (UUID, RuleMatchKind, String) -> Void
+    /// the user submits a valid form — a create or an update, decided by the
+    /// caller from `mode`.
+    let onSubmit: (UUID, RuleMatchKind, String) -> Void
     let onCancel: () -> Void
 
     @State private var matchKind: RuleMatchKind = .contains
@@ -37,21 +49,39 @@ struct CreateRuleSheet: View {
                 }
                 .padding(Spacing.gutter)
             }
-            .sheetChrome("Nuova regola")
+            .sheetChrome(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Crea", action: submit)
-                        .disabled(isCreating || trimmedPattern.isEmpty || selectedCategoryID == nil)
+                    Button(confirmTitle, action: submit)
+                        .disabled(isSaving || trimmedPattern.isEmpty || selectedCategoryID == nil)
                 }
             }
         }
         .onAppear {
-            if selectedCategoryID == nil {
+            if case .edit(let rule) = mode, patternText.isEmpty {
+                matchKind = rule.matchKind
+                patternText = rule.pattern
+                selectedCategoryID = rule.categoryID
+            } else if selectedCategoryID == nil {
                 selectedCategoryID = categories.first?.id
             }
+        }
+    }
+
+    private var title: String {
+        switch mode {
+        case .create: "Nuova regola"
+        case .edit: "Modifica regola"
+        }
+    }
+
+    private var confirmTitle: String {
+        switch mode {
+        case .create: "Crea"
+        case .edit: "Salva"
         }
     }
 
@@ -75,6 +105,10 @@ struct CreateRuleSheet: View {
 
     // MARK: Category
 
+    /// Indented, icon-and-colour tree — the same shape
+    /// `TransactionFiltersSheet.categorySection` already renders, so a rule's
+    /// category picker doesn't stay the odd one out with a flat,
+    /// icon-less list.
     private var categoryCard: some View {
         VStack(alignment: .leading, spacing: Spacing.tightGap) {
             EyebrowLabel(text: "Assegna la categoria")
@@ -83,16 +117,28 @@ struct CreateRuleSheet: View {
                     .font(Typography.caption)
                     .foregroundStyle(Palette.inkSecondary)
             } else {
+                let tree = TraccioCore.categoryTree(categories)
                 OptionListCard {
-                    ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
+                    ForEach(Array(tree.enumerated()), id: \.element.id) { index, node in
                         if index > 0 {
                             Divider().overlay(Palette.separator)
                         }
                         OptionRow(
-                            title: category.name,
-                            isSelected: category.id == selectedCategoryID,
-                            action: { selectedCategoryID = category.id }
+                            title: node.category.name,
+                            icon: (node.category.tileIcon.systemImageName, node.category.color),
+                            isSelected: node.category.id == selectedCategoryID,
+                            action: { selectedCategoryID = node.category.id }
                         )
+                        ForEach(node.children) { child in
+                            Divider().overlay(Palette.separator)
+                            OptionRow(
+                                title: child.name,
+                                icon: (child.tileIcon.systemImageName, child.color),
+                                isSelected: child.id == selectedCategoryID,
+                                indented: true,
+                                action: { selectedCategoryID = child.id }
+                            )
+                        }
                     }
                 }
             }
@@ -107,6 +153,6 @@ struct CreateRuleSheet: View {
 
     private func submit() {
         guard !trimmedPattern.isEmpty, let selectedCategoryID else { return }
-        onCreate(selectedCategoryID, matchKind, trimmedPattern)
+        onSubmit(selectedCategoryID, matchKind, trimmedPattern)
     }
 }

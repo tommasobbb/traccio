@@ -189,9 +189,16 @@ actor FakeAPIClient: APIClientProtocol {
     var categoryAppearanceUpdates: [RecordedCategoryAppearance] = []
     var movedCategories: [RecordedCategoryMove] = []
     var deletedCategoryIDs: [UUID] = []
+    /// How many times `categories()` was called — asserts a write issued one
+    /// reload, not two (`CategorizationViewModel.updateCategory`).
+    var categoriesFetchCount = 0
     var rulesFetchCount = 0
     var createdRuleRequests: [CreateRuleRequest] = []
     var deletedRuleIDs: [UUID] = []
+    /// Ordered log of `"delete"`/`"create"` entries from `deleteRule`/
+    /// `createRule`, so `updateRule`'s delete-before-create invariant is
+    /// tested on ordering, not just on each array's contents.
+    var ruleCallLog: [String] = []
     var applyRulesCallCount = 0
     var eventsFetchCount = 0
     var eventFetchCount = 0

@@ -35,6 +35,14 @@ final class CategorizationViewModel {
         case duplicateRule
         /// A rule's pattern was blank or too long.
         case invalidPattern
+        /// `POST /categories/{id}/move` refused because the category being
+        /// moved has children of its own and a non-`nil` parent was given.
+        case categoryHasChildren
+        /// `POST /categories/{id}/move` refused because the new parent is
+        /// the category itself or is itself a child (max depth is 2, ADR
+        /// 0018) — pre-checked client-side for the children case, but the
+        /// self/depth cases still round-trip.
+        case invalidMove
         case generic
     }
 
@@ -153,6 +161,135 @@ final class CategorizationViewModel {
     func setCategoryAppearance(id: UUID, color: PaletteColor, icon: CategoryIcon?) async {
         await performUpdate { client in
             _ = try await client.setCategoryAppearance(id: id, color: color, icon: icon)
+        }
+    }
+
+    /// Apply a category edit — name, colour, and icon — as one logical write.
+    ///
+    /// Not atomic server-side: there is no combined update endpoint, so this
+    /// is still `POST /categories/{id}/rename` followed by
+    /// `POST /categories/{id}/appearance` when either actually changed. What
+    /// it guarantees is one in-flight guard, one failure mapping, and one
+    /// `load()` for the whole edit, instead of the view issuing two
+    /// independent writes and two reloads. Each write is skipped when its
+    /// fields are unchanged, so renaming nothing never risks a spurious
+    /// `409 category_name_taken` from re-sending the same name. If the
+    /// rename lands and the appearance write fails, the rename stays — the
+    /// subsequent `load()` shows exactly what persisted, alongside the
+    /// failure banner.
+    ///
+    /// Parameters
+    /// ----------
+    /// category:
+    ///     The category being edited, before this write.
+    /// name:
+    ///     The new name.
+    /// color:
+    ///     The new colour.
+    /// icon:
+    ///     The new icon, or `nil` to clear it.
+    func updateCategory(
+        _ category: CategoryResponse, name: String, color: PaletteColor, icon: CategoryIcon?
+    ) async {
+        await performUpdate(onFailure: { $0 == 409 ? .nameTaken : .generic }) { client in
+            if name != category.name {
+                _ = try await client.renameCategory(id: category.id, name: name)
+            }
+            if color != category.color || icon != category.icon {
+                _ = try await client.setCategoryAppearance(id: category.id, color: color, icon: icon)
+            }
+        }
+    }
+
+    /// Reparent a category — nest it under a root, or (`parentID: nil`) make
+    /// it a root.
+    ///
+    /// Wires `POST /categories/{id}/move`, present since ADR 0018 and until
+    /// now unused by any view. Notifies `onSuggestionsChanged`: the
+    /// dashboard's category breakdown rolls a child's spending up into its
+    /// root, so a move changes what Panoramica shows even though no
+    /// transaction changed.
+    ///
+    /// Parameters
+    /// ----------
+    /// id:
+    ///     The category to move.
+    /// parentID:
+    ///     The new parent, or `nil` to make it a root.
+    func moveCategory(id: UUID, parentID: UUID?) async {
+        await performUpdate(
+            onFailure: { code in
+                switch code {
+                case 409: return .categoryHasChildren
+                case 422: return .invalidMove
+                default: return .generic
+                }
+            },
+            notifiesFreshness: true
+        ) { client in
+            _ = try await client.moveCategory(id: id, parentID: parentID)
+        }
+    }
+
+    /// Apply a rule edit.
+    ///
+    /// Implemented as delete-then-create, which is not a workaround: a rule
+    /// has no edit endpoint by design (ADR 0005) — its `(matchKind,
+    /// pattern)` pair is what makes it a distinct rule at all, so "editing"
+    /// one is delete-and-recreate by the backend's own stated semantics
+    /// (`RuleResponse`'s doc comment, `APIClient+Rules.deleteRule`'s).
+    /// Nothing persists a rule id outside this screen — a suggestion stores
+    /// only `category_id` — so the churn is invisible elsewhere. Its one
+    /// visible consequence: `created_at` changes, so among rules with
+    /// *equal-length* patterns the edited rule now sorts last in evaluation
+    /// order (ties break by `created_at`); precedence is driven by pattern
+    /// length, so this is harmless.
+    ///
+    /// **Delete must come first.** Create-first would `409` whenever
+    /// `(matchKind, pattern)` is unchanged — the commonest edit, "just point
+    /// it at a different category" — because the backend's duplicate check
+    /// is keyed on that pair alone and ignores the category. On a failed
+    /// create, the original is recreated verbatim, so a failed edit leaves
+    /// the rule set exactly as it was rather than silently losing a rule.
+    ///
+    /// Parameters
+    /// ----------
+    /// original:
+    ///     The rule being edited, before this write.
+    /// categoryID:
+    ///     The (possibly unchanged) target category.
+    /// matchKind:
+    ///     The (possibly unchanged) predicate.
+    /// pattern:
+    ///     The (possibly unchanged) pattern.
+    func updateRule(
+        _ original: RuleResponse, categoryID: UUID, matchKind: RuleMatchKind, pattern: String
+    ) async {
+        guard categoryID != original.categoryID || matchKind != original.matchKind
+            || pattern != original.pattern
+        else { return }
+
+        await performUpdate(onFailure: { code in
+            switch code {
+            case 409: return .duplicateRule
+            case 422: return .invalidPattern
+            default: return .generic
+            }
+        }) { client in
+            try await client.deleteRule(id: original.id)
+            do {
+                _ = try await client.createRule(
+                    CreateRuleRequest(categoryID: categoryID, matchKind: matchKind, pattern: pattern)
+                )
+            } catch {
+                _ = try? await client.createRule(
+                    CreateRuleRequest(
+                        categoryID: original.categoryID, matchKind: original.matchKind,
+                        pattern: original.pattern
+                    )
+                )
+                throw error
+            }
         }
     }
 

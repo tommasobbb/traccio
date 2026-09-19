@@ -17,8 +17,8 @@ public struct CategoryTreeNode: Sendable, Equatable, Identifiable {
 extension TraccioCore {
     /// Group a flat category list into roots with their direct children.
     ///
-    /// Pure presentation grouping, not a derivation of any value (`.claude/
-    /// rules/swift.md`): `GET /categories` already returns a flat,
+    /// Pure presentation grouping, not a derivation of any value
+    /// (`docs/engineering.md`): `GET /categories` already returns a flat,
     /// backend-ordered list (each root immediately followed by its own
     /// children — see `traccio.db.repositories.list_categories`), and this
     /// function only reshapes it into the two-level structure a picker or a

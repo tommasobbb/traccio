@@ -1,7 +1,9 @@
 import SwiftUI
 
-/// The circular icon-only button used for a per-connection manual sync and
-/// the Conti top bar's "add" control (`docs/design/canvas/Accounts.dc.html`).
+/// The circular icon-only button used for a per-connection manual sync, a
+/// category row's add/edit/delete controls, and similar in-content actions.
+/// `IconButtonLabel` below is the same shape without the `Button` wrapper,
+/// for a `Menu` that needs to wear it (`RuleRow`'s overflow menu).
 ///
 /// A flat `Circle().fill(background)` — chrome carries Liquid Glass
 /// (`docs/decisions/0030-liquid-glass-chrome.md`), a control living inside a
@@ -23,22 +25,40 @@ struct IconButton: View {
 
     var body: some View {
         Button(action: action) {
-            ZStack {
-                Circle().fill(background)
-                if isLoading {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(foreground)
-                } else {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(foreground)
-                }
-            }
-            .frame(width: 36, height: 36)
+            IconButtonLabel(
+                systemImage: systemImage, background: background, foreground: foreground,
+                isLoading: isLoading
+            )
         }
         .buttonStyle(.pressable)
         .disabled(isLoading)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// The circular glyph-in-a-fill shape `IconButton` wears, pulled out so a
+/// `Menu` (which can't be a `Button`'s label — `RuleRow`'s trailing overflow
+/// menu needs the same circular chrome a plain delete `IconButton` used to
+/// have) can wear it too, without duplicating the `ZStack`.
+struct IconButtonLabel: View {
+    let systemImage: String
+    var background: Color = Palette.neutralFill
+    var foreground: Color = Palette.inkSecondary
+    var isLoading: Bool = false
+
+    var body: some View {
+        ZStack {
+            Circle().fill(background)
+            if isLoading {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(foreground)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(foreground)
+            }
+        }
+        .frame(width: 36, height: 36)
     }
 }
