@@ -10,7 +10,7 @@ extension CalendarPeriod {
     /// `CalendarPeriod` itself in `TraccioCore`, per the "display copy stays
     /// in the view" rule `TransactionPeriodPreset` and
     /// `TransactionsView.title(for:)` already follow — used by both
-    /// `DashboardPeriodPicker` and `DashboardHeroFootnote`'s comparison text.
+    /// `DashboardPeriodPicker` and `DashboardStatsCard`'s comparison text.
     var displayTitle: String {
         switch unit {
         case .month:

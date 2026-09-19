@@ -15,7 +15,7 @@ import TraccioCore
 /// revision).
 ///
 /// The card-sized pieces (`DashboardPeriodPicker`, `DashboardHeroCard`,
-/// `DashboardHeroFootnote`, `CategoryBreakdownCard`, `DailySpendingCard`,
+/// `DashboardStatsCard`, `CategoryBreakdownCard`, `DailySpendingCard`,
 /// `OtherCurrenciesCard`, `AccountBreakdownCard`, `MealVoucherCard`) each
 /// live in their own file next to this one — this view only wires them to
 /// `DashboardViewModel` and lays them out.
@@ -137,8 +137,7 @@ struct DashboardView: View {
         // currency up front, the rest listed separately and never summed.
         if let converted = summary.converted {
             DashboardHeroCard(summary: converted.summary)
-            heroFootnote(converted.summary)
-            conversionCaption(converted)
+            statsCard(converted.summary, caption: conversionCaptionText(converted))
 
             if summary.currencies.count > 1 {
                 OtherCurrenciesCard(others: summary.currencies, combined: true)
@@ -146,18 +145,15 @@ struct DashboardView: View {
             breakdownCards(converted.summary)
             mealVoucherCards(summary.mealVouchers)
         } else if let primary = summary.currencies.primary() {
+            let caption =
+                summary.conversionUnavailable != nil
+                ? "Totale combinato non disponibile al momento." : nil
             DashboardHeroCard(summary: primary)
-            heroFootnote(primary)
+            statsCard(primary, caption: caption)
 
             let others = summary.currencies.filter { $0.currency != primary.currency }
             if !others.isEmpty {
                 OtherCurrenciesCard(others: others, combined: false)
-            }
-            if summary.conversionUnavailable != nil {
-                Text("Totale combinato non disponibile al momento.")
-                    .font(Typography.caption)
-                    .foregroundStyle(Palette.inkTertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             breakdownCards(primary)
             mealVoucherCards(summary.mealVouchers)
@@ -171,9 +167,11 @@ struct DashboardView: View {
         }
     }
 
-    private func heroFootnote(_ summary: CurrencySummaryResponse) -> some View {
-        DashboardHeroFootnote(
-            summary: summary, previousPeriodTitle: model.period.previous().displayTitle
+    private func statsCard(_ summary: CurrencySummaryResponse, caption: String?) -> some View {
+        DashboardStatsCard(
+            summary: summary,
+            previousPeriodTitle: model.period.previous().displayTitle,
+            caption: caption
         )
     }
 
@@ -181,8 +179,8 @@ struct DashboardView: View {
     /// `CurrencySummaryResponse` — the converted combined summary when FX is
     /// on, else the primary currency. Each renders nothing when it has
     /// nothing to show (pure-income period, no accounts). The period
-    /// comparison is no longer a card here — it is `heroFootnote`
-    /// (2026-09-08 tone revision).
+    /// comparison is no longer a card here — it is `DashboardStatsCard`
+    /// (2026-09-08 tone revision, 2026-09-19 recompose into its own card).
     @ViewBuilder
     private func breakdownCards(_ summary: CurrencySummaryResponse) -> some View {
         CategoryBreakdownCard(
@@ -221,15 +219,13 @@ struct DashboardView: View {
         ForEach(mealVouchers, id: \.currency) { MealVoucherCard(summary: $0) }
     }
 
-    /// The "convertito in EUR ai tassi BCE · dd/MM" line under the converted
-    /// hero. The date is the most recent rate actually applied.
-    private func conversionCaption(_ converted: ConvertedSummaryResponse) -> some View {
+    /// The "convertito in EUR ai tassi BCE · dd/MM" caption, folded into
+    /// `DashboardStatsCard` rather than rendered as its own loose line. The
+    /// date is the most recent rate actually applied.
+    private func conversionCaptionText(_ converted: ConvertedSummaryResponse) -> String {
         let latest = converted.rates.map(\.rateDate).max()
         let suffix = latest.map { " · \(String(format: "%02d/%02d", $0.day, $0.month))" } ?? ""
-        return Text("Convertito in \(converted.summary.currency) ai tassi BCE\(suffix)")
-            .font(Typography.caption)
-            .foregroundStyle(Palette.inkTertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        return "Convertito in \(converted.summary.currency) ai tassi BCE\(suffix)"
     }
 }
 

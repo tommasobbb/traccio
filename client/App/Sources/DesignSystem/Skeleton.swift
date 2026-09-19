@@ -80,6 +80,11 @@ struct DashboardSkeleton: View {
                 }
             }
 
+            Card(elevation: .flush) {
+                SkeletonBlock(width: 180, height: 10)
+                SkeletonBlock(width: 140, height: 10)
+            }
+
             ForEach(0..<2, id: \.self) { _ in
                 Card {
                     SkeletonBlock(width: 100, height: 10)
