@@ -227,6 +227,49 @@ def test_budget_exhausted_is_skipped() -> None:
         assert provider.calls == []
 
 
+def test_accumulated_interval_skips_do_not_exhaust_the_budget() -> None:
+    """Regression for the pre-ADR-0037 deadlock
+    (`count_recent_sync_runs`'s docstring): the scheduler records one row per
+    tick for every connection, including a skip — so 24 hourly ticks fill the
+    rolling 24h window with far more than `budget_per_day` rows. None of them
+    called the provider, so a connection that genuinely becomes due must
+    still be allowed to sync rather than reporting `SKIPPED_BUDGET` forever."""
+    engine = _engine()
+    cipher = _cipher()
+    provider = FakeProvider()
+    with Session(engine) as session:
+        connection_id = _active_connection(session, cipher, credentials="A")
+        # A full day of hourly ticks, all skipped for a reason other than
+        # budget (e.g. the interval gate, before this connection ever synced
+        # for the first time) — 24 rows, six times the default budget.
+        for hours_ago in range(1, 25):
+            record_sync_run(
+                session,
+                sync_run=SyncRun(
+                    user_id=_USER_ID,
+                    connection_id=connection_id,
+                    trigger=SyncTrigger.BACKGROUND,
+                    outcome=SyncRunOutcome.SKIPPED_INTERVAL,
+                    started_at=_NOW - timedelta(hours=hours_ago),
+                    finished_at=_NOW - timedelta(hours=hours_ago),
+                ),
+            )
+        session.commit()
+
+        run_due_syncs(
+            session, provider=provider, cipher=cipher, user_id=_USER_ID, **_default_kwargs()
+        )
+
+        latest = session.scalars(
+            select(SyncRunRow)
+            .where(SyncRunRow.connection_id == connection_id)
+            .order_by(SyncRunRow.started_at.desc())
+        ).first()
+        assert latest is not None
+        assert latest.outcome is SyncRunOutcome.SUCCESS
+        assert provider.calls == ["A"]
+
+
 def test_recently_synced_connection_is_skipped_for_the_interval() -> None:
     engine = _engine()
     cipher = _cipher()

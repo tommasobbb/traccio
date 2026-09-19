@@ -560,6 +560,25 @@ class SyncRunOutcome(StrEnum):
     SKIPPED_BUDGET = "skipped_budget"
     SKIPPED_INTERVAL = "skipped_interval"
 
+    @property
+    def counts_toward_budget(self) -> bool:
+        """Whether this outcome consumed one of the consent's background fetches.
+
+        Only an attempt that actually reached the provider does
+        (:attr:`SUCCESS`, :attr:`PROVIDER_FAILED`). A skipped run is still
+        recorded for the audit trail (ADR 0010 decision 4) but calls no bank
+        at all, so counting it toward the budget would let the scheduler
+        starve itself: it writes one skip row per tick for every connection
+        not currently due
+        (:func:`~traccio.services.scheduler.run_due_syncs`), so a rolling-24h
+        count of *every* row — the pre-ADR-0037 behavior — crosses
+        ``budget_per_day`` after that many ticks and never comes back down,
+        since each new tick adds another skip to the very window it's being
+        measured against. See ``docs/decisions/0037-sync-budget-counts-
+        fetches-not-skips.md``.
+        """
+        return self in {SyncRunOutcome.SUCCESS, SyncRunOutcome.PROVIDER_FAILED}
+
 
 class BucketGranularity(StrEnum):
     """How ``GET /dashboard/summary``'s ``by_bucket`` groups transactions in time.

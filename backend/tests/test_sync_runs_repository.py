@@ -138,16 +138,47 @@ def test_count_recent_sync_runs_counts_only_within_the_window() -> None:
         assert count == 2
 
 
-def test_count_recent_sync_runs_counts_skips_too() -> None:
-    """The budget must be verifiable, so a skip counts exactly like a success
-    (docs/domain.md §Sync: "records what was attempted... and what failed")."""
+def test_count_recent_sync_runs_excludes_skips() -> None:
+    """A skip never called the provider, so it must not consume budget — the
+    regression this test guards (ADR 0037): the scheduler writes one skip row
+    per tick for every not-yet-due connection
+    (``services/scheduler.py::run_due_syncs``), so counting every outcome
+    (the pre-ADR-0037 behavior) crossed the budget within a handful of ticks
+    and never recovered, since each new tick added another skip to the very
+    rolling window being measured. 24 skips — a full day at an hourly tick —
+    must still read as zero budget consumed."""
+    engine = _engine()
+    connection_id = uuid4()
+    with Session(engine) as session:
+        for hours_ago in range(24):
+            record_sync_run(
+                session,
+                sync_run=_run(
+                    connection_id=connection_id,
+                    outcome=SyncRunOutcome.SKIPPED_INTERVAL,
+                    started_at=_NOW - timedelta(hours=hours_ago),
+                ),
+            )
+        session.commit()
+
+        assert (
+            count_recent_sync_runs(
+                session, connection_id=connection_id, since=_NOW - timedelta(hours=24)
+            )
+            == 0
+        )
+
+
+def test_count_recent_sync_runs_counts_provider_failed() -> None:
+    """A failed attempt still called the provider, so — unlike a skip — it
+    does consume budget (ADR 0037)."""
     engine = _engine()
     connection_id = uuid4()
     with Session(engine) as session:
         record_sync_run(
             session,
             sync_run=_run(
-                connection_id=connection_id, outcome=SyncRunOutcome.SKIPPED_BUDGET, started_at=_NOW
+                connection_id=connection_id, outcome=SyncRunOutcome.PROVIDER_FAILED, started_at=_NOW
             ),
         )
         session.commit()
@@ -211,6 +242,40 @@ def test_oldest_recent_sync_run_started_at_ignores_runs_outside_the_window() -> 
             session, connection_id=connection_id, since=_NOW - timedelta(hours=24)
         )
 
+        assert oldest is not None
+        assert oldest.replace(tzinfo=UTC) == _NOW - timedelta(hours=5)
+
+
+def test_oldest_recent_sync_run_started_at_ignores_skips() -> None:
+    """A skip must not be projected as the run that eventually frees a
+    budget slot — it never occupied one (ADR 0037, mirrors
+    `count_recent_sync_runs`'s own exclusion)."""
+    engine = _engine()
+    connection_id = uuid4()
+    with Session(engine) as session:
+        record_sync_run(
+            session,
+            sync_run=_run(
+                connection_id=connection_id,
+                outcome=SyncRunOutcome.SKIPPED_BUDGET,
+                started_at=_NOW - timedelta(hours=20),
+            ),
+        )
+        record_sync_run(
+            session,
+            sync_run=_run(
+                connection_id=connection_id,
+                outcome=SyncRunOutcome.SUCCESS,
+                started_at=_NOW - timedelta(hours=5),
+            ),
+        )
+        session.commit()
+
+        oldest = oldest_recent_sync_run_started_at(
+            session, connection_id=connection_id, since=_NOW - timedelta(hours=24)
+        )
+
+        # The 20h-old skip is ignored; only the 5h-old success counts.
         assert oldest is not None
         assert oldest.replace(tzinfo=UTC) == _NOW - timedelta(hours=5)
 

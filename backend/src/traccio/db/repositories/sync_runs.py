@@ -17,9 +17,17 @@ from traccio.db.mappers import (
 from traccio.db.models import (
     SyncRunRow,
 )
+from traccio.domain.enums import SyncRunOutcome
 from traccio.domain.models import (
     SyncRun,
 )
+
+# The outcomes that consumed a real background fetch — see
+# `SyncRunOutcome.counts_toward_budget`'s docstring for why a skip must not
+# be one of them (ADR 0037).
+_BUDGET_COUNTED_OUTCOMES = [
+    outcome for outcome in SyncRunOutcome if outcome.counts_toward_budget
+]
 
 
 def record_sync_run(session: Session, *, sync_run: SyncRun) -> SyncRun:
@@ -47,16 +55,18 @@ def record_sync_run(session: Session, *, sync_run: SyncRun) -> SyncRun:
 
 
 def count_recent_sync_runs(session: Session, *, connection_id: UUID, since: datetime) -> int:
-    """Count sync runs for one connection since ``since``, any outcome.
+    """Count *budget-counted* sync runs for one connection since ``since``.
 
     The read side of the background fetch budget
     (:func:`~traccio.domain.sync_schedule.sync_decision`): the budget is
-    counted in *runs*, not provider HTTP calls (docs/openbanking.md's "~4
-    background fetches per day" is read as "~4 sync attempts," since one run
-    already makes several provider calls internally). Every outcome counts,
-    including a skip, since a skip already means a decision was evaluated for
-    this connection in the window — only the interval check below reads
-    ``started_at`` to decide *whether* to run at all.
+    counted in *runs that actually reached the provider*, not raw HTTP calls
+    (docs/openbanking.md's "~4 background fetches per day" is read as "~4
+    sync attempts," since one run already makes several provider calls
+    internally) — and, since ADR 0037, not skips either
+    (:attr:`~traccio.domain.enums.SyncRunOutcome.counts_toward_budget`). A
+    skip means a decision was evaluated, but calls no bank at all; counting
+    it here previously made the scheduler starve itself (see that
+    property's docstring for the exact mechanism this fixes).
 
     Not scoped by ``user_id``: a connection's own id already scopes it to one
     user (``connections.user_id``), and the caller (the scheduler) already
@@ -74,13 +84,15 @@ def count_recent_sync_runs(session: Session, *, connection_id: UUID, since: date
     Returns
     -------
     int
-        How many runs are on record for this connection since ``since``.
+        How many budget-counted runs are on record for this connection since
+        ``since``.
     """
     return (
         session.scalars(
             select(func.count(SyncRunRow.id)).where(
                 SyncRunRow.connection_id == connection_id,
                 SyncRunRow.started_at >= since,
+                SyncRunRow.outcome.in_(_BUDGET_COUNTED_OUTCOMES),
             )
         ).one()
         or 0
@@ -90,13 +102,16 @@ def count_recent_sync_runs(session: Session, *, connection_id: UUID, since: date
 def oldest_recent_sync_run_started_at(
     session: Session, *, connection_id: UUID, since: datetime
 ) -> datetime | None:
-    """Return the earliest ``started_at`` among a connection's runs since ``since``.
+    """Return the earliest budget-counted ``started_at`` since ``since``.
 
     The read side of "when does the background budget next free a slot" —
     once this run ages past the rolling window, the count
     :func:`count_recent_sync_runs` returns for the same ``since`` drops by
     one (assuming no newer run has landed since — an estimate, not a
     promise). See :func:`~traccio.domain.sync_schedule.next_sync_eligible_at`.
+    Filtered to the same budget-counted outcomes as
+    :func:`count_recent_sync_runs` (ADR 0037) — a skip row is not what's
+    occupying the slot, so it must not be what's projected to free it.
 
     Not scoped by ``user_id``, for the same reason as
     :func:`count_recent_sync_runs`.
@@ -114,12 +129,13 @@ def oldest_recent_sync_run_started_at(
     -------
     datetime or None
         The earliest ``started_at`` in the window, or ``None`` if there are
-        no runs in it.
+        no budget-counted runs in it.
     """
     return session.scalars(
         select(func.min(SyncRunRow.started_at)).where(
             SyncRunRow.connection_id == connection_id,
             SyncRunRow.started_at >= since,
+            SyncRunRow.outcome.in_(_BUDGET_COUNTED_OUTCOMES),
         )
     ).one()
 

@@ -76,6 +76,16 @@ the budget verifiable from the data rather than trusted on faith — the same
 motivation behind adding the `SyncRun` entity `docs/domain.md` had described
 but never modeled.
 
+> **Superseded in part by `docs/decisions/0037-sync-budget-counts-fetches-not-skips.md`
+> (2026-09-19):** recording every attempt, skip included, is unchanged and
+> still the point of `SyncRun`. But counting a skip *toward the budget* (the
+> second half of this decision) was a bug, not a feature: the scheduler
+> writes a skip row once per tick for every not-yet-due connection, so the
+> rolling-24h count crossed the budget within hours of any process start and
+> never came back down — the mechanism meant to protect the four-fetch limit
+> instead permanently blocked it. Only `SUCCESS`/`PROVIDER_FAILED` count
+> toward the budget now; see that ADR for the full mechanism and the fix.
+
 **5. The sync decision is derived fresh every tick, never stored.**
 `domain/sync_schedule.py::sync_decision` is a pure function of
 `(consent_state, runs_last_24h, last_synced_at, now, budget_per_day,
