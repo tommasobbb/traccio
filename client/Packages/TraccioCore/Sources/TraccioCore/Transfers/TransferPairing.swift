@@ -67,4 +67,24 @@ extension TraccioCore {
     ) -> Bool {
         sharesTransferStructure(a, b) && a.amount < 0 && b.amount < 0
     }
+
+    /// Whether `transaction` may anchor a fresh transfer-pairing selection —
+    /// the "no other row picked yet" half of `sharesTransferStructure`, since
+    /// with nothing selected there is no counterpart to check symmetry
+    /// against yet. Extracted from `TransactionsView.rowSelection(for:)` so
+    /// the same rule gates both a bare row's selectability and the row
+    /// context menu's "Collega a…" entry
+    /// (`docs/decisions/0036-movimenti-row-actions.md`).
+    ///
+    /// Parameters
+    /// ----------
+    /// transaction:
+    ///     The transaction that would become the selection's anchor.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if `transaction` could join either transfer kind.
+    public static func canStartTransferLink(_ transaction: TransactionResponse) -> Bool {
+        transaction.role == .personal && transaction.status != .rejected && transaction.amount != 0
+    }
 }

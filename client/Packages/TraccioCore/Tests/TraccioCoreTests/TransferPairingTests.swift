@@ -97,6 +97,55 @@ struct TransferPairingTests {
     }
 }
 
+/// Tests for `TraccioCore.canStartTransferLink(_:)` — the "no other row
+/// selected yet" half of `TransferPairingTests`' structural rule, gating a
+/// fresh selection's anchor and the row context menu's "Collega a…" entry.
+struct TransferLinkAnchorTests {
+    private static func makeTransaction(
+        amount: Int = -5000,
+        status: TransactionStatus = .booked,
+        role: TransactionRole = .personal
+    ) -> TransactionResponse {
+        TransactionResponse(
+            id: UUID(),
+            accountID: UUID(),
+            amount: amount,
+            effectiveAmount: amount,
+            currency: "EUR",
+            bookedAt: Date(timeIntervalSince1970: 1_755_000_000),
+            valueDate: nil,
+            description: "TEST MERCHANT 01",
+            displayDescription: nil,
+            status: status,
+            role: role,
+            suggestedCategoryID: nil,
+            confirmedCategoryID: nil,
+            effectiveCategoryID: nil,
+            eventID: nil
+        )
+    }
+
+    @Test func trueForAPersonalBookedNonZeroTransaction() {
+        #expect(TraccioCore.canStartTransferLink(Self.makeTransaction()))
+    }
+
+    @Test func trueRegardlessOfSign() {
+        #expect(TraccioCore.canStartTransferLink(Self.makeTransaction(amount: 5000)))
+    }
+
+    @Test func falseWhenNotPersonal() {
+        #expect(!TraccioCore.canStartTransferLink(Self.makeTransaction(role: .advance)))
+    }
+
+    @Test func falseWhenRejected() {
+        #expect(!TraccioCore.canStartTransferLink(Self.makeTransaction(status: .rejected)))
+    }
+
+    @Test func falseForAZeroAmount() {
+        #expect(!TraccioCore.canStartTransferLink(Self.makeTransaction(amount: 0)))
+    }
+}
+
 /// Tests for `TraccioCore.canLinkAsFundedPayment(_:_:)` — the client-side
 /// gate for which two rows may be linked as a funded payment (ADR 0022).
 /// Mirrors `validate_transfer_pair(kind=funded_payment)` the same way

@@ -559,4 +559,175 @@ struct TransactionsViewModelTests {
         #expect(model.isSelecting)
         #expect(model.selectedIDs.count == 2)
     }
+
+    // MARK: Row actions — category (docs/decisions/0036-movimenti-row-actions.md)
+
+    private static let categoryID = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+
+    @Test func confirmCategorySucceedsRefetchesAndReplacesTheRow() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setTransaction(Self.makeTransaction(id: original.id, confirmedCategoryID: Self.categoryID))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.confirmCategory(Self.categoryID, for: original.id)
+
+        #expect(ok)
+        #expect(model.rowActionFailure == nil)
+        #expect(await client.confirmedCategoryIDs == [Self.categoryID])
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.first?.confirmedCategoryID == Self.categoryID)
+    }
+
+    @Test func confirmCategorySuccessBumpsSuccessTick() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setTransaction(Self.makeTransaction(id: original.id, confirmedCategoryID: Self.categoryID))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        await model.confirmCategory(Self.categoryID, for: original.id)
+
+        #expect(model.successTick == 1)
+    }
+
+    @Test func confirmCategoryFailureLeavesTheRowUnchangedAndRecordsGeneric() async throws {
+        let original = Self.makeTransaction()
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setConfirmCategoryError(FakeAPIError())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.confirmCategory(Self.categoryID, for: original.id)
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .generic)
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.first?.confirmedCategoryID == nil)
+    }
+
+    @Test func clearCategorySucceedsRefetchesAndReplacesTheRow() async throws {
+        let original = Self.makeTransaction(confirmedCategoryID: Self.categoryID)
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setTransaction(Self.makeTransaction(id: original.id, confirmedCategoryID: nil))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.clearCategory(for: original.id)
+
+        #expect(ok)
+        #expect(await client.clearCategoryCallCount == 1)
+        guard case .loaded(let rows) = model.state else {
+            Issue.record("expected .loaded")
+            return
+        }
+        #expect(rows.first?.confirmedCategoryID == nil)
+    }
+
+    @Test func clearCategoryFailureRecordsGeneric() async throws {
+        let original = Self.makeTransaction(confirmedCategoryID: Self.categoryID)
+        let client = FakeAPIClient()
+        await client.setTransactions([original])
+        await client.setClearCategoryError(FakeAPIError())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+        await model.load()
+
+        let ok = await model.clearCategory(for: original.id)
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .generic)
+    }
+
+    @Test func seedDefaultCategoriesPublishesTheReturnedSetWithoutBumpingSuccessTick() async throws {
+        let client = FakeAPIClient()
+        let defaults = [
+            CategoryResponse(
+                id: UUID(), name: "TEST CATEGORY", parentID: nil, color: .slate, icon: nil,
+                createdAt: Date()
+            )
+        ]
+        await client.setSeedDefaultCategoriesResult(defaults)
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        let ok = await model.seedDefaultCategories()
+
+        #expect(ok)
+        #expect(model.categories.map(\.id) == defaults.map(\.id))
+        #expect(model.categoriesByID.keys.sorted() == defaults.map(\.id).sorted())
+        #expect(model.rowActionFailure == nil)
+        // Seeding a fresh database's defaults isn't itself a write worth a
+        // success haptic — only the confirm/clear/create-rule it unblocks is.
+        #expect(model.successTick == 0)
+    }
+
+    @Test func seedDefaultCategoriesFailureRecordsGeneric() async throws {
+        let client = FakeAPIClient()
+        await client.setSeedDefaultCategoriesError(FakeAPIError())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        let ok = await model.seedDefaultCategories()
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .generic)
+    }
+
+    @Test func createRuleAndApplyRulesSucceedsAndBumpsSuccessTick() async throws {
+        let client = FakeAPIClient()
+        let createdRule = RuleResponse(
+            id: UUID(), categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01",
+            createdAt: Date(timeIntervalSince1970: 1_755_000_000)
+        )
+        await client.setCreateRuleResult(createdRule)
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        let ok = await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(ok)
+        #expect(model.rowActionFailure == nil)
+        #expect(model.successTick == 1)
+        #expect(await client.applyRulesCallCount == 1)
+    }
+
+    @Test func createRuleAndApplyRulesDuplicateSetsDuplicateRuleAndNeverAppliesRules() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateRuleError(APIError.badStatus(409))
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        let ok = await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .duplicateRule)
+        #expect(model.successTick == 0)
+        #expect(await client.applyRulesCallCount == 0)
+    }
+
+    @Test func createRuleAndApplyRulesGenericFailureNeverBumpsSuccessTick() async throws {
+        let client = FakeAPIClient()
+        await client.setCreateRuleError(FakeAPIError())
+        let model = TransactionsViewModel(client: client, pageSize: 50)
+
+        let ok = await model.createRuleAndApplyRules(
+            categoryID: Self.categoryID, matchKind: .contains, pattern: "TEST MERCHANT 01"
+        )
+
+        #expect(!ok)
+        #expect(model.rowActionFailure == .generic)
+        #expect(model.successTick == 0)
+    }
+
 }

@@ -2,16 +2,18 @@ import Foundation
 import Observation
 import TraccioCore
 
-/// Drives `TransactionDetailView`: confirms or clears a transaction's
-/// category, and holds the category list the picker renders.
+/// Drives `TransactionDetailView`: the event, advance, transfer, and
+/// manual-movement actions that stay on this pushed screen. Category
+/// confirm/clear moved to `TransactionsViewModel` — see
+/// `docs/decisions/0036-movimenti-row-actions.md` — this type keeps only a
+/// read-only `categories` list, to resolve the header's category name.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
 /// (`docs/engineering.md`). After a successful write it re-fetches the single
-/// transaction via `transaction(id:)` rather than mutating
-/// `effectiveCategoryID` locally, so the backend stays the only place that
-/// resolves confirmed-vs-suggested (`domain/categories.py::effective_category`)
-/// — see `docs/architecture.md`. Nothing here logs or prints a transaction:
-/// it carries an amount and a raw bank description, both sensitive
+/// transaction via `transaction(id:)` rather than mutating derived fields
+/// locally, so the backend stays the only place that resolves them
+/// (`docs/architecture.md`). Nothing here logs or prints a transaction: it
+/// carries an amount and a raw bank description, both sensitive
 /// (`docs/engineering.md`).
 ///
 /// The type is split by concern across `TransactionDetailViewModel+*.swift`
@@ -39,9 +41,6 @@ final class TransactionDetailViewModel {
         /// `422` from the same endpoint — the event and this transaction
         /// don't share a currency.
         case mixedCurrency
-        /// `409` from `POST /rules` — a rule with this exact
-        /// `(matchKind, pattern)` already exists.
-        case duplicateRule
         /// `409 transaction_in_use` from `DELETE /transactions/{id}` — the
         /// manual movement is a leg of a transfer, advance, or reimbursement
         /// and must be unlinked first (ADR 0020).
@@ -68,10 +67,13 @@ final class TransactionDetailViewModel {
     /// `let`, this can now change as a side effect of a user action on this
     /// screen, not just from what the caller passed in.
     var advance: AdvanceResponse?
-    /// The caller's categories, for the picker. Seeded from
-    /// `TransactionsViewModel.categories` (already fetched for the list) to
-    /// avoid a flash of empty; `loadCategoriesIfNeeded()` fetches on its own
-    /// when that seed is empty, so the screen is usable on its own too.
+    /// The caller's categories, read-only — resolves `categoryName` for
+    /// `TransactionHeaderCard`'s badge (categorizing itself is a row-level
+    /// action now, `docs/decisions/0036-movimenti-row-actions.md`). Seeded
+    /// from `TransactionsViewModel.categories` (already fetched for the
+    /// list) to avoid a flash of empty; `loadCategoriesIfNeeded()` fetches on
+    /// its own when that seed is empty (the Anticipi entry path), so the
+    /// screen is usable on its own too.
     var categories: [CategoryResponse]
     /// This transaction's confirmed transfer, if `role == .transfer` and the
     /// lookup resolved. Cleared to `nil` after a successful
@@ -133,12 +135,6 @@ final class TransactionDetailViewModel {
     /// `DataFreshness`) bumps `.dashboard` so Panoramica re-fetches rather
     /// than showing a now-stale total — see `DataFreshness`'s doc comment.
     let onDashboardStale: () -> Void
-    /// Invoked after a successful `createRuleAndApplyRules(...)` — applying
-    /// rules can change `suggested_category_id` (and therefore
-    /// `effectiveCategoryID`) across every transaction, not just this one, so
-    /// the caller invalidates `DataFreshness.Scope.transactions`/`.dashboard`
-    /// rather than this screen trying to know which other rows changed.
-    let onRulesApplied: () -> Void
     /// Invoked with this transaction's id after a successful
     /// `deleteManualTransaction()` (ADR 0020), so the caller
     /// (`TransactionsViewModel.remove(id:)`) can drop the row; the view then
@@ -174,10 +170,6 @@ final class TransactionDetailViewModel {
     ///     Called after any successful write that can change the dashboard's
     ///     totals. Defaults to a no-op for previews and callers that don't
     ///     need it.
-    /// onRulesApplied:
-    ///     Called after a successful `createRuleAndApplyRules(...)`, so the
-    ///     caller can invalidate `DataFreshness.Scope.transactions`/`.dashboard`.
-    ///     Defaults to a no-op.
     init(
         transaction: TransactionResponse,
         advance: AdvanceResponse? = nil,
@@ -187,7 +179,6 @@ final class TransactionDetailViewModel {
         onUpdate: @escaping (TransactionResponse) -> Void = { _ in },
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {},
-        onRulesApplied: @escaping () -> Void = {},
         onDelete: @escaping (UUID) -> Void = { _ in }
     ) {
         self.transaction = transaction
@@ -198,7 +189,6 @@ final class TransactionDetailViewModel {
         self.onUpdate = onUpdate
         self.onAdvanceChange = onAdvanceChange
         self.onDashboardStale = onDashboardStale
-        self.onRulesApplied = onRulesApplied
         self.onDelete = onDelete
     }
 

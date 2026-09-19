@@ -5,11 +5,14 @@ import TraccioCore
 /// relevant, and the amount — following
 /// `docs/design/canvas/Transactions.dc.html`.
 ///
-/// Every row is a `NavigationLink` to `TransactionDetailView`
-/// (`docs/design/canvas/TransactionDetail.dc.html`) — where a category can be
-/// confirmed or cleared, and an advance-role row also gets its "quota"
-/// caption and the split/participants/reimbursements cards once the advance
-/// lookup resolves.
+/// The row is a `NavigationLink` to `TransactionDetailView`
+/// (`docs/design/canvas/TransactionDetail.dc.html`) — an advance-role row
+/// gets its "quota" caption here and the split/participants/reimbursements
+/// cards there once the advance lookup resolves. The leading tile is a
+/// second, narrower tap target laid over the link
+/// (`docs/decisions/0036-movimenti-row-actions.md`): tapping it opens
+/// `CategoryPickerSheet` directly, the two-tap categorization path — tapping
+/// anywhere else on the row still pushes to the detail screen.
 struct TransactionRow: View {
     let transaction: TransactionResponse
     /// The caller's categories, threaded to `TransactionDetailView`'s picker.
@@ -47,14 +50,15 @@ struct TransactionRow: View {
     /// change the dashboard's totals, so the caller can invalidate
     /// `DataFreshness.Scope.dashboard`.
     let onDashboardStale: () -> Void
-    /// Called after "Categorizza sempre così" successfully creates a rule
-    /// and re-applies every rule, so the caller can invalidate
-    /// `DataFreshness.Scope.transactions`/`.dashboard`.
-    let onRulesApplied: () -> Void
     /// Called with this transaction's id after it is deleted from the detail
     /// screen (a manual movement, ADR 0020), so
     /// `TransactionsViewModel.remove(id:)` can drop the row.
     let onDelete: (UUID) -> Void
+    /// Called when the leading tile is tapped, to open `CategoryPickerSheet`
+    /// for this row (`docs/decisions/0036-movimenti-row-actions.md`) — the
+    /// two-tap categorization path. Absent in selection mode, where the tile
+    /// is already a checkbox.
+    let onCategorize: (TransactionResponse) -> Void
     /// When non-`nil`, the row is in transfer-pairing selection mode: it
     /// renders a leading checkbox and toggles selection on tap instead of
     /// navigating to the detail screen (`docs/domain.md` §Transfer).
@@ -96,7 +100,6 @@ struct TransactionRow: View {
                         onUpdate: onUpdate,
                         onAdvanceChange: onAdvanceUpdate,
                         onDashboardStale: onDashboardStale,
-                        onRulesApplied: onRulesApplied,
                         onDelete: onDelete
                     )
                     #if os(iOS)
@@ -107,9 +110,35 @@ struct TransactionRow: View {
                 }
                 .buttonStyle(.pressableRow)
                 .matchedTransitionSource(id: transaction.id, in: namespace)
+                .overlay(alignment: .leading) { categorizeTapTarget }
             }
         }
         .rowScrollTransition()
+    }
+
+    /// An invisible 44×44 tap target centered on the 28pt leading tile,
+    /// sitting *beside* the `NavigationLink` rather than nested inside its
+    /// label — a `Button` inside a `NavigationLink`'s label would have its
+    /// tap swallowed by the link. Only present outside selection mode, where
+    /// `leadingTile` is a real category tile rather than a checkbox.
+    /// `docs/decisions/0036-movimenti-row-actions.md`'s two-tap
+    /// categorization path: this tap opens `CategoryPickerSheet`, the rest of
+    /// the row still pushes to `TransactionDetailView`.
+    private var categorizeTapTarget: some View {
+        Button(action: { onCategorize(transaction) }) {
+            Color.clear
+        }
+        .buttonStyle(.plain)
+        .frame(width: 44, height: 44)
+        // Row padding is 16pt, the tile is 28pt: its center sits at 16 + 14 =
+        // 30pt from the row's leading edge, so an 8pt inset centers this 44pt
+        // target on it.
+        .padding(.leading, 8)
+        .accessibilityLabel(categorizeAccessibilityLabel)
+    }
+
+    private var categorizeAccessibilityLabel: String {
+        categoryName.map { "Categoria: \($0)" } ?? "Categorizza"
     }
 
     /// The row is a plain padded line — no card of its own. Its day group
@@ -154,9 +183,28 @@ struct TransactionRow: View {
                         : (selection.isSelectable ? Palette.inkTertiary : Palette.inkQuaternary)
                 )
                 .frame(width: 28, height: 28)
+        } else if let effectiveCategory {
+            IconTile(systemImage: effectiveCategory.tileIcon.systemImageName, color: effectiveCategory.color, diameter: 28)
         } else {
-            IconTile(systemImage: categoryTileIcon, color: categoryTileColor, diameter: 28)
+            uncategorizedTile
         }
+    }
+
+    /// A dashed, glyph-only tile marking "not yet categorized" — distinct
+    /// from a real category's solid `IconTile` fill, so an uncategorized row
+    /// reads as tappable rather than looking like it already has a generic
+    /// bucket assigned. No accent colour: this is a data state, not
+    /// something currently selected (`docs/design/tokens.md`'s "Accent
+    /// dosage").
+    private var uncategorizedTile: some View {
+        Image(systemName: "tag")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Palette.inkTertiary)
+            .frame(width: 28, height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.tile, style: .continuous)
+                    .strokeBorder(Palette.inkQuaternary, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+            )
     }
 
     /// This row's advance, when it is one and the fetch resolved it.
@@ -180,14 +228,6 @@ struct TransactionRow: View {
     /// placeholder category, since `nil` is a real, distinct state.
     private var effectiveCategory: CategoryResponse? {
         transaction.effectiveCategoryID.flatMap { categoriesByID[$0] }
-    }
-
-    private var categoryTileIcon: String {
-        (effectiveCategory?.tileIcon ?? .other).systemImageName
-    }
-
-    private var categoryTileColor: PaletteColor {
-        effectiveCategory?.color ?? .slate
     }
 
     /// A row is muted when it does not read as a plain, settled personal

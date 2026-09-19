@@ -37,6 +37,23 @@ final class TransactionsViewModel {
         case generic
     }
 
+    /// Why a row action failed, for whichever sheet `TransactionsView.rowAction`
+    /// is currently showing to surface. Carries only a status-derived reason,
+    /// never the response body — same shape as
+    /// `TransactionDetailViewModel.ActionFailure`, which this replaces for
+    /// category/advance/manual-movement actions now that they're row-level
+    /// (`docs/decisions/0036-movimenti-row-actions.md`).
+    enum RowActionFailure: Equatable {
+        case generic
+        /// `409` from `POST /rules` — a rule with this exact
+        /// `(matchKind, pattern)` already exists.
+        case duplicateRule
+        /// `409 transaction_in_use` from `DELETE /transactions/{id}` — the
+        /// manual movement is a leg of a transfer, advance, or reimbursement
+        /// and must be unlinked first (ADR 0020).
+        case transactionInUse
+    }
+
     /// Current load state, observed by the view.
     private(set) var state: LoadState<[TransactionResponse]> = .idle
     /// The caller's categories, for `TransactionDetailView`'s picker — seeded
@@ -99,6 +116,17 @@ final class TransactionsViewModel {
     private(set) var isLinking = false
     /// Why the most recent free-form link failed, if it did.
     private(set) var linkFailure: LinkFailure?
+    /// Set while a row action (category confirm/clear/seed/create-rule,
+    /// mark-as-advance, manual edit/delete) is in flight, so whichever sheet
+    /// `TransactionsView.rowAction` is showing can disable its controls.
+    /// Shared across every row action rather than one flag each — only one
+    /// row-action sheet can be open at a time, so there is never real
+    /// overlap to distinguish (same posture as
+    /// `TransactionDetailViewModel.isUpdating`, which this replaces for
+    /// those actions).
+    private(set) var isUpdatingRow = false
+    /// Why the most recent row action failed, if it did.
+    private(set) var rowActionFailure: RowActionFailure?
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
     /// the concrete `APIClient` (`docs/engineering.md`), so a test can
@@ -199,9 +227,7 @@ final class TransactionsViewModel {
         async let eventsResult = client.events()
 
         if let fetchedCategories = try? await categoriesResult {
-            categories = fetchedCategories
-            categoryNames = Dictionary(uniqueKeysWithValues: fetchedCategories.map { ($0.id, $0.name) })
-            categoriesByID = Dictionary(uniqueKeysWithValues: fetchedCategories.map { ($0.id, $0) })
+            setCategories(fetchedCategories)
         }
         if let advances = try? await advancesResult {
             advancesByTransactionID = Dictionary(
@@ -447,6 +473,51 @@ final class TransactionsViewModel {
         }
     }
 
+    // MARK: Row actions (docs/decisions/0036-movimenti-row-actions.md)
+
+    /// Shared shape for every row-action write in
+    /// `TransactionsViewModel+Category.swift`/`+RowActions.swift`: guard
+    /// against overlap, run the write, re-fetch the row on success, swap it
+    /// in via `replace(_:)` — mirrors `TransactionDetailViewModel.performUpdate`,
+    /// relocated here now that these actions start from a row rather than
+    /// the pushed detail screen. Not `private`: both extensions call it, and
+    /// splitting a class across files means Swift's file-scoped `private`
+    /// cannot reach across them (same reasoning as
+    /// `TransactionDetailViewModel`'s own doc comment).
+    ///
+    /// Parameters
+    /// ----------
+    /// transactionID:
+    ///     The row to re-fetch and swap in after `write` succeeds.
+    /// write:
+    ///     The write to perform, given the client and `transactionID`.
+    ///
+    /// Returns
+    /// -------
+    /// `true` if the write succeeded, `false` otherwise (having recorded
+    /// `rowActionFailure`).
+    @discardableResult
+    func performRowUpdate(
+        for transactionID: UUID,
+        _ write: (any APIClientProtocol, UUID) async throws -> Void
+    ) async -> Bool {
+        guard !isUpdatingRow else { return false }
+        isUpdatingRow = true
+        defer { isUpdatingRow = false }
+        rowActionFailure = nil
+
+        do {
+            try await write(client, transactionID)
+            let refreshed = try await client.transaction(id: transactionID)
+            replace(refreshed)
+            successTick += 1
+            return true
+        } catch {
+            rowActionFailure = .generic
+            return false
+        }
+    }
+
     /// The accounts eligible for a new manual movement — the manual ones
     /// (ADR 0020). A synced account's history is bank-owned; the backend
     /// refuses `POST /transactions` for it, so it never appears in the
@@ -554,6 +625,61 @@ final class TransactionsViewModel {
             newFilter.searchTerm = term
             await applyFilter(newFilter)
         }
+    }
+
+    /// Begin a row action that doesn't fit `performRowUpdate(for:_:)`'s
+    /// write-refetch-replace shape (seeding categories, creating a rule):
+    /// guard against overlap. Not `private` for the same file-scoping reason
+    /// as `performRowUpdate(for:_:)`.
+    ///
+    /// Returns
+    /// -------
+    /// `true`, with `isUpdatingRow` now `true` and any stale
+    /// `rowActionFailure` cleared, if no row action was already in flight;
+    /// `false` otherwise, in which case the caller should abandon its
+    /// attempt without calling `endRowAction(failure:)`.
+    func beginRowAction() -> Bool {
+        guard !isUpdatingRow else { return false }
+        isUpdatingRow = true
+        rowActionFailure = nil
+        return true
+    }
+
+    /// End a row action started with `beginRowAction()`, clearing
+    /// `isUpdatingRow` and recording why it failed (`nil` on success).
+    func endRowAction(failure: RowActionFailure?) {
+        isUpdatingRow = false
+        rowActionFailure = failure
+    }
+
+    /// Bump the success-tick trigger for
+    /// `.sensoryFeedback(.success, trigger:)` — separate from
+    /// `endRowAction(failure:)` since not every successful row action
+    /// deserves the haptic (e.g. seeding default categories doesn't).
+    func markRowActionSucceeded() {
+        successTick += 1
+    }
+
+    /// Replace the cached category set and its two lookup maps together —
+    /// they must never drift apart. Called by `loadContext()` and by
+    /// `TransactionsViewModel+Category.seedDefaultCategories()`; not
+    /// `private` for the same file-scoping reason as `performRowUpdate(for:_:)`
+    /// above.
+    ///
+    /// Parameters
+    /// ----------
+    /// categories:
+    ///     The caller's full category set, freshly fetched or seeded.
+    func setCategories(_ categories: [CategoryResponse]) {
+        self.categories = categories
+        categoryNames = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0.name) })
+        categoriesByID = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
+    }
+
+    /// Clear `rowActionFailure`, so a stale error from a previous row action
+    /// doesn't reappear in a freshly opened sheet.
+    func clearRowActionFailure() {
+        rowActionFailure = nil
     }
 
     /// Set or clear `advancesByTransactionID`'s entry for one transaction.

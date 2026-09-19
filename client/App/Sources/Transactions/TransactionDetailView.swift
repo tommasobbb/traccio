@@ -1,43 +1,44 @@
 import SwiftUI
 import TraccioCore
 
-/// "Dettaglio movimento" — the generic transaction detail screen, reached by
-/// tapping any row in `TransactionsView`.
+/// "Dettaglio movimento" — reached by tapping a Movimenti row. Categorizing
+/// now happens from the row's leading tile instead of this pushed screen
+/// (`docs/decisions/0036-movimenti-row-actions.md`); marking as advance,
+/// editing, and deleting a manual movement are moving the same way in a
+/// follow-up and still live here for now.
 ///
-/// The client's first write-with-a-body flow: confirming or clearing a
-/// category calls `TransactionDetailViewModel`, which re-fetches the row from
-/// the backend rather than deriving the new `effectiveCategoryID` here (the
-/// backend owns every derived value, `docs/engineering.md`) and hands the result
-/// up to `onUpdate` so `TransactionsViewModel.replace(_:)` can update the
-/// Movimenti row without a full reload.
+/// `TransactionDetailViewModel` re-fetches the row from the backend after
+/// every write rather than deriving the new state here (the backend owns
+/// every derived value, `docs/engineering.md`) and hands the result up to
+/// `onUpdate` so `TransactionsViewModel.replace(_:)` can update the Movimenti
+/// row without a full reload.
 ///
 /// The header and advance cards previously lived in a dedicated
 /// `AdvanceDetailView`; that view is now `AdvanceSections`, embedded here only
 /// for a transaction whose advance resolved (`model.advance`, kept in the
 /// view model rather than a fixed `let` — creating or deleting the advance
-/// right here changes it, unlike the category-confirmation flow's other
-/// side effects). An eligible transaction with no advance
+/// right here changes it, unlike the category-confirmation flow's other side
+/// effects). An eligible transaction with no advance
 /// (`TraccioCore.canBecomeAdvance(_:)`) instead gets a "Segna come anticipo"
 /// card presenting `CreateAdvanceSheet`. A transaction whose `role ==
 /// .transfer` and whose transfer resolved additionally gets `TransferSection`
 /// — the counterpart leg and an "Annulla collegamento" action. No mockup
-/// covers the category picker, the advance-creation flow, or the transfer
-/// card (`docs/design/canvas/TransactionDetail.dc.html` only covers the
-/// already-created advance case), so all three are built from existing
+/// covers the advance-creation flow or the transfer card
+/// (`docs/design/canvas/TransactionDetail.dc.html` only covers the
+/// already-created advance case), so both are built from existing
 /// tokens/components (`Card`, `Badge`, `EyebrowLabel`, `PillButton`,
 /// `Banner`) rather than a new design pass.
 ///
-/// `TransactionHeaderCard`, `TransactionCategoryCard`, and
-/// `TransactionEventCard` each live in their own file next to this one —
-/// this view wires them to `TransactionDetailViewModel` and lays them out
-/// alongside `AdvanceSections`/`TransferSection` (already separate) and the
-/// two small manual-movement/mark-as-advance cards kept inline here.
+/// `TransactionHeaderCard` and `TransactionEventCard` each live in their own
+/// file next to this one — this view wires them to
+/// `TransactionDetailViewModel` and lays them out alongside
+/// `AdvanceSections`/`TransferSection` (already separate) and the two small
+/// manual-movement/mark-as-advance cards kept inline here.
 struct TransactionDetailView: View {
     @State private var model: TransactionDetailViewModel
     @State private var isPresentingCreateAdvanceSheet = false
     @State private var isPresentingAddReimbursementSheet = false
     @State private var isPresentingEventPickerSheet = false
-    @State private var isPresentingCreateRuleSheet = false
     @State private var isPresentingEditSheet = false
     @State private var isConfirmingDelete = false
     @Environment(\.dismiss) private var dismiss
@@ -68,7 +69,8 @@ struct TransactionDetailView: View {
     ///     The transaction to show and act on.
     /// categories:
     ///     Categories already fetched by the caller (`TransactionsViewModel`),
-    ///     or empty to have the view model fetch them itself.
+    ///     or empty to have the view model fetch them itself — read-only
+    ///     here, only to resolve the header's category name.
     /// advance:
     ///     This transaction's advance, if role is `.advance` and the lookup
     ///     resolved.
@@ -95,11 +97,6 @@ struct TransactionDetailView: View {
     ///     Called after any successful write that can change the dashboard's
     ///     totals, so the caller can invalidate `DataFreshness.Scope.dashboard`.
     ///     Defaults to a no-op.
-    /// onRulesApplied:
-    ///     Called after "Categorizza sempre così" successfully creates a rule
-    ///     and re-applies every rule, so the caller can invalidate
-    ///     `DataFreshness.Scope.transactions`/`.dashboard`. Defaults to a
-    ///     no-op.
     init(
         transaction: TransactionResponse,
         categories: [CategoryResponse],
@@ -111,15 +108,13 @@ struct TransactionDetailView: View {
         onUpdate: @escaping (TransactionResponse) -> Void,
         onAdvanceChange: @escaping (AdvanceResponse?) -> Void = { _ in },
         onDashboardStale: @escaping () -> Void = {},
-        onRulesApplied: @escaping () -> Void = {},
         onDelete: @escaping (UUID) -> Void = { _ in }
     ) {
         _model = State(
             wrappedValue: TransactionDetailViewModel(
                 transaction: transaction, advance: advance, categories: categories, transfer: transfer,
                 client: client, onUpdate: onUpdate, onAdvanceChange: onAdvanceChange,
-                onDashboardStale: onDashboardStale, onRulesApplied: onRulesApplied,
-                onDelete: onDelete
+                onDashboardStale: onDashboardStale, onDelete: onDelete
             )
         )
         self.account = account
@@ -136,15 +131,6 @@ struct TransactionDetailView: View {
                 if let bannerMessage {
                     Banner(message: bannerMessage)
                 }
-                TransactionCategoryCard(
-                    categories: model.categories,
-                    transaction: model.transaction,
-                    isUpdating: model.isUpdating,
-                    onSeedDefaults: { Task { await model.seedDefaultCategories() } },
-                    onConfirm: { categoryID in Task { await model.confirm(categoryID: categoryID) } },
-                    onClear: { Task { await model.clearCategory() } },
-                    onCreateRule: { isPresentingCreateRuleSheet = true }
-                )
                 TransactionEventCard(
                     eventID: model.transaction.eventID,
                     events: events,
@@ -232,26 +218,6 @@ struct TransactionDetailView: View {
                     }
                 },
                 onCancel: { isPresentingAddReimbursementSheet = false }
-            )
-        }
-        .sheet(isPresented: $isPresentingCreateRuleSheet) {
-            CreateRuleFromTransactionSheet(
-                categoryName: categoryName ?? "",
-                initialPattern: model.transaction.displayDescription ?? model.transaction.description,
-                isCreating: model.isUpdating,
-                failureMessage: createRuleFailureMessage,
-                onCreate: { matchKind, pattern in
-                    guard let categoryID = model.transaction.confirmedCategoryID else { return }
-                    Task {
-                        await model.createRuleAndApplyRules(
-                            categoryID: categoryID, matchKind: matchKind, pattern: pattern
-                        )
-                        if model.actionFailure == nil {
-                            isPresentingCreateRuleSheet = false
-                        }
-                    }
-                },
-                onCancel: { isPresentingCreateRuleSheet = false }
             )
         }
         .sheet(isPresented: $isPresentingEventPickerSheet) {
@@ -371,20 +337,9 @@ struct TransactionDetailView: View {
         case nil: nil
         case .transactionInAnotherEvent: "Il movimento è già assegnato a un altro evento."
         case .mixedCurrency: "Questo movimento ha una valuta diversa da quella dell'evento."
-        case .duplicateRule: "Esiste già una regola così."
         case .transactionInUse:
             "Il movimento è collegato a un trasferimento o a un anticipo. Scollegalo prima di eliminarlo."
         case .generic: "Non è stato possibile completare l'operazione. Riprova."
         }
-    }
-
-    /// `CreateRuleFromTransactionSheet`'s own failure copy — separate from
-    /// `bannerMessage` so a duplicate-rule error reads specifically inside
-    /// the sheet that caused it, rather than the screen's generic banner.
-    private var createRuleFailureMessage: String? {
-        guard let failure = model.actionFailure else { return nil }
-        return failure == .duplicateRule
-            ? "Esiste già una regola così."
-            : "Non è stato possibile creare la regola. Riprova."
     }
 }

@@ -45,6 +45,28 @@ struct TransactionsView: View {
     /// push can zoom from the row's own frame (`TransactionRow`, iOS only —
     /// `ZoomNavigationTransition` is unavailable on macOS).
     @Namespace private var transitionNamespace
+    /// Which row-level action sheet is presented, if any
+    /// (`docs/decisions/0036-movimenti-row-actions.md`). One `Identifiable`
+    /// enum rather than one `@State` boolean per sheet — only one row action
+    /// can be in flight at a time.
+    @State private var rowAction: RowAction?
+    /// Presents `CreateRuleFromTransactionSheet`, nested inside
+    /// `CategoryPickerSheet` — a `@State` here (not on the sheet itself)
+    /// because this view owns the write and its outcome, same as every other
+    /// sheet's dismissal.
+    @State private var isPresentingCreateRuleSheet = false
+
+    /// One row-level action awaiting a sheet or dialog, keyed by the
+    /// transaction it targets.
+    enum RowAction: Identifiable {
+        case categorize(TransactionResponse)
+
+        var id: UUID {
+            switch self {
+            case .categorize(let transaction): transaction.id
+            }
+        }
+    }
 
     /// Create the screen.
     ///
@@ -110,6 +132,51 @@ struct TransactionsView: View {
                         applyFilters(accountID: accountID, category: category, period: period)
                     }
                 )
+            }
+            .sheet(item: $rowAction) { action in
+                switch action {
+                case .categorize(let transaction):
+                    CategoryPickerSheet(
+                        categories: model.categories,
+                        transaction: transaction,
+                        isUpdating: model.isUpdatingRow,
+                        failureMessage: rowActionFailureMessage,
+                        onSeedDefaults: {
+                            Task { await model.seedDefaultCategories() }
+                        },
+                        onConfirm: { categoryID in
+                            Task {
+                                if await model.confirmCategory(categoryID, for: transaction.id) {
+                                    freshness.markStale([.dashboard])
+                                    rowAction = nil
+                                }
+                            }
+                        },
+                        onClear: {
+                            Task {
+                                if await model.clearCategory(for: transaction.id) {
+                                    freshness.markStale([.dashboard])
+                                    rowAction = nil
+                                }
+                            }
+                        },
+                        onCancel: { rowAction = nil },
+                        isPresentingCreateRuleSheet: $isPresentingCreateRuleSheet,
+                        createRuleFailureMessage: createRuleFailureMessage,
+                        onCreateRule: { matchKind, pattern in
+                            guard let categoryID = transaction.confirmedCategoryID else { return }
+                            Task {
+                                if await model.createRuleAndApplyRules(
+                                    categoryID: categoryID, matchKind: matchKind, pattern: pattern
+                                ) {
+                                    freshness.markStale([.transactions, .dashboard])
+                                    isPresentingCreateRuleSheet = false
+                                    rowAction = nil
+                                }
+                            }
+                        }
+                    )
+                }
             }
             .sheet(isPresented: $isChoosingFundedPaymentOrientation) {
                 let selected = model.selectedTransactions
@@ -216,6 +283,29 @@ struct TransactionsView: View {
         case .alreadyLinked: "Uno dei due movimenti è già in un trasferimento."
         case .notLinkable: "Questi due movimenti non possono formare un trasferimento."
         case .generic: "Non è stato possibile collegare i movimenti. Riprova."
+        }
+    }
+
+    // MARK: Row actions (docs/decisions/0036-movimenti-row-actions.md)
+
+    /// `CategoryPickerSheet`'s banner copy for `model.rowActionFailure`, or
+    /// `nil` when there is none. `.duplicateRule` reads specifically inside
+    /// `CreateRuleFromTransactionSheet` instead (`createRuleFailureMessage`),
+    /// so it is not surfaced here.
+    private var rowActionFailureMessage: String? {
+        switch model.rowActionFailure {
+        case nil, .duplicateRule: nil
+        case .generic, .transactionInUse: "Non è stato possibile completare l'operazione. Riprova."
+        }
+    }
+
+    /// `CreateRuleFromTransactionSheet`'s own failure copy — separate from
+    /// `rowActionFailureMessage` so a duplicate-rule error reads specifically
+    /// inside the sheet that caused it.
+    private var createRuleFailureMessage: String? {
+        switch model.rowActionFailure {
+        case .duplicateRule: "Esiste già una regola identica."
+        case nil, .generic, .transactionInUse: nil
         }
     }
 
@@ -405,8 +495,11 @@ struct TransactionsView: View {
                             onUpdate: { model.replace($0) },
                             onAdvanceUpdate: { model.updateAdvance($0, for: transaction.id) },
                             onDashboardStale: { freshness.markStale([.dashboard]) },
-                            onRulesApplied: { freshness.markStale([.transactions, .dashboard]) },
                             onDelete: { model.remove(id: $0) },
+                            onCategorize: { transaction in
+                                model.clearRowActionFailure()
+                                rowAction = .categorize(transaction)
+                            },
                             selection: rowSelection(for: transaction),
                             namespace: transitionNamespace
                         )
@@ -446,9 +539,7 @@ struct TransactionsView: View {
                 TraccioCore.canLinkAsTransfer(anchor, transaction)
                 || TraccioCore.canLinkAsFundedPayment(anchor, transaction)
         } else {
-            isSelectable =
-                transaction.role == .personal && transaction.status != .rejected
-                && transaction.amount != 0
+            isSelectable = TraccioCore.canStartTransferLink(transaction)
         }
         return TransactionRow.Selection(
             isSelected: isSelected,
