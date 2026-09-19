@@ -55,17 +55,20 @@ struct DashboardView: View {
 
     /// A cheap discriminator for `.animation(_:value:)`, richer than
     /// `LoadState.tag` (see its doc comment for why not `Equatable`): folds
-    /// in the headline spend total so a loaded→loaded change (a new period,
-    /// an FX toggle) lands inside an animation transaction and the hero
-    /// figure's `.contentTransition(.numericText())` rolls the digits
-    /// instead of snapping.
+    /// in the headline spend total and the transaction count so a
+    /// loaded→loaded change (a new period, an FX toggle) lands inside an
+    /// animation transaction and every `.contentTransition(.numericText())`
+    /// figure rolls its digits instead of snapping — the hero figure, and
+    /// since 2026-09-19 `DashboardStatsCard`'s three columns too. The count
+    /// is folded in separately from spend: a period whose spend happens to
+    /// match the previous one (rare, but not impossible) would otherwise
+    /// leave the movement-count column snapping instead of rolling.
     private var stateTag: String {
         switch model.state {
         case .idle, .loading: return "loading"
         case .loaded(let summary):
-            let spend = summary.converted?.summary.spending
-                ?? summary.currencies.primary()?.spending
-            return "loaded-\(spend ?? 0)"
+            let primary = summary.converted?.summary ?? summary.currencies.primary()
+            return "loaded-\(primary?.spending ?? 0)-\(primary?.transactionCount ?? 0)"
         case .failed: return "failed"
         }
     }

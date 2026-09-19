@@ -81,8 +81,15 @@ struct DashboardSkeleton: View {
             }
 
             Card(elevation: .flush) {
-                SkeletonBlock(width: 180, height: 10)
-                SkeletonBlock(width: 140, height: 10)
+                HStack(spacing: 24) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        VStack(alignment: .leading, spacing: 6) {
+                            SkeletonBlock(width: 44, height: 20)
+                            SkeletonBlock(width: 56, height: 8)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
 
             ForEach(0..<2, id: \.self) { _ in
