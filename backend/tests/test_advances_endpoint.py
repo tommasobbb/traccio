@@ -226,7 +226,9 @@ def test_list_envelope_carries_cross_advance_summary() -> None:
     )
 
     summary = client.get("/advances").json()["summary"]
-    assert summary["totals"] == [{"currency": "EUR", "outstanding": 2500, "open_advances": 1}]
+    assert summary["totals"] == [
+        {"currency": "EUR", "outstanding": 2500, "expected": 4000, "reimbursed": 1500, "open_advances": 1}
+    ]
     [person] = summary["by_person"]
     assert person == {
         "name": "TEST FRIEND 01",
@@ -253,9 +255,10 @@ def test_status_filter_narrows_rows_but_not_summary() -> None:
     filtered = client.get("/advances", params={"status": "open"}).json()
     assert [a["transaction_id"] for a in filtered["advances"]] == [kept]
     # The written-off advance's 7000 receivable is deliberately absent from the
-    # total, but its currency row still reflects only the open advance.
+    # total (expected and reimbursed alike), but its currency row still
+    # reflects only the open advance.
     assert filtered["summary"]["totals"] == [
-        {"currency": "EUR", "outstanding": 4000, "open_advances": 1}
+        {"currency": "EUR", "outstanding": 4000, "expected": 4000, "reimbursed": 0, "open_advances": 1}
     ]
 
     unfiltered = client.get("/advances").json()
@@ -305,7 +308,9 @@ def test_summary_is_scoped_to_the_caller() -> None:
     )
 
     summary = client.get("/advances").json()["summary"]
-    assert summary["totals"] == [{"currency": "EUR", "outstanding": 4000, "open_advances": 1}]
+    assert summary["totals"] == [
+        {"currency": "EUR", "outstanding": 4000, "expected": 4000, "reimbursed": 0, "open_advances": 1}
+    ]
     assert [p["name"] for p in summary["by_person"]] == ["TEST FRIEND 01"]
 
 
@@ -341,7 +346,7 @@ def test_tracking_start_floor_hides_pre_cutoff_advances_from_rows_and_summary() 
     unfiltered = client.get("/advances").json()
     assert {a["transaction_id"] for a in unfiltered["advances"]} == {old_tx, new_tx}
     assert unfiltered["summary"]["totals"] == [
-        {"currency": "EUR", "outstanding": 6500, "open_advances": 2}
+        {"currency": "EUR", "outstanding": 6500, "expected": 6500, "reimbursed": 0, "open_advances": 2}
     ]
 
     # Floor after the old movement: only the new advance is left, rows and
@@ -350,7 +355,7 @@ def test_tracking_start_floor_hides_pre_cutoff_advances_from_rows_and_summary() 
     floored = client.get("/advances").json()
     assert [a["transaction_id"] for a in floored["advances"]] == [new_tx]
     assert floored["summary"]["totals"] == [
-        {"currency": "EUR", "outstanding": 2500, "open_advances": 1}
+        {"currency": "EUR", "outstanding": 2500, "expected": 2500, "reimbursed": 0, "open_advances": 1}
     ]
     assert [p["name"] for p in floored["summary"]["by_person"]] == ["TEST FRIEND 01"]
     assert floored["summary"]["by_person"][0]["advance_count"] == 1
@@ -376,7 +381,7 @@ def test_tracking_start_none_leaves_every_advance_visible() -> None:
     body = client.get("/advances").json()
     assert [a["transaction_id"] for a in body["advances"]] == [tx_id]
     assert body["summary"]["totals"] == [
-        {"currency": "EUR", "outstanding": 4000, "open_advances": 1}
+        {"currency": "EUR", "outstanding": 4000, "expected": 4000, "reimbursed": 0, "open_advances": 1}
     ]
 
 

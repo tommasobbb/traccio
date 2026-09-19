@@ -334,12 +334,21 @@ class ReceivableTotalResponse(BaseModel):
         Total still owed (cents). Can exceed the sum of the per-person
         outstandings when some reimbursements are not attributed to a
         participant.
+    expected : int
+        Total receivable (cents) — the denominator for a "quanto è rientrato"
+        progress bar across every advance in this currency.
+    reimbursed : int
+        Total already paid back (cents) — the numerator for that same bar.
+        ``expected - reimbursed`` can diverge from ``outstanding`` when an
+        advance is over-reimbursed, same as :attr:`PersonSummaryResponse.expected`.
     open_advances : int
         Count of still-open advances in this currency.
     """
 
     currency: str
     outstanding: int
+    expected: int
+    reimbursed: int
     open_advances: int
 
     @classmethod
@@ -348,6 +357,8 @@ class ReceivableTotalResponse(BaseModel):
         return cls(
             currency=total.currency,
             outstanding=total.outstanding.amount,
+            expected=total.expected.amount,
+            reimbursed=total.reimbursed.amount,
             open_advances=total.open_advances,
         )
 

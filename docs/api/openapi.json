@@ -2229,11 +2229,15 @@
         "type": "object"
       },
       "ReceivableTotalResponse": {
-        "description": "What the user is still owed in one currency, across all advances.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code.\noutstanding : int\n    Total still owed (cents). Can exceed the sum of the per-person\n    outstandings when some reimbursements are not attributed to a\n    participant.\nopen_advances : int\n    Count of still-open advances in this currency.",
+        "description": "What the user is still owed in one currency, across all advances.\n\nAttributes\n----------\ncurrency : str\n    ISO 4217 code.\noutstanding : int\n    Total still owed (cents). Can exceed the sum of the per-person\n    outstandings when some reimbursements are not attributed to a\n    participant.\nexpected : int\n    Total receivable (cents) \u2014 the denominator for a \"quanto \u00e8 rientrato\"\n    progress bar across every advance in this currency.\nreimbursed : int\n    Total already paid back (cents) \u2014 the numerator for that same bar.\n    ``expected - reimbursed`` can diverge from ``outstanding`` when an\n    advance is over-reimbursed, same as :attr:`PersonSummaryResponse.expected`.\nopen_advances : int\n    Count of still-open advances in this currency.",
         "properties": {
           "currency": {
             "title": "Currency",
             "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "integer"
           },
           "open_advances": {
             "title": "Open Advances",
@@ -2242,11 +2246,17 @@
           "outstanding": {
             "title": "Outstanding",
             "type": "integer"
+          },
+          "reimbursed": {
+            "title": "Reimbursed",
+            "type": "integer"
           }
         },
         "required": [
           "currency",
           "outstanding",
+          "expected",
+          "reimbursed",
           "open_advances"
         ],
         "title": "ReceivableTotalResponse",

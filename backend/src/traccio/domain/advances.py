@@ -630,6 +630,19 @@ class ReceivableTotal(BaseModel):
         advance keeps its ``outstanding`` populated (the write-off moves that
         amount into spending, not to zero) but is deliberately excluded here —
         the user chose to stop expecting that money.
+    expected : Money
+        The sum of every *non-written-off* advance's ``receivable`` — the
+        denominator for a "quanto è rientrato" progress bar across every
+        advance (Anticipi's list screen, mirroring :class:`PersonSummary`'s own
+        ``expected``/``reimbursed`` pair). Same written-off exclusion as
+        ``outstanding``, for the same reason.
+    reimbursed : Money
+        The sum of every *non-written-off* advance's ``reimbursed`` — the
+        numerator for that same progress bar. Can make ``expected -
+        reimbursed`` diverge from ``outstanding`` when an advance carries
+        ``excess`` (over-reimbursement): ``outstanding`` is clamped at zero,
+        ``expected``/``reimbursed`` are not, exactly as already documented on
+        :class:`PersonSummary`.
     open_advances : int
         How many advances in this currency are still ``open`` with a non-zero
         outstanding.
@@ -639,6 +652,8 @@ class ReceivableTotal(BaseModel):
 
     currency: str
     outstanding: Money
+    expected: Money
+    reimbursed: Money
     open_advances: int
 
 
@@ -650,10 +665,12 @@ def total_receivable(states: Sequence[AdvanceState]) -> list[ReceivableTotal]:
     states : Sequence[AdvanceState]
         One per advance, as returned by :func:`derive_advance`. A ``settled``
         advance's ``outstanding`` is already zero, so it contributes nothing. A
-        ``written_off`` advance's ``outstanding`` stays populated but is
-        excluded explicitly — the user stopped expecting that money. Either kind
-        still keeps its currency present, as a zero row if nothing else is owed
-        in it.
+        ``written_off`` advance's ``outstanding``/``receivable``/``reimbursed``
+        stay populated on the state itself but are excluded here, all three —
+        the user stopped expecting that money, so it should read out of the
+        progress bar the same way it reads out of the headline figure. Either
+        kind still keeps its currency present, as a zero row if nothing else is
+        owed in it.
 
     Returns
     -------
@@ -662,11 +679,21 @@ def total_receivable(states: Sequence[AdvanceState]) -> list[ReceivableTotal]:
         currency code. Amounts are never converted between currencies (ADR 0026).
     """
     outstanding: dict[str, int] = {}
+    expected: dict[str, int] = {}
+    reimbursed: dict[str, int] = {}
     open_counts: dict[str, int] = {}
     for state in states:
         currency = state.outstanding.currency
-        owed = 0 if state.status is AdvanceStatus.WRITTEN_OFF else state.outstanding.amount
-        outstanding[currency] = outstanding.get(currency, 0) + owed
+        is_written_off = state.status is AdvanceStatus.WRITTEN_OFF
+        outstanding[currency] = outstanding.get(currency, 0) + (
+            0 if is_written_off else state.outstanding.amount
+        )
+        expected[currency] = expected.get(currency, 0) + (
+            0 if is_written_off else state.receivable.amount
+        )
+        reimbursed[currency] = reimbursed.get(currency, 0) + (
+            0 if is_written_off else state.reimbursed.amount
+        )
         open_counts.setdefault(currency, 0)
         if state.status is AdvanceStatus.OPEN and state.outstanding.amount > 0:
             open_counts[currency] += 1
@@ -674,6 +701,8 @@ def total_receivable(states: Sequence[AdvanceState]) -> list[ReceivableTotal]:
         ReceivableTotal(
             currency=currency,
             outstanding=Money(amount=outstanding[currency], currency=currency),
+            expected=Money(amount=expected[currency], currency=currency),
+            reimbursed=Money(amount=reimbursed[currency], currency=currency),
             open_advances=open_counts[currency],
         )
         for currency in sorted(outstanding)

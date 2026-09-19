@@ -309,6 +309,8 @@ def test_total_receivable_sums_outstanding_per_currency() -> None:
     [total] = total_receivable([a, b])
     assert total.currency == "EUR"
     assert total.outstanding == _eur(4000 + 1500)
+    assert total.expected == _eur(4000 + 2500)  # receivable: (5000-1000) + (3000-500)
+    assert total.reimbursed == _eur(0 + 1000)
     assert total.open_advances == 2
 
 
@@ -318,7 +320,21 @@ def test_total_receivable_excludes_written_off_and_counts_only_open() -> None:
     written_off = derive_advance(_tx(amount=-9000), _eur(1000), _eur(0), written_off=True)
     [total] = total_receivable([open_advance, settled, written_off])
     assert total.outstanding == _eur(4000)  # only the open advance contributes
+    # expected/reimbursed follow the same written-off exclusion as outstanding
+    # — the written-off advance's 8000 receivable never enters the sum.
+    assert total.expected == _eur(4000 + 1500)
+    assert total.reimbursed == _eur(0 + 1500)
     assert total.open_advances == 1
+
+
+def test_total_receivable_expected_and_reimbursed_can_diverge_from_outstanding() -> None:
+    """An over-reimbursed advance clamps `outstanding` at zero but not
+    `expected`/`reimbursed` — mirroring PersonSummary's own excess handling."""
+    over_reimbursed = derive_advance(_tx(amount=-5000), _eur(1000), _eur(6000), written_off=False)
+    [total] = total_receivable([over_reimbursed])
+    assert total.outstanding == _eur(0)  # clamped
+    assert total.expected == _eur(4000)  # receivable: 5000-1000
+    assert total.reimbursed == _eur(6000)  # not clamped
 
 
 def test_total_and_per_person_diverge_on_an_unattributed_reimbursement() -> None:
