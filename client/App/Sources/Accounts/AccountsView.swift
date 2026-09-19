@@ -313,7 +313,7 @@ struct AccountsView: View {
 
     private func connectionHeader(_ connection: ConnectionResponse) -> some View {
         HStack(spacing: Spacing.itemGap) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Spacing.tightGap) {
                 BankLogoView(
                     logo: connection.institutionLogo, name: connection.institutionName,
                     style: .wordmark(height: Self.wordmarkHeight, maxWidth: Self.wordmarkMaxWidth)
@@ -343,7 +343,7 @@ struct AccountsView: View {
                 editingAccount = account
             } label: {
                 HStack(spacing: Spacing.itemGap) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Spacing.tightGap) {
                         BankLogoView(
                             logo: connection.institutionLogo, name: connection.institutionName,
                             style: .wordmark(height: Self.wordmarkHeight, maxWidth: Self.wordmarkMaxWidth)
@@ -370,20 +370,34 @@ struct AccountsView: View {
         }
     }
 
+    /// Two rows when the scheduler is on, each single-line on its own — never
+    /// one interpolated string that wraps. A wrapped status line was exactly
+    /// the 2026-09-19 bug (`docs/design/tokens.md`'s "Text never wraps"): the
+    /// dot floated to the middle of a multi-line block instead of sitting on
+    /// its first line. Two `.lineLimit(1)` rows keep that fix while giving the
+    /// scheduler's own line (`automaticSyncLine`) room to say more than
+    /// "auto…" — the second line is a deliberate second fact, not a wrap of
+    /// the first. The second row's leading inset (`Spacing.itemGap`, 12pt)
+    /// lines its text up under the first row's own text, past the 7pt dot and
+    /// its 5pt gap.
     private func statusRow(_ connection: ConnectionResponse) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(statusDotColor(for: connection.consentState))
-                .frame(width: 7, height: 7)
-            // Single-line, always — a status line that wraps floats the dot
-            // above beside the middle of a multi-line block instead of its
-            // first line (`docs/design/tokens.md`'s "Text never wraps"). A
-            // very long institution/alias name truncates with an ellipsis
-            // instead, never a second line.
-            Text(statusLine(for: connection))
-                .font(Typography.caption)
-                .foregroundStyle(Palette.inkTertiary)
-                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(statusDotColor(for: connection.consentState))
+                    .frame(width: 7, height: 7)
+                Text(statusLine(for: connection))
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkTertiary)
+                    .lineLimit(1)
+            }
+            if let autoLine = automaticSyncLine(for: connection) {
+                Text(autoLine)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.inkQuaternary)
+                    .lineLimit(1)
+                    .padding(.leading, Spacing.itemGap)
+            }
         }
     }
 
@@ -411,8 +425,9 @@ struct AccountsView: View {
     /// (`docs/design/tokens.md`'s "Text never wraps" — a `.lineLimit(1)` line
     /// truncates the very information a problem state needs to show).
     /// Abbreviated relative times (`relativeTimeShort`, "3 h fa" not "3 ore
-    /// fa") and a short "auto" suffix keep the common case well inside one
-    /// line at Conti's actual card width.
+    /// fa") keep the common case well inside one line at Conti's actual card
+    /// width. The scheduler's own state is a separate line
+    /// (`automaticSyncLine`), not appended here — see `statusRow`.
     private func statusLine(for connection: ConnectionResponse) -> String {
         let syncLabel: String
         if let lastSyncedAt = connection.lastSyncedAt {
@@ -422,9 +437,9 @@ struct AccountsView: View {
             syncLabel = "Mai sincronizzato"
         }
         guard let stateLabel = problemStateLabel(for: connection.consentState) else {
-            return "\(syncLabel)\(automaticSyncSuffix(for: connection))"
+            return syncLabel
         }
-        return "\(stateLabel) · \(syncLabel.lowercased())\(automaticSyncSuffix(for: connection))"
+        return "\(stateLabel) · \(syncLabel.lowercased())"
     }
 
     /// `nil` for `.active` — the dot alone says "fine"; every other state
@@ -440,23 +455,26 @@ struct AccountsView: View {
         }
     }
 
-    /// The scheduler's own state, appended to `statusLine(for:)`. Every
-    /// figure here is derived server-side (`GET /connections`) and rendered
-    /// as-is — the client never computes when the next sync will happen
-    /// (`docs/engineering.md`). Empty when the scheduler is off, so an ordinary
-    /// manual-only setup reads exactly as it did before this existed.
-    private func automaticSyncSuffix(for connection: ConnectionResponse) -> String {
-        guard connection.backgroundSyncEnabled else { return "" }
+    /// The scheduler's own state, on its own line under `statusLine(for:)`
+    /// (`statusRow`). Every figure here is derived server-side
+    /// (`GET /connections`) and rendered as-is — the client never computes
+    /// when the next sync will happen (`docs/engineering.md`). `nil` when the
+    /// scheduler is off, so an ordinary manual-only setup shows only the one
+    /// line it always has. Now its own line rather than a suffix
+    /// (`docs/design/tokens.md`'s "Text never wraps" used to truncate this to
+    /// "auto in…" at Conti's card width) there is room for the whole word.
+    private func automaticSyncLine(for connection: ConnectionResponse) -> String? {
+        guard connection.backgroundSyncEnabled else { return nil }
         if let nextSyncAt = connection.nextSyncAt {
             let relative = TraccioCore.relativeTimeShort(from: nextSyncAt, to: Date())
-            return " · auto \(relative)"
+            return "Sincronizzazione automatica \(relative)"
         }
         // nextSyncAt is nil while background_sync_enabled is true either
         // because it's already due (the next tick will sync it) or its
         // consent needs re-authorization rather than time to pass — the
         // consent-warning banner above already covers the latter, so a
         // single "in coda" reading is honest for both without guessing which.
-        return " · auto in coda"
+        return "Sincronizzazione automatica in coda"
     }
 
     // MARK: Accounts
