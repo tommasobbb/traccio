@@ -24,4 +24,28 @@ public enum APIError: Error, Sendable {
     case notHTTP
     /// The request path and query could not be assembled into a valid URL.
     case invalidURL
+
+    /// `true` when this wraps a cancelled request rather than a genuine
+    /// failure.
+    ///
+    /// `URLSession` reports a cancelled `Task` (SwiftUI tears down the
+    /// `.refreshable` scroll view mid-request, a view disappears mid-`.task`,
+    /// …) as `URLError.cancelled` through `.transport`, indistinguishable at
+    /// a glance from a real offline/DNS/TLS failure. A caller that maps every
+    /// `.transport` straight to a user-facing "impossibile caricare" message
+    /// must check this first — a self-inflicted cancellation is not news.
+    public var isCancellation: Bool {
+        guard case .transport(let underlying) = self else { return false }
+        return underlying is CancellationError || (underlying as? URLError)?.code == .cancelled
+    }
+}
+
+extension Error {
+    /// `true` for a plain `CancellationError`, or an `APIError` wrapping one
+    /// (`APIError.isCancellation`) — the one check a `catch` block needs
+    /// regardless of which shape the cancellation surfaced in, since `error`
+    /// there is typed `any Error`, not `APIError`.
+    public var isCancellationError: Bool {
+        self is CancellationError || (self as? APIError)?.isCancellation == true
+    }
 }

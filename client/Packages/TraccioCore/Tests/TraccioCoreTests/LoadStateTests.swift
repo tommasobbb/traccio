@@ -26,4 +26,29 @@ struct LoadStateTests {
         #expect(LoadState<Int>.idle == LoadState<Int>.idle)
         #expect(LoadState<Int>.idle != LoadState<Int>.loading)
     }
+
+    @Test func beginLoadingEntersLoadingFromIdleOrFailed() {
+        var idle = LoadState<Int>.idle
+        idle.beginLoading()
+        #expect(idle == .loading)
+
+        var failed = LoadState<Int>.failed
+        failed.beginLoading()
+        #expect(failed == .loading)
+    }
+
+    @Test func beginLoadingKeepsLoadedContentVisible() {
+        // The whole point: a refetch of an already-`.loaded` screen (a
+        // pull-to-refresh, a filter change) must not drop back to `.loading`
+        // and discard what's on screen.
+        var loaded = LoadState.loaded(42)
+        loaded.beginLoading()
+        #expect(loaded == .loaded(42))
+    }
+
+    @Test func beginLoadingIsANoOpWhenAlreadyLoading() {
+        var loading = LoadState<Int>.loading
+        loading.beginLoading()
+        #expect(loading == .loading)
+    }
 }

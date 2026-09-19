@@ -30,6 +30,24 @@ public enum LoadState<Value> {
         case .failed: "failed"
         }
     }
+
+    /// Enter `.loading` only when there is nothing worth keeping on screen.
+    ///
+    /// A refetch (pull-to-refresh, a filter change, a `DataFreshness` bump)
+    /// that always resets to `.loading` first forces every consumer's view
+    /// to tear down its `.loaded` content and rebuild a skeleton in its
+    /// place — and on iOS, when that content is the `ScrollView` hosting a
+    /// `.refreshable` control, tearing it down cancels the very Task the
+    /// refresh is running in. `AdvancesViewModel.load()` found this pattern
+    /// first; every other load function with the same shape (Movimenti,
+    /// Conti, Trasferimenti, Categorie) adopts it here instead of repeating
+    /// the same four-case switch.
+    public mutating func beginLoading() {
+        switch self {
+        case .idle, .failed: self = .loading
+        case .loading, .loaded: break
+        }
+    }
 }
 
 extension LoadState: Equatable where Value: Equatable {}
