@@ -2,7 +2,7 @@
 
 No network and no database: these exercise the field-by-field mapping directly.
 Every value is synthetic — invented amounts, ``"TEST MERCHANT 01"`` descriptions
-(see ``.claude/rules/data-safety.md``).
+(see ``docs/engineering.md``).
 """
 
 import hashlib

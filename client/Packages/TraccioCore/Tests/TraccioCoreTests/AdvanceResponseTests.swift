@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the advances payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): round amounts,
+/// Fixtures are synthetic (`docs/engineering.md`): round amounts,
 /// invented participant names. They pin the wire contract: field name
 /// mapping, the `AdvanceStatus` enum, empty `participants` as a valid state,
 /// and every required field being genuinely required.

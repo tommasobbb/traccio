@@ -5,7 +5,7 @@ import Foundation
 /// The cases carry only non-sensitive context: a status code, or an underlying
 /// system/decoding error. No response body and no financial data ever enter an
 /// `APIError` — a bank response body must never reach a log or an error message
-/// (see `.claude/rules/data-safety.md`). In particular the transport and
+/// (see `docs/engineering.md`). In particular the transport and
 /// decoding cases wrap the framework error, never the payload that produced it.
 public enum APIError: Error, Sendable {
     /// The request never produced an HTTP response (offline, DNS, TLS, …).

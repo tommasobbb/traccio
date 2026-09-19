@@ -9,7 +9,7 @@ import TraccioCore
 /// posture as `CreateAdvanceSheet`. Presentational only: the pattern is
 /// trimmed here to gate the submit button, but never checked for length or
 /// duplication — the backend's `422`/`409` are the real checks
-/// (`.claude/rules/swift.md`: the backend owns every derived value; the same
+/// (`docs/engineering.md`: the backend owns every derived value; the same
 /// reasoning extends to validation the backend already performs).
 struct CreateRuleSheet: View {
     let categories: [CategoryResponse]

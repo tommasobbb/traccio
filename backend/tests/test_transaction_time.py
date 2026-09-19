@@ -1,7 +1,7 @@
 """Tests for the ``transaction_when``/``effective_calendar_date`` derivation.
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts, invented references) — see ``.claude/rules/data-safety.md``.
+(round amounts, invented references) — see ``docs/engineering.md``.
 """
 
 from datetime import UTC, date, datetime

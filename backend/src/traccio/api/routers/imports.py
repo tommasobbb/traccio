@@ -8,7 +8,7 @@ the ``new`` ones. Re-importing the same file is a no-op — each movement's
 ``stable_key`` is ``"{profile}:{external_id}"`` and the ``(account_id,
 stable_key)`` uniqueness deduplicates.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only counts
+Data safety (``docs/engineering.md``): these handlers log only counts
 and stable reason codes — never a cell value, a description, or an amount.
 """
 

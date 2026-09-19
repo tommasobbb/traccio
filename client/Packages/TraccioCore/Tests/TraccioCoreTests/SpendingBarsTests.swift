@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.spendingBars(_:)` — pure geometry, no drawing
 /// framework involved. Fixtures are synthetic round amounts
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 ///
 /// No gap-fill tests here: the backend gap-fills `by_bucket` itself when
 /// both `start`/`end` are given (`docs/decisions/

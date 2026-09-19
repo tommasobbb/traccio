@@ -3,7 +3,7 @@
 No I/O, imports nothing but the standard library, so both the normalization
 and the ``LIKE`` escaping are testable without a database. Search text is
 counterparty/merchant text (a transaction's description) — never logged, per
-``.claude/rules/data-safety.md``.
+``docs/engineering.md``.
 """
 
 # Query-parameter length cap enforced by the API layer (``api/routers/

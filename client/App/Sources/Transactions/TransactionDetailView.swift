@@ -7,7 +7,7 @@ import TraccioCore
 /// The client's first write-with-a-body flow: confirming or clearing a
 /// category calls `TransactionDetailViewModel`, which re-fetches the row from
 /// the backend rather than deriving the new `effectiveCategoryID` here (the
-/// backend owns every derived value, `client/CLAUDE.md`) and hands the result
+/// backend owns every derived value, `docs/engineering.md`) and hands the result
 /// up to `onUpdate` so `TransactionsViewModel.replace(_:)` can update the
 /// Movimenti row without a full reload.
 ///

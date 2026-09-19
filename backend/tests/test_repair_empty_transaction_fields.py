@@ -7,7 +7,7 @@ pure decision function earns a test — see ``pyproject.toml``'s
 
 No network and no database: only :func:`plan_repair`, which decides field
 fills from already-fetched data. Every value is synthetic
-(`.claude/rules/data-safety.md`).
+(`docs/engineering.md`).
 """
 
 from datetime import UTC, datetime

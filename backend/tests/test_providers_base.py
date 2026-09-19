@@ -4,7 +4,7 @@ Pure unit tests: no database, no network, no provider SDK. A minimal in-memory
 :class:`FakeBankProvider` stands in for a real adapter to prove the interface is
 implementable and substitutable, and that its DTOs behave. Fixtures use
 synthetic values only (invented references, round amounts) — see
-``.claude/rules/data-safety.md``.
+``docs/engineering.md``.
 """
 
 from collections.abc import Mapping

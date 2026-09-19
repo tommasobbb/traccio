@@ -9,7 +9,7 @@ import SwiftUI
 /// Two independent concerns share this one `scenePhase` observer:
 /// - **Privacy cover** — shown whenever `scenePhase != .active`, entirely
 ///   unconditional on `AppLock.isEnabled`. Addresses
-///   `.claude/rules/data-safety.md`'s app-switcher-snapshot note on its own,
+///   `docs/engineering.md`'s app-switcher-snapshot note on its own,
 ///   for every user, whether or not they ever turn biometric lock on.
 /// - **Lock screen** — shown whenever `AppLock.state != .unlocked`, which
 ///   only happens at all when the preference is on.

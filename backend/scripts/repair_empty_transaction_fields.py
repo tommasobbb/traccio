@@ -27,7 +27,7 @@ This script is that something. For one connection, it:
 
 Not PayPal-specific: it repairs any account served through
 :func:`~traccio.api.deps.build_bank_provider`, whatever bank sent the empty
-fields (`.claude/rules/python.md`: no per-bank branching outside the adapter
+fields (`docs/engineering.md`: no per-bank branching outside the adapter
 seam).
 
 **The bank will not serve everything.** PayPal (like most Open Banking
@@ -46,7 +46,7 @@ Run with ``make repair-empty-fields CONNECTION=<connection-id>`` (add
 ``TRACCIO_ENABLE_BANKING_*``, ``TRACCIO_ENCRYPTION_KEY``,
 ``TRACCIO_DATABASE_URL``.
 
-Data safety (`.claude/rules/data-safety.md`): same guard as
+Data safety (`docs/engineering.md`): same guard as
 ``eb_field_census.py`` — nothing derived from a value is ever printed. The
 report is counts only: how many rows, how many fields filled, how many still
 empty. No description, no date, no counterparty name ever reaches stdout.

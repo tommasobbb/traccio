@@ -3,7 +3,7 @@ import Foundation
 /// A thin async client over the Traccio backend HTTP API.
 ///
 /// This is where the client's networking lives — the app target only renders
-/// what these methods return (see `client/CLAUDE.md`). The client has no notion
+/// what these methods return (see `docs/engineering.md`). The client has no notion
 /// of *bank* tokens: it never stores or forwards a bank credential; those never
 /// leave the backend. `apiToken` below is a different thing entirely — the
 /// app's own shared secret for reaching its own backend (ADR 0014), sent as a

@@ -20,7 +20,7 @@ be matched to it) is the caller's job, not the adapter's. Likewise it holds no
 account-uid cache — ``fetch_transactions`` re-resolves the provider uid from the
 stored account's stable ``identification_hash`` each call.
 
-Data safety (``.claude/rules/data-safety.md``): never logs the SCA url (it embeds
+Data safety (``docs/engineering.md``): never logs the SCA url (it embeds
 ``state``), the callback ``code``, the ``session_id`` credential, or any
 transaction contents. Failures raise
 :class:`~traccio.providers.base.ProviderError` with stable, value-free messages.
@@ -280,7 +280,7 @@ def _to_provider_account(details: Mapping[str, Any]) -> ProviderAccount:
     across sessions and re-authorizations), so it is used directly as the adapter's
     stable identity — the raw IBAN never leaves the provider. The display name is
     the bank's proprietary ``product`` name, deliberately **not** the account-holder
-    ``name`` field, which is personal data (``.claude/rules/data-safety.md``).
+    ``name`` field, which is personal data (``docs/engineering.md``).
 
     Parameters
     ----------

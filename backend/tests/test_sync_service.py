@@ -5,7 +5,7 @@ stands in for the bank adapter. These exercise exactly the behavior
 ``api/routers/connections.py::sync_connection`` used to implement inline,
 before it moved to :mod:`traccio.services.sync` — the router's own tests
 (``tests/test_connections.py``) cover the HTTP-layer translation on top of
-this. Values are synthetic (``.claude/rules/data-safety.md``).
+this. Values are synthetic (``docs/engineering.md``).
 """
 
 from collections.abc import Mapping

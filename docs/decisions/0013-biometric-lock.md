@@ -8,7 +8,7 @@ Date: 2026-08-25
 Point 5 of the M3 "iPhone trial" roadmap (`tasks/backlog.md`): the app now
 carries real financial data on a phone that leaves the house, and nothing
 protects it. Two gaps existed before this slice: no gate at launch or on
-return from the background, and `.claude/rules/data-safety.md`'s own
+return from the background, and `docs/engineering.md`'s own
 reminder — "consider what appears in the app switcher snapshot when the app
 is backgrounded" — had no code behind it at all. There was also no
 `UserDefaults` usage, no `LocalAuthentication` usage, and no root-level
@@ -50,7 +50,7 @@ or an update never surprises the user with a lock screen they never opted
 into.
 
 **4. `UserDefaults`, not Keychain.** The client's first use of
-`UserDefaults` — for exactly one `Bool`. `.claude/rules/data-safety.md`
+`UserDefaults` — for exactly one `Bool`. `docs/engineering.md`
 restricts *financial* data from `UserDefaults`; a plain on/off preference is
 not that, so this is a narrow, deliberate exception rather than a crack in
 the rule. An attacker with physical access to the device could flip the key
@@ -86,7 +86,7 @@ retrying is `authenticate()`, called from a button tap.
   `AccountsView`'s post-bank-re-auth refresh
   (`AccountsView.swift:14,24`) — a lock/unlock cycle never discards tab or
   scroll state and never re-runs a tab's initial load.
-- `client/CLAUDE.md`'s "logic lives in `TraccioCore`" is a rule for
+- `docs/engineering.md`'s "logic lives in `TraccioCore`" is a rule for
   *business* logic; `AppLock` is platform/lifecycle wiring, the same category
   `DataFreshness` already occupies in `App/Sources/`, not `TraccioCore`.
 - No new design tokens. `LockScreenView`/`PrivacyCoverView` compose only

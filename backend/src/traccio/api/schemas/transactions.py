@@ -110,7 +110,7 @@ class TransactionResponse(BaseModel):
     (``entry_reference``, ``stable_key``, ``key_strategy``) are intentionally
     omitted. ``amount`` is integer minor units (cents); ``description`` is the
     bank's raw text — returned to its owner over authenticated transport, but
-    never logged (see ``.claude/rules/data-safety.md``).
+    never logged (see ``docs/engineering.md``).
 
     Attributes
     ----------
@@ -251,7 +251,7 @@ class PrunePendingResponse(BaseModel):
     """The outcome of pruning abandoned pending transactions.
 
     Only a count is returned, never row contents
-    (``.claude/rules/data-safety.md``) — mirrors ``SyncResponse``'s
+    (``docs/engineering.md``) — mirrors ``SyncResponse``'s
     counts-only shape (``api/schemas/connections.py``).
 
     Attributes

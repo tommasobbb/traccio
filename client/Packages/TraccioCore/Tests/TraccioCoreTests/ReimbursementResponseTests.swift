@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the reimbursements payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids,
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids,
 /// round amounts, `"Marco via bonifico"` as a note. Pins the wire contract:
 /// field name mapping, both the manual-cash (`transaction_id: null`) and
 /// linked shapes, and every required field being genuinely required.

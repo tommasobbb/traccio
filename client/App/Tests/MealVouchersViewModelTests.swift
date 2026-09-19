@@ -5,7 +5,7 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `MealVouchersViewModel` (ADR 0029) against `FakeAPIClient`.
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// Fixtures are synthetic (`docs/engineering.md`).
 @MainActor
 struct MealVouchersViewModelTests {
     @Test func loadPublishesTheCurrentValue() async {

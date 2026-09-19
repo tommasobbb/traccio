@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for `GET /events/{id}/summary` (ADR 0028).
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`). They pin that
+/// Fixtures are synthetic (`docs/engineering.md`). They pin that
 /// `by_category` is the same shape the dashboard returns, so the event
 /// breakdown reuses `donutSegments` / `breakdownRows` unchanged.
 struct EventSummaryResponseTests {

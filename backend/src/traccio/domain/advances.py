@@ -48,7 +48,7 @@ class AdvanceError(ValueError):
     Raised by :func:`validate_advance`. Carries a stable, value-free ``reason``
     (one of the ``REASON_*`` constants) so the API layer can map it to an HTTP
     status without inspecting the message. No amounts are included (see
-    ``.claude/rules/data-safety.md``).
+    ``docs/engineering.md``).
 
     Attributes
     ----------
@@ -67,7 +67,7 @@ class ReimbursementError(ValueError):
     Raised by :func:`validate_reimbursement`. Carries a stable, value-free
     ``reason`` (one of the module ``REASON_*`` constants) so the API layer can map
     it to an HTTP status without inspecting the message. No amounts are included
-    (see ``.claude/rules/data-safety.md``).
+    (see ``docs/engineering.md``).
 
     Attributes
     ----------

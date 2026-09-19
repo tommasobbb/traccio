@@ -6,19 +6,19 @@ import TraccioCore
 /// assigning/unassigning a transaction, and deleting the event.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`): `total`/`memberCount` are server-derived
+/// (`docs/engineering.md`): `total`/`memberCount` are server-derived
 /// (`domain/events.py::event_total`). A membership write re-fetches *both*
 /// the event and its members (`async let`), since assigning or unassigning a
 /// transaction changes both `event`'s totals and the `members` list — unlike
 /// `TransactionDetailViewModel.performUpdate`, which only ever needs to
 /// re-fetch one row. Nothing here logs or prints a transaction or an event
-/// name (`.claude/rules/data-safety.md`).
+/// name (`docs/engineering.md`).
 @MainActor
 @Observable
 final class EventDetailViewModel {
     /// Why a write failed, for the view to surface. Carries only a
     /// status-derived reason, never the response body
-    /// (`.claude/rules/data-safety.md`).
+    /// (`docs/engineering.md`).
     enum ActionFailure: Equatable {
         /// `POST /events/{id}/transactions` refused (`409`) because the
         /// transaction already belongs to a *different* event.

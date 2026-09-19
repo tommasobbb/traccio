@@ -5,9 +5,9 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `AccountsViewModel` against `FakeAPIClient` — no network stub
-/// needed, per `.claude/rules/swift.md`'s "test the seam." Closes the
+/// needed, per `docs/engineering.md`'s "test the seam." Closes the
 /// zero-test gap this view model previously had (`tasks/backlog.md`).
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids, a
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids, a
 /// round hash, no real bank data.
 @MainActor
 struct AccountsViewModelTests {

@@ -35,7 +35,7 @@ class RuleError(ValueError):
     ``reason`` (one of the module ``REASON_*`` constants) so the API layer can
     map it to an HTTP status without inspecting the message. The offending
     pattern is never included — it is merchant/counterparty text, exactly what
-    ``.claude/rules/data-safety.md`` forbids in an error message.
+    ``docs/engineering.md`` forbids in an error message.
 
     Attributes
     ----------

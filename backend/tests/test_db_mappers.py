@@ -2,7 +2,7 @@
 
 Pure: no database, no session. They pin the translation, in particular the
 :class:`Money` split/join, so a field added on one side without the other is
-caught. Fixtures use synthetic values only (see ``.claude/rules/data-safety.md``).
+caught. Fixtures use synthetic values only (see ``docs/engineering.md``).
 """
 
 from datetime import UTC, datetime

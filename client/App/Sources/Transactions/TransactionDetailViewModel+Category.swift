@@ -55,7 +55,7 @@ extension TransactionDetailViewModel {
     /// A `409` from the create means a rule with this exact
     /// `(matchKind, pattern)` already exists — surfaced as `.duplicateRule`,
     /// distinct from `.generic`. `pattern` is never put in a log or error
-    /// message (`.claude/rules/data-safety.md`: it is merchant/counterparty
+    /// message (`docs/engineering.md`: it is merchant/counterparty
     /// text lifted from the bank description).
     ///
     /// Parameters

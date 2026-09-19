@@ -1,7 +1,7 @@
 """Tests for the pure account rules (``domain/accounts``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(invented account names) — see ``.claude/rules/data-safety.md``.
+(invented account names) — see ``docs/engineering.md``.
 """
 
 from uuid import uuid4

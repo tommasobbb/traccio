@@ -6,7 +6,7 @@ import Testing
 /// Decoding tests for the rules payload family: `RulesResponse`
 /// (`GET /rules`) and `ApplyRulesResponse` (`POST /rules/apply`).
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented
+/// Fixtures are synthetic (`docs/engineering.md`): invented
 /// patterns like `"TEST MERCHANT 01"`, a rule's pattern being
 /// merchant/counterparty text (`api/schemas/rules.py`). They pin the wire
 /// contract: field name mapping, all three `RuleMatchKind` cases, the order

@@ -6,9 +6,9 @@ import TraccioCore
 /// exposes the current load state and period for the view to render.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation, no
-/// arithmetic (that lives in the backend, per `client/CLAUDE.md`). Nothing
+/// arithmetic (that lives in the backend, per `docs/engineering.md`). Nothing
 /// here logs or prints the summary: it carries amounts, which are sensitive
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 @MainActor
 @Observable
 final class DashboardViewModel {
@@ -16,7 +16,7 @@ final class DashboardViewModel {
     /// highlighted. Not a plain `UUID??` — that would let "nothing selected"
     /// and "the no-category segment selected" collapse into ambiguous
     /// optional-of-optional nesting; this enum makes both states explicit
-    /// (`.claude/rules/swift.md`: "make illegal states unrepresentable").
+    /// (`docs/engineering.md`: "make illegal states unrepresentable").
     enum DonutSelection: Equatable {
         case none
         case category(UUID?)
@@ -72,7 +72,7 @@ final class DashboardViewModel {
     }
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
-    /// the concrete `APIClient` (`.claude/rules/swift.md`: "a view model
+    /// the concrete `APIClient` (`docs/engineering.md`: "a view model
     /// depends on a protocol and tests inject a fake") — a test can supply a
     /// fake without a network stub.
     private let client: any APIClientProtocol

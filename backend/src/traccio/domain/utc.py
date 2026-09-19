@@ -3,7 +3,7 @@
 SQLite (used in dev and by the test suite; PostgreSQL is the eventual
 production target) discards timezone info on a ``DateTime(timezone=True))``
 column, so a value stored as UTC comes back naive. Every timestamp in this
-system is UTC (root ``CLAUDE.md``: ``datetime.now(UTC)``), so treating a
+system is UTC (root ``docs/engineering.md``: ``datetime.now(UTC)``), so treating a
 naive value as UTC is the correct reading, not a guess.
 
 Before this module existed, this same one-line guard was written out

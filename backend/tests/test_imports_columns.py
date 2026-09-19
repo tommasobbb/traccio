@@ -5,7 +5,7 @@ No I/O: a header row is a plain ``list[str]`` the way
 feature exists — a real Satispay export labels its id column
 ``"ID (Comunicalo all'Assistenza Clienti…)"``, not ``"ID"`` — plus the
 normalisation and ambiguity rules. Values are synthetic
-(``.claude/rules/data-safety.md``).
+(``docs/engineering.md``).
 """
 
 import unicodedata

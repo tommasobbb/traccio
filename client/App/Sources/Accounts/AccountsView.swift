@@ -389,7 +389,7 @@ struct AccountsView: View {
     /// The scheduler's own state, appended to `statusLine(for:)`. Every
     /// figure here is derived server-side (`GET /connections`) and rendered
     /// as-is — the client never computes when the next sync will happen
-    /// (`client/CLAUDE.md`). Empty when the scheduler is off, so an ordinary
+    /// (`docs/engineering.md`). Empty when the scheduler is off, so an ordinary
     /// manual-only setup reads exactly as it did before this existed.
     private func automaticSyncSuffix(for connection: ConnectionResponse) -> String {
         guard connection.backgroundSyncEnabled else { return "" }

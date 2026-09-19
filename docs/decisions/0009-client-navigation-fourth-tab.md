@@ -67,7 +67,7 @@ because stock `Form`/`List` styling is the platform default for one.
   injected once from `TraccioApp` via `.environment(_:)` and bumped by a
   successful `applyRules()`/`deleteCategory(id:)`; `DashboardView` and
   `TransactionsView` key their `.task(id:)` to it, so a bump triggers a full
-  re-fetch — never a local recomputation, keeping `client/CLAUDE.md`'s "the
+  re-fetch — never a local recomputation, keeping `docs/engineering.md`'s "the
   backend owns every derived value" intact. This is a partial fix: creating
   an advance or recording a reimbursement has the same cross-tab staleness
   and is not wired to `DataFreshness` yet (`tasks/backlog.md`).

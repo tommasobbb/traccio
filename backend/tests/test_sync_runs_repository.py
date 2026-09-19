@@ -1,7 +1,7 @@
 """Tests for the sync run repositories.
 
 An in-memory SQLite engine backs the queries so no PostgreSQL is needed. Every
-value is synthetic (see ``.claude/rules/data-safety.md``).
+value is synthetic (see ``docs/engineering.md``).
 """
 
 from datetime import UTC, datetime, timedelta

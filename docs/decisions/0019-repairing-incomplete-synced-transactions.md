@@ -17,7 +17,7 @@ any date-bounded query — the entire PayPal history was invisible in every
 Panoramica period and every date-filtered Movimenti view, silently.
 
 The mapper itself was fixed with a general fallback chain (not a PayPal
-branch, `.claude/rules/python.md`): `value_date` falls back to
+branch, `docs/engineering.md`): `value_date` falls back to
 `transaction_date`, and `description` falls back to the counterparty's name
 on the side implied by `credit_debit_indicator` — see
 `docs/openbanking.md`'s normalization bullets and per-bank table for the

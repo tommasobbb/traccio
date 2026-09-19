@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.breakdownRows(groups:expanded:)` — pure flattening
 /// of a hierarchical `by_category` into a list a `ForEach` can render.
-/// Fixtures are synthetic round amounts (`.claude/rules/data-safety.md`).
+/// Fixtures are synthetic round amounts (`docs/engineering.md`).
 struct CategoryBreakdownRowsTests {
     private static func child(
         id: UUID = UUID(), name: String = "Coffee", spending: Int, transactionCount: Int = 1

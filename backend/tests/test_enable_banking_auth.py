@@ -1,7 +1,7 @@
 """Tests for Enable Banking bearer JWT minting.
 
 Pure unit tests: no network, no real credentials. The RSA keypair is generated
-in-test and is entirely synthetic (see ``.claude/rules/data-safety.md``).
+in-test and is entirely synthetic (see ``docs/engineering.md``).
 """
 
 import base64

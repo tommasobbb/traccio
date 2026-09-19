@@ -10,7 +10,7 @@ Like :mod:`traccio.core.logging`, this module takes the key as a plain argument
 rather than importing :mod:`traccio.core.config`, so ``core/`` stays free of
 internal coupling; the caller reads the key from settings and passes it in.
 
-Data safety (``.claude/rules/data-safety.md``): this module never logs, and no
+Data safety (``docs/engineering.md``): this module never logs, and no
 exception it raises contains the key or any plaintext — a leak here is an
 incident, not a bug.
 """

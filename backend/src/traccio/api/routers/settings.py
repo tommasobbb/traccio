@@ -15,7 +15,7 @@ out of its headline totals.
   start from each account's first movement, and names the account that
   constrains it.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only dates,
+Data safety (``docs/engineering.md``): these handlers log only dates,
 booleans, and counts — never an amount or a description.
 """
 

@@ -4,7 +4,7 @@ import Testing
 @testable import TraccioCore
 
 /// Tests for `TraccioCore.categoryTree(_:)` — pure grouping logic, no backend
-/// involved. Fixtures are synthetic (`.claude/rules/data-safety.md`):
+/// involved. Fixtures are synthetic (`docs/engineering.md`):
 /// invented names, round dates.
 struct CategoryTreeTests {
     private static func category(

@@ -4,7 +4,7 @@ Configured here and invoked once at startup. Takes plain arguments rather than
 importing :mod:`traccio.core.config`, so ``core/`` stays free of internal
 coupling.
 
-Remember ``.claude/rules/data-safety.md``: log identifiers and counts, never
+Remember ``docs/engineering.md``: log identifiers and counts, never
 whole objects and never financial data.
 """
 
@@ -19,7 +19,7 @@ get_logger = structlog.get_logger
 # Third-party HTTP client loggers whose INFO/DEBUG records include full request
 # URLs. For Enable Banking those URLs carry the consent secret
 # (``/sessions/{session_id}``) and account uids (``/accounts/{account_uid}/...``),
-# so they must never reach the log sink (see ``.claude/rules/data-safety.md``).
+# so they must never reach the log sink (see ``docs/engineering.md``).
 # Pinned at WARNING regardless of the app's configured level.
 _SILENCED_HTTP_LOGGERS = ("httpx", "httpcore")
 

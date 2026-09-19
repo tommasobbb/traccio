@@ -5,8 +5,8 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `DashboardViewModel` against `FakeAPIClient` — no network stub
-/// needed, per `.claude/rules/swift.md`'s "test the seam." Fixtures are
-/// synthetic (`.claude/rules/data-safety.md`).
+/// needed, per `docs/engineering.md`'s "test the seam." Fixtures are
+/// synthetic (`docs/engineering.md`).
 @MainActor
 struct DashboardViewModelTests {
     private static let fixedNow = Date(timeIntervalSince1970: 1_755_000_000)  // 2025-08-12

@@ -8,7 +8,7 @@ import TraccioCore
 /// `TransactionDetailView` uses after a write, which must update one row
 /// without disturbing pagination or the rest of the list — and `load()`'s
 /// transfer-suggestion count and per-leg transfer lookup. Fixtures are
-/// synthetic (`.claude/rules/data-safety.md`).
+/// synthetic (`docs/engineering.md`).
 @MainActor
 struct TransactionsViewModelTests {
     private static func makeTransaction(

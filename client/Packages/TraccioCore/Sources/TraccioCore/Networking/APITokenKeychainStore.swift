@@ -3,10 +3,10 @@ import Security
 
 /// Persists a single secret in the system Keychain — the seam `ServerConfigurationStore`
 /// depends on, so a test can inject an in-memory fake instead of touching the
-/// real Keychain (`.claude/rules/swift.md`'s "protocols at real seams").
+/// real Keychain (`docs/engineering.md`'s "protocols at real seams").
 ///
 /// This is the app's *own* shared API secret (ADR 0014), not a bank
-/// credential — `client/CLAUDE.md`'s "the client has no notion that [bank]
+/// credential — `docs/engineering.md`'s "the client has no notion that [bank]
 /// tokens exist" is unrelated and still holds.
 public protocol APITokenStoring: Sendable {
     /// The stored token, or `nil` if none is saved.

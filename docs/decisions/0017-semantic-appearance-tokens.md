@@ -95,7 +95,7 @@ case worth a third endpoint for.
   pins the explicit-`null` behavior for each so this cannot regress silently.
 - `docs/api/openapi.json` schema descriptions come straight from Pydantic
   model and route docstrings — a `test_schema_never_leaks_token_fields`
-  data-safety guard (`.claude/rules/data-safety.md`: bank tokens must never
+  data-safety guard (`docs/engineering.md`: bank tokens must never
   appear in the exported schema) turned out to fire on the plain English word
   "token" in a docstring, unrelated to any secret. The domain enum is named
   `PaletteColor`, not `ColorToken`, and every account-facing docstring avoids

@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the connections payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented bank
+/// Fixtures are synthetic (`docs/engineering.md`): invented bank
 /// name, no real consent data. They pin the wire contract: field name
 /// mapping, every `ConsentState`/`ConnectionStatus` case, the nullable
 /// fields, and an unknown enum value failing to decode rather than being
@@ -84,7 +84,7 @@ struct ConnectionResponseTests {
         // Unlike syncBudgetRemaining/nextSyncAt (nullable, so a missing key
         // still decodes to nil), backgroundSyncEnabled is non-optional — the
         // backend always sends it, so a missing key is a contract violation
-        // that must throw, not silently default (client/CLAUDE.md).
+        // that must throw, not silently default (docs/engineering.md).
         let json = """
             { "connections": [ {
               "id": "11111111-1111-1111-1111-111111111111",

@@ -6,7 +6,7 @@ import Foundation
 /// Server-side only: `TransactionsView`'s account/category chips narrow what
 /// the backend returns, never what a client-held page shows — filtering a
 /// single already-fetched page would silently disagree with the rest of the
-/// list on the server (`.claude/rules/swift.md`, "make illegal states
+/// list on the server (`docs/engineering.md`, "make illegal states
 /// unrepresentable").
 ///
 /// `category` is its own three-state enum, not an `Int?`/`Bool` pair, so

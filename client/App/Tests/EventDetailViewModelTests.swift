@@ -5,8 +5,8 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `EventDetailViewModel` against `FakeAPIClient` — no network
-/// stub needed, per `.claude/rules/swift.md`'s "test the seam." Fixtures are
-/// synthetic (`.claude/rules/data-safety.md`): invented ids, round amounts,
+/// stub needed, per `docs/engineering.md`'s "test the seam." Fixtures are
+/// synthetic (`docs/engineering.md`): invented ids, round amounts,
 /// `"TEST MERCHANT 01"`.
 @MainActor
 struct EventDetailViewModelTests {

@@ -1,7 +1,7 @@
 """Request and response schemas for the connections endpoints.
 
 None of these carry secret material: the consent secret (``session_id``) is
-encrypted at rest and never returned by any endpoint (``.claude/rules/data-safety.md``).
+encrypted at rest and never returned by any endpoint (``docs/engineering.md``).
 """
 
 from datetime import datetime
@@ -97,7 +97,7 @@ class SyncResponse(BaseModel):
     """The outcome of syncing a connection.
 
     Only counts are returned, never account or transaction contents
-    (``.claude/rules/data-safety.md``); the data itself is read back via the
+    (``docs/engineering.md``); the data itself is read back via the
     resource endpoints (e.g. ``GET /accounts``).
 
     Attributes
@@ -119,7 +119,7 @@ class ConnectionResponse(BaseModel):
     A narrow projection of :class:`~traccio.domain.models.Connection`. It
     carries no secret material by construction: the consent secret and the
     anti-CSRF ``auth_state`` live only on the ORM row, never on the domain model
-    this is built from (see ``.claude/rules/data-safety.md``). ``user_id`` is
+    this is built from (see ``docs/engineering.md``). ``user_id`` is
     implied by the caller and omitted.
 
     Attributes

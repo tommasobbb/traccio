@@ -1,7 +1,7 @@
 """Tests for the ``effective_amount`` derivation.
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts, invented references) — see ``.claude/rules/data-safety.md``.
+(round amounts, invented references) — see ``docs/engineering.md``.
 """
 
 from uuid import uuid4

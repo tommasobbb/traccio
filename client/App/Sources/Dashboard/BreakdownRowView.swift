@@ -90,7 +90,7 @@ struct BreakdownRowView: View {
     }
 
     /// `row.name` with the Italian fallback/suffix applied — presentation
-    /// copy stays in the view layer, per `client/CLAUDE.md`.
+    /// copy stays in the view layer, per `docs/engineering.md`.
     private var displayName: String {
         let base = row.name ?? "Senza categoria"
         return row.isDirectRemainder ? "\(base) · diretto" : base

@@ -2,7 +2,7 @@
 
 An in-memory SQLite engine backs the queries so no PostgreSQL is needed. Every
 value is synthetic (round amounts, invented ids) — see
-``.claude/rules/data-safety.md``.
+``docs/engineering.md``.
 """
 
 from datetime import UTC, datetime

@@ -96,7 +96,7 @@ actually fits**: 27 `.padding(20)` → `Spacing.gutter`, 24
 matching token (`Card`'s own `contentPadding` overrides, a colour swatch's
 3pt corner, the FX tile's `cornerRadius: 14` already flagged in
 `tasks/backlog.md`) are left as literals rather than forced into the wrong
-token or given a one-off token of their own (YAGNI, `.claude/rules/swift.md`)
+token or given a one-off token of their own (YAGNI, `docs/engineering.md`)
 — not every literal is missing coverage; some are legitimately unique.
 
 **8. Small motion additions**: a symbol morph

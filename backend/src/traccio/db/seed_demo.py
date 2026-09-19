@@ -8,7 +8,7 @@ a USD card, and a manual cash account: categorized spending and income, an
 event with three member transactions, an advance with one participant and a
 partial reimbursement, and an unlinked same-amount opposite-sign pair for the
 transfer-suggestion detector to find. All values are synthetic (see
-``.claude/rules/data-safety.md``): invented merchants, round amounts, no real
+``docs/engineering.md``): invented merchants, round amounts, no real
 bank ever touched.
 
 Idempotent — every row has a fixed id (derived from a name via ``uuid5``, not

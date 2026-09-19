@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for `GET /connections/institutions`.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented bank
+/// Fixtures are synthetic (`docs/engineering.md`): invented bank
 /// names, no real institution data.
 struct InstitutionResponseTests {
     @Test func decodesEnvelopePreservingFields() throws {

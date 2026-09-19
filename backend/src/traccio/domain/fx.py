@@ -39,7 +39,7 @@ class FxRate(BaseModel):
 
     The value object crossing the ``db``/``services``/``domain`` boundary for
     a cached rate. ``rate`` is an exact :class:`~decimal.Decimal` — never a
-    float (root ``CLAUDE.md``: money is never floating point).
+    float (root ``docs/engineering.md``: money is never floating point).
 
     Attributes
     ----------
@@ -69,7 +69,7 @@ class MissingRate(BaseModel):
     """Returned by :func:`to_base_currency` when a required rate is absent.
 
     Carries only the offending currency code — a value-free identifier, never
-    an amount (``.claude/rules/data-safety.md``).
+    an amount (``docs/engineering.md``).
 
     Attributes
     ----------

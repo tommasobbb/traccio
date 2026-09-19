@@ -6,7 +6,7 @@ import TraccioCore
 /// close/reopen toggle, and the destructive delete action.
 ///
 /// Every displayed value still arrives via `init`, never recomputed here
-/// (`client/CLAUDE.md`): `total`/`memberCount` are `EventResponse` fields,
+/// (`docs/engineering.md`): `total`/`memberCount` are `EventResponse` fields,
 /// server-derived. This view owns only the confirmation-dialog state for the
 /// one destructive action (delete) and calls back up to
 /// `EventDetailViewModel` through plain closures, same shape as

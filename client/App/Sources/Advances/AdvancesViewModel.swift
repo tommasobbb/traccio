@@ -5,14 +5,14 @@ import TraccioCore
 /// Drives `AdvancesView`: the caller's advances, the cross-advance summary
 /// (who owes what, how much in total), and the lifecycle-status filter.
 ///
-/// Orchestration only, no derivation (`client/CLAUDE.md`): every figure —
+/// Orchestration only, no derivation (`docs/engineering.md`): every figure —
 /// per-advance `outstanding`, per-person roll-ups, per-currency totals — is
 /// computed server-side (`domain/advances.py`, ADR 0026). This view model
 /// calls `GET /advances` and publishes the result; each row now carries its
 /// own transaction description and date (`AdvanceResponse`), so there is no
 /// per-advance fetch — a row navigates through `TransactionDetailLoader`,
 /// which resolves the transaction only when opened. Nothing here logs an
-/// advance: participant names are user-typed (`.claude/rules/data-safety.md`).
+/// advance: participant names are user-typed (`docs/engineering.md`).
 @MainActor
 @Observable
 final class AdvancesViewModel {

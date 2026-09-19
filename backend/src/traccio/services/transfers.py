@@ -47,7 +47,7 @@ class TransferPairError(ValueError):
     Raised by :func:`validate_transfer_pair`. Carries a stable, value-free
     ``reason`` (one of the ``REASON_*`` constants) so the API layer can map it to
     an HTTP status without inspecting the message. No amounts, descriptions, or
-    other financial values are included (see ``.claude/rules/data-safety.md``).
+    other financial values are included (see ``docs/engineering.md``).
 
     Attributes
     ----------

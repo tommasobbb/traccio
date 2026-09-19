@@ -44,7 +44,7 @@ def effective_amount(transaction: Transaction, *, advance_own_share: Money | Non
     ValueError
         If the transaction is an advance and ``advance_own_share`` is missing, or
         carries a different currency than the transaction. The message is stable
-        and value-free (no amounts), per ``.claude/rules/data-safety.md``.
+        and value-free (no amounts), per ``docs/engineering.md``.
     """
     currency = transaction.money.currency
 

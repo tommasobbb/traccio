@@ -10,7 +10,7 @@ import Foundation
 /// (`api/schemas/dashboard.py`'s `CategoryDisplay`) — this is presentation
 /// *structure*, not presentation *copy*: `name` stays `nil` for the "no
 /// category" bucket rather than this type inventing the Italian fallback
-/// text itself (`client/CLAUDE.md`: display copy belongs in the view layer).
+/// text itself (`docs/engineering.md`: display copy belongs in the view layer).
 public struct CategoryBreakdownRow: Sendable, Equatable, Identifiable {
     /// Stable across a re-render for the same logical row — `"root:<uuid>"`,
     /// `"root:none"` (the "no category" bucket), `"direct:<uuid>"` (a root's

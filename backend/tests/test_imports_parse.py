@@ -2,7 +2,7 @@
 
 No I/O: rows are built as ``header -> cell`` maps the way
 ``services/imports.decode_rows`` would produce them. Fixtures are synthetic
-(invented ids, round amounts, ``"TEST MERCHANT 01"`` — ``.claude/rules/data-safety.md``).
+(invented ids, round amounts, ``"TEST MERCHANT 01"`` — ``docs/engineering.md``).
 """
 
 from datetime import UTC, datetime

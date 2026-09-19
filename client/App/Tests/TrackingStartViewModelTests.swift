@@ -5,7 +5,7 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `TrackingStartViewModel` (ADR 0024) against `FakeAPIClient`.
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// Fixtures are synthetic (`docs/engineering.md`).
 @MainActor
 struct TrackingStartViewModelTests {
     private static func suggestion(

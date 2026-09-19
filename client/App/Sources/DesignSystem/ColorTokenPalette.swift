@@ -3,7 +3,7 @@ import TraccioCore
 
 /// Maps a backend `PaletteColor` to its `Colors.xcassets` colours.
 ///
-/// A separate file from `Palette.swift` (`.claude/rules/swift.md`: "small,
+/// A separate file from `Palette.swift` (`docs/engineering.md`: "small,
 /// focused files") because this is a mapping *from* a backend-owned
 /// vocabulary, not a fixed design token like the rest of `Palette`. Each of
 /// the ten tones ships as one colorset (`PaletteColor<Name>`) with an explicit

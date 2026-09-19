@@ -104,7 +104,7 @@ def transactions(
         whitespace-only is treated as absent. Longer than
         :data:`~traccio.domain.search.MAX_SEARCH_TERM_LENGTH` is a ``422``.
         Never logged — it is counterparty text
-        (``.claude/rules/data-safety.md``).
+        (``docs/engineering.md``).
     start : datetime or None, optional
         Inclusive lower bound on ``coalesce(booked_at, value_date)``.
     end : datetime or None, optional

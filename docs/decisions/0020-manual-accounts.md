@@ -36,7 +36,7 @@ A manual account has no consent and no provider-assigned identity, so both
 columns go `NULL` for it. `Account` gains a `model_validator` that enforces
 the only two legal shapes: **both set** (a synced account) or **both `None`**
 (a manual account). A half-populated `Account` fails to construct — illegal
-state unrepresentable, per `.claude/rules/python.md`.
+state unrepresentable, per `docs/engineering.md`.
 
 `AccountKind.MANUAL` was rejected: `kind` answers *what type* of account this
 is (current / savings / card / wallet / cash), an axis orthogonal to *where

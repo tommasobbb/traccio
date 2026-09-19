@@ -3,7 +3,7 @@
 The app is built via the factory and its ``get_session`` dependency is
 overridden to a shared in-memory SQLite engine, so the endpoint is exercised end
 to end (routing, response schema, repository query) without a running
-PostgreSQL. Values are synthetic (see ``.claude/rules/data-safety.md``).
+PostgreSQL. Values are synthetic (see ``docs/engineering.md``).
 """
 
 from collections.abc import Iterator

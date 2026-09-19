@@ -14,7 +14,7 @@ import TraccioCore
 /// non-negative number" — the real range check
 /// (`0 <= own_share <= |amount|`) is the backend's, which answers `422` with
 /// a stable reason if it's wrong (`failureMessage` surfaces that as a
-/// generic banner, per `.claude/rules/data-safety.md`: never a value in an
+/// generic banner, per `docs/engineering.md`: never a value in an
 /// error).
 struct CreateAdvanceSheet: View {
     /// The transaction this advance would be created on — its total is shown

@@ -2,7 +2,7 @@
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
 (round amounts, invented references, ``"TEST MERCHANT 01"``), never real bank
-data — see ``.claude/rules/data-safety.md``.
+data — see ``docs/engineering.md``.
 """
 
 from uuid import uuid4

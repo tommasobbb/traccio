@@ -6,7 +6,7 @@ import Foundation
 /// returned by both `POST /connections` and
 /// `POST /connections/{id}/reauthorize`. `authorizationURL` must be opened in
 /// the system browser, never an in-app `WebView` — bank SCA apps often fail
-/// to open from one (`.claude/rules/data-safety.md`, `docs/openbanking.md`).
+/// to open from one (`docs/engineering.md`, `docs/openbanking.md`).
 public struct StartConnectionResponse: Codable, Sendable, Equatable {
     /// The connection this authorization is for — a fresh one for
     /// `POST /connections`, the same one re-armed for `reauthorize`.

@@ -6,7 +6,7 @@ import TraccioCore
 /// per-account suggestion (ADR 0024), and saves or clears the date.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). Nothing here logs a movement.
+/// (`docs/engineering.md`). Nothing here logs a movement.
 @MainActor
 @Observable
 final class TrackingStartViewModel {

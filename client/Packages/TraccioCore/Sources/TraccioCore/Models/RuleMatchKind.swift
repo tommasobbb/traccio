@@ -6,7 +6,7 @@
 /// than being silently dropped — the same discipline as `AccountKind` and
 /// `AdvanceStatus`. Matching itself is entirely server-side
 /// (`domain/rules.py::rule_matches`); the client never re-implements it (see
-/// `.claude/rules/swift.md`: "the backend owns every derived value").
+/// `docs/engineering.md`: "the backend owns every derived value").
 public enum RuleMatchKind: String, Codable, Sendable, CaseIterable {
     /// The pattern appears anywhere in the description.
     case contains

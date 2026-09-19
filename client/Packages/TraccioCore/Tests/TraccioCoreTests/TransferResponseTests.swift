@@ -6,9 +6,9 @@ import Testing
 /// Decoding tests for the transfer-suggestion and confirmed-transfer
 /// payloads.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids,
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids,
 /// round amounts. They pin the wire contract, including the negative cases
-/// `client/CLAUDE.md` requires (a malformed id, a missing required field).
+/// `docs/engineering.md` requires (a malformed id, a missing required field).
 struct TransferResponseTests {
     // MARK: TransferSuggestionsResponse
 

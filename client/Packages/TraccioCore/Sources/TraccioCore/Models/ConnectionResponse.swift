@@ -4,8 +4,8 @@ import Foundation
 ///
 /// Mirrors the `ConnectionResponse` schema in `docs/api/openapi.json`. Carries
 /// no secret material by construction — the consent secret and the anti-CSRF
-/// `auth_state` never leave the backend (`.claude/rules/data-safety.md`); the
-/// client has no notion that tokens exist (`client/CLAUDE.md`).
+/// `auth_state` never leave the backend (`docs/engineering.md`); the
+/// client has no notion that tokens exist (`docs/engineering.md`).
 public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
     /// Stable connection identifier.
     public let id: UUID
@@ -41,7 +41,7 @@ public struct ConnectionResponse: Codable, Sendable, Identifiable, Equatable {
     /// How many more background sync runs this connection may have in the
     /// current rolling 24h, or `nil` when `backgroundSyncEnabled` is
     /// `false`. Derived by the backend on every read, never stored — render
-    /// it, never compute it (`client/CLAUDE.md`).
+    /// it, never compute it (`docs/engineering.md`).
     public let syncBudgetRemaining: Int?
     /// When this connection is next expected to become eligible for a
     /// background sync, or `nil` when `backgroundSyncEnabled` is `false`,

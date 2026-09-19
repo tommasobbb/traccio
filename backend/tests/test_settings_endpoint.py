@@ -3,7 +3,7 @@
 The app is built via the factory with ``get_session`` overridden to a shared
 in-memory SQLite engine. A fresh test database has no ``users`` row for the
 dev user — ``GET /settings`` must tolerate that and ``POST /settings`` must
-insert one. Values are synthetic (``.claude/rules/data-safety.md``).
+insert one. Values are synthetic (``docs/engineering.md``).
 """
 
 from collections.abc import Iterator

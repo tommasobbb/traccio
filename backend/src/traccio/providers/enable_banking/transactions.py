@@ -34,8 +34,8 @@ normalization duties every adapter owes (``docs/architecture.md``,
 
 Money is integer minor units, never float: the decimal-string ``amount`` is
 parsed with :class:`decimal.Decimal` and scaled, never through ``float`` (root
-``CLAUDE.md``). Errors raise a value-free
-:class:`~traccio.providers.base.ProviderError` (``.claude/rules/data-safety.md``):
+``docs/engineering.md``). Errors raise a value-free
+:class:`~traccio.providers.base.ProviderError` (``docs/engineering.md``):
 no amount, description, or counterparty ever enters a message.
 """
 
@@ -77,8 +77,9 @@ _HASH_SEP = "\x1f"
 # value_date fallback chain, most-specific-first: the bank's own value_date,
 # then transaction_date (ISO 20022's "when the movement occurred" — the
 # right substitute for an instant-ledger account where value_date is absent,
-# found on PayPal). A general chain, not a per-bank branch (`.claude/rules/
-# python.md`): a bank that sends value_date never reaches the second entry.
+# found on PayPal). A general chain, not a per-bank branch
+# (`docs/engineering.md`): a bank that sends value_date never reaches the
+# second entry.
 _DATE_SOURCES_VALUE = ("value_date", "transaction_date")
 # Which counterparty is the interesting party for a description fallback,
 # keyed by the same credit/debit indicator `_amount_to_cents` already
@@ -228,7 +229,7 @@ def _first_date(raw: dict[str, Any], keys: tuple[str, ...]) -> datetime | None:
     """Return the first parseable date among ``keys``, in order, or ``None``.
 
     A general fallback chain over field *names*, not a branch on which bank
-    sent the entry (`.claude/rules/python.md`): a bank whose first key is
+    sent the entry (`docs/engineering.md`): a bank whose first key is
     always populated never reaches the second. Each candidate is parsed with
     :func:`_parse_date`, so a present-but-malformed value still fails loud.
     """

@@ -1,7 +1,7 @@
 """Tests for the pure dashboard aggregation (``domain/dashboard``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts) — see ``.claude/rules/data-safety.md``.
+(round amounts) — see ``docs/engineering.md``.
 """
 
 from datetime import UTC, date, datetime

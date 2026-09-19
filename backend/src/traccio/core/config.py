@@ -136,7 +136,7 @@ class Settings(BaseSettings):
     background_sync_enabled : bool
         Whether ``api/main.py``'s lifespan starts the background scheduler
         (``services/scheduler.py``, ADR 0010). ``False`` by default: the app
-        must boot with no ``.env`` (``backend/CLAUDE.md``) without silently
+        must boot with no ``.env`` (``docs/engineering.md``) without silently
         calling a real bank on startup — this is switched on deliberately.
     background_sync_interval_minutes : int
         Minutes between the end of one scheduler tick and the start of the

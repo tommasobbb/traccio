@@ -1,7 +1,7 @@
 """Tests for the pure reimbursement/advance-state logic (``domain/advances``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts) — see ``.claude/rules/data-safety.md``.
+(round amounts) — see ``docs/engineering.md``.
 """
 
 from uuid import UUID, uuid4

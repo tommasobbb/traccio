@@ -11,7 +11,7 @@ import Foundation
 ///
 /// No error crossing this seam carries a raw system message —
 /// `BiometricAuthError` is a closed, value-free enum, per
-/// `.claude/rules/data-safety.md`'s "never re-raise a provider exception
+/// `docs/engineering.md`'s "never re-raise a provider exception
 /// unchanged" posture applied to a platform framework instead of a network
 /// provider.
 protocol BiometricAuthenticating: Sendable {
@@ -47,7 +47,7 @@ enum BiometryKind: Equatable, Sendable {
 }
 
 /// A stable, value-free authentication outcome — never a raw `LAError` or
-/// its `localizedDescription` (`.claude/rules/data-safety.md`).
+/// its `localizedDescription` (`docs/engineering.md`).
 enum BiometricAuthError: Error, Equatable, Sendable {
     /// The user cancelled the prompt, or the app was interrupted (backgrounded
     /// mid-prompt, another app requested authentication first).

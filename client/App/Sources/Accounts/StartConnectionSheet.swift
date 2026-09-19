@@ -4,7 +4,7 @@ import TraccioCore
 /// The institution picker presented from `AccountsView`'s "Collega un nuovo
 /// conto" entry point — the first step of `POST /connections`: pick a bank,
 /// then hand off to the system browser for SCA
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 ///
 /// A sheet rather than inline, same reasoning as `EventPickerSheet`: starting
 /// a new connection is an occasional action, not something the Conti list

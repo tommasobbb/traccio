@@ -40,7 +40,7 @@ final class AppLock {
 
     /// `UserDefaults` key for the enabled preference. The client's first use
     /// of `UserDefaults`: a plain `Bool` is not financial data
-    /// (`.claude/rules/data-safety.md` restricts *financial* data, not every
+    /// (`docs/engineering.md` restricts *financial* data, not every
     /// preference), so this is a deliberate, narrow exception, not a crack in
     /// the rule. Not Keychain-backed: an attacker with device access could
     /// flip this key directly, accepted as YAGNI for a personal, single-user

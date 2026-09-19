@@ -14,9 +14,9 @@ which returns institution metadata only (no personal data — see
 
 Run with ``make eb-aspsps COUNTRY=IT`` (needs ``TRACCIO_ENABLE_BANKING_*`` set in
 a local ``.env``). Lives under ``scripts/`` — outside ``src/traccio/`` — because
-the root ``CLAUDE.md`` reserves the package tree for the layered modules.
+the root ``docs/engineering.md`` reserves the package tree for the layered modules.
 
-Data safety (``.claude/rules/data-safety.md``): prints only a count and each
+Data safety (``docs/engineering.md``): prints only a count and each
 bank's ``name`` + ``country`` (public institution metadata). It never prints the
 JWT, the private key, the ``.env``, or any raw provider response body.
 """

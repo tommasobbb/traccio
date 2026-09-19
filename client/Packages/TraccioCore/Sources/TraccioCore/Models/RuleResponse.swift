@@ -14,7 +14,7 @@ public struct RuleResponse: Codable, Sendable, Identifiable, Equatable {
     /// The predicate applied to a transaction's raw `description`.
     public let matchKind: RuleMatchKind
     /// The text matched against — merchant/counterparty text, never logged
-    /// (`.claude/rules/data-safety.md`).
+    /// (`docs/engineering.md`).
     public let pattern: String
     /// When the rule was created.
     public let createdAt: Date

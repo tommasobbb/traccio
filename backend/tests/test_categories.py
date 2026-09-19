@@ -1,7 +1,7 @@
 """Tests for the pure category rules (``domain/categories``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts, invented names) — see ``.claude/rules/data-safety.md``.
+(round amounts, invented names) — see ``docs/engineering.md``.
 """
 
 from uuid import UUID, uuid4

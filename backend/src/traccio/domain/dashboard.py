@@ -89,7 +89,7 @@ def _bucket_of(
     uses to filter (:func:`~traccio.domain.transaction_time.transaction_when`,
     mirroring that query's SQL ``coalesce``) — so a row can never be counted
     in the period but excluded from every bucket, or vice versa.
-    Every timestamp in this system is UTC (root ``CLAUDE.md``), but a value
+    Every timestamp in this system is UTC (root ``docs/engineering.md``), but a value
     round-tripped through SQLite comes back naive; a naive value is treated as
     UTC rather than the local zone, per
     :func:`~traccio.domain.utc.as_aware_utc`. Bucketing itself
@@ -302,7 +302,7 @@ class BucketSummary(BaseModel):
         The bucket's exclusive end — for a ``DAY`` bucket, ``start + 1``. Sent
         explicitly rather than left for the client to derive, since computing
         "the last day of this ISO week/calendar month" client-side would be a
-        derivation the client must not perform (``client/CLAUDE.md``), and
+        derivation the client must not perform (``docs/engineering.md``), and
         could silently disagree with how this module actually bucketed.
     spending : Money
         Total spending in this bucket, a positive magnitude.

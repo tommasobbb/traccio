@@ -9,7 +9,7 @@ value-free message (never a response body), and a ``transport`` seam so tests
 serve responses offline.
 
 Rates are parsed into :class:`~decimal.Decimal` from the JSON number's string
-form, so no float ever touches a monetary computation (root ``CLAUDE.md``).
+form, so no float ever touches a monetary computation (root ``docs/engineering.md``).
 
 Endpoints used:
 

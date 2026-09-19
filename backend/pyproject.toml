@@ -50,7 +50,7 @@ warn_unreachable = true
 testpaths = ["tests"]
 # Put src/ on sys.path directly so test imports never depend on the editable
 # install. This survives the intermittent _virtualenv.pth interference that
-# otherwise drops the editable src entry (see backend/CLAUDE.md).
+# otherwise drops the editable src entry (see docs/engineering.md).
 # scripts/ is also here so tests/test_repair_empty_transaction_fields.py can
 # import repair_empty_transaction_fields.plan_repair directly — it writes to
 # production data, so unlike the other operational scripts it earns a test.

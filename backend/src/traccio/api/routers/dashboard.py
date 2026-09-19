@@ -5,7 +5,7 @@ from a real trip and watch the dashboard show my actual share rather than the
 full amount." Aggregates from ``effective_amount`` alone, never raw ``amount``
 (see ``docs/architecture.md``).
 
-Data safety (``.claude/rules/data-safety.md``): this handler logs only
+Data safety (``docs/engineering.md``): this handler logs only
 currency codes, counts, and the requested granularity/timezone — never
 amounts.
 """

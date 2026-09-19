@@ -1,7 +1,7 @@
 """Tests for the token encryption helper.
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only —
-never a real bank token or a real key (see ``.claude/rules/data-safety.md``).
+never a real bank token or a real key (see ``docs/engineering.md``).
 """
 
 import pytest

@@ -19,7 +19,7 @@ argument rather than importing :mod:`traccio.core.config`, so the layering rule
 holds (``providers/`` imports only ``domain`` plus stdlib/third-party); the
 caller reads the path from settings and passes the loaded PEM in.
 
-Data safety (``.claude/rules/data-safety.md``): this module never logs, and no
+Data safety (``docs/engineering.md``): this module never logs, and no
 exception it raises contains the private key or the minted token.
 """
 

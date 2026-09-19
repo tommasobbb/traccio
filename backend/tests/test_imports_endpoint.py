@@ -3,7 +3,7 @@
 The app is built via the factory with ``get_session`` overridden to a shared
 in-memory SQLite engine, so the endpoints run end to end (routing, xlsx/csv
 decode, parse, insert). Files are built in-memory; values are synthetic
-(``.claude/rules/data-safety.md``).
+(``docs/engineering.md``).
 """
 
 import base64

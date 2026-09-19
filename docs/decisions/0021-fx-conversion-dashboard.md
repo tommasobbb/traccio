@@ -111,7 +111,7 @@ carries.
   dependency to a screen that must still work when the rate API is briefly
   down. The cache table makes a brief outage invisible.
 - **A `RateProvider` ABC** (Strategy, like `BankProvider`). Rejected by
-  YAGNI (`.claude/rules/python.md`): there is exactly one rate source and no
+  YAGNI (`docs/engineering.md`): there is exactly one rate source and no
   concrete second one on the horizon. A module of functions plus a
   settings-driven base URL is the house style until a second source is real.
 - **A user-facing base-currency setting screen.** Deferred: there is no user

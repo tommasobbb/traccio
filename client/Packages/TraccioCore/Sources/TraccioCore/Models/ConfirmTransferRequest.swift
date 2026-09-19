@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Mirrors the `ConfirmTransferRequest` schema in `docs/api/openapi.json`.
 /// Field-identical to `RejectTransferRequest` on the wire, but kept as a
-/// separate type: `client/CLAUDE.md`'s "models mirror the backend schema" is
+/// separate type: `docs/engineering.md`'s "models mirror the backend schema" is
 /// what makes an independent rename on either endpoint a compile error —
 /// collapsing the two into one shared type would quietly lose that for
 /// whichever endpoint changes.

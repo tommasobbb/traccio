@@ -98,7 +98,7 @@ auth will look like.
 
 The follow-up flagged in Consequences above. `APIClient+Dev.swift`'s
 hardcoded `http://localhost:8000` (a force-unwrapped literal —
-`.claude/rules/swift.md` forbids `!` outside test scaffolding, which this
+`docs/engineering.md` forbids `!` outside test scaffolding, which this
 already wasn't) is replaced by `TraccioCore.ServerConfigurationStore`: the
 base URL in `UserDefaults` (not financial data), the token in the Keychain
 via a new `APITokenStoring` seam (`KeychainAPITokenStore` in production, an

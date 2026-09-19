@@ -2,7 +2,7 @@
 ///
 /// Mirrors the `SyncResponse` schema in `docs/api/openapi.json`. Only counts
 /// are returned, never account or transaction contents
-/// (`.claude/rules/data-safety.md`); the data itself is read back via the
+/// (`docs/engineering.md`); the data itself is read back via the
 /// resource endpoints (`GET /accounts`, `GET /transactions`).
 public struct SyncResponse: Codable, Sendable, Equatable {
     /// How many accounts were discovered and persisted.

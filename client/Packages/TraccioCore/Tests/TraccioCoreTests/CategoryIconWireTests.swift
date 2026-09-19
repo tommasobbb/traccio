@@ -5,7 +5,7 @@ import Testing
 
 /// Pins the wire spelling of every `CategoryIcon` / `AccountIcon` value
 /// against `docs/api/openapi.json` — the models are hand-maintained against
-/// the schema (`client/CLAUDE.md`), so a typo like `phoneBill` instead of
+/// the schema (`docs/engineering.md`), so a typo like `phoneBill` instead of
 /// `phone_bill` would only surface at runtime without this.
 struct CategoryIconWireTests {
     /// Frozen copy of the backend `CategoryIcon` string values (ADR 0017 /

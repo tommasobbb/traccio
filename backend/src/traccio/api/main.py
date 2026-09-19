@@ -101,7 +101,7 @@ def create_app() -> FastAPI:
 
     app_version = resolve_version()
 
-    # Fail loudly and early (.claude/rules/python.md): an unauthenticated
+    # Fail loudly and early (docs/engineering.md): an unauthenticated
     # API is the deliberate localhost default (ADR 0014), but "production"
     # declared with no token would otherwise boot exposing every user's
     # financial data behind nothing but a log line. Development and test

@@ -49,7 +49,7 @@ class RuleResponse(BaseModel):
     pattern : str
         The text matched against. Returned to its owner over authenticated
         transport — it is merchant/counterparty text, never logged (see
-        ``.claude/rules/data-safety.md``).
+        ``docs/engineering.md``).
     created_at : datetime
         When the rule was created (timezone-aware, UTC).
     """

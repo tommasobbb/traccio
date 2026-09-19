@@ -5,9 +5,9 @@ import Testing
 
 /// Decoding tests for the file-import payloads (ADR 0023).
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids,
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids,
 /// round amounts. They pin the wire contract including the negative cases
-/// `client/CLAUDE.md` requires (unknown enum, missing required field).
+/// `docs/engineering.md` requires (unknown enum, missing required field).
 struct ImportResponseTests {
     private static let previewEnvelope = """
         {

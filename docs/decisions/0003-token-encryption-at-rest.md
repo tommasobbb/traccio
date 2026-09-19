@@ -15,7 +15,7 @@ this: "Token encryption at rest — decide the scheme before storing anything."
 
 The scheme had to be chosen before the Enable Banking adapter (which persists
 the first real credential) is built. Constraints: Traccio is a personal, local,
-dependency-light backend managed with `uv` (root `CLAUDE.md`), with no extra
+dependency-light backend managed with `uv` (`docs/engineering.md`), with no extra
 infrastructure and no legal entity before M4. Whatever is chosen must be simple,
 testable with no network, and portable across the dev Mac and CI.
 

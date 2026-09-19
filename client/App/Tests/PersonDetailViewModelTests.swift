@@ -5,8 +5,8 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `PersonDetailViewModel` against `FakeAPIClient` — the seam, not
-/// the implementation (`.claude/rules/swift.md`). Synthetic fixtures
-/// (`.claude/rules/data-safety.md`): invented ids and names, round amounts.
+/// the implementation (`docs/engineering.md`). Synthetic fixtures
+/// (`docs/engineering.md`): invented ids and names, round amounts.
 @MainActor
 struct PersonDetailViewModelTests {
     private static func person(

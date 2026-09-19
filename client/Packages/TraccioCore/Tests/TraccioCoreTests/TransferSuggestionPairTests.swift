@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `pairSuggestions(_:)` — pure, no networking.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids,
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids,
 /// round amounts, `"TEST MERCHANT 01"`.
 struct TransferSuggestionPairTests {
     private static func transaction(id: UUID, amount: Int) -> TransactionResponse {

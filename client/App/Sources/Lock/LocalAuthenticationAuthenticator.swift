@@ -45,7 +45,7 @@ struct LocalAuthenticationAuthenticator: BiometricAuthenticating {
 
     /// Map an `LAError` to the stable, value-free outcome `AppLock` sees —
     /// never the raw `LAError`/`localizedDescription`
-    /// (`.claude/rules/data-safety.md`).
+    /// (`docs/engineering.md`).
     private static func map(_ error: Error?) -> BiometricAuthError {
         guard let laError = error as? LAError else { return .failed }
         switch laError.code {

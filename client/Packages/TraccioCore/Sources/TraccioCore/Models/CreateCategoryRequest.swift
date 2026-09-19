@@ -12,7 +12,7 @@ import Foundation
 /// validates length and blankness (`domain/categories.py::normalize_category_name`),
 /// the parent's depth (ADR 0018), and name uniqueness; the client does not
 /// re-check any of them, letting a `404`/`409`/`422` surface instead
-/// (`.claude/rules/swift.md`).
+/// (`docs/engineering.md`).
 public struct CreateCategoryRequest: Encodable, Sendable {
     /// The category's name, e.g. `"Alimentari"`.
     public let name: String

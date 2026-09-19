@@ -3,7 +3,7 @@
 For local use only: it gives ``GET /accounts`` something to return before real
 bank data exists (M1). Idempotent — rows have fixed ids and are merged, so
 re-running changes nothing. All values are synthetic (see
-``.claude/rules/data-safety.md``); this never touches a real bank response.
+``docs/engineering.md``); this never touches a real bank response.
 
 Run with ``make seed-dev`` (needs a reachable database). ``seed_demo.py``
 (``make demo``) builds a full presentable dataset on top of the same user,

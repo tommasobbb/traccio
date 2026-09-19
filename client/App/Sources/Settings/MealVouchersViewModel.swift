@@ -6,7 +6,7 @@ import TraccioCore
 /// the current `meal_vouchers_enabled` setting and flips it.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). A simpler shape than `TrackingStartViewModel`
+/// (`docs/engineering.md`). A simpler shape than `TrackingStartViewModel`
 /// (a flat `Bool`, not a loaded/failed enum with a payload) since there is
 /// nothing else to show alongside the toggle.
 @MainActor

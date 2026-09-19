@@ -67,7 +67,7 @@ struct AmountText: View {
 
     /// Split a formatted figure into everything-before-the-cents and the
     /// ",dd" tail. Italian formatting only (the client is Italian-only,
-    /// `client/CLAUDE.md`): the decimal separator is "," and there are always
+    /// `docs/engineering.md`): the decimal separator is "," and there are always
     /// exactly two fraction digits. Any other shape (the "XXX" wallet
     /// fallback, a future locale change) returns `nil` and the caller renders
     /// the whole string in one run.

@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the categories payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`) — invented names,
+/// Fixtures are synthetic (`docs/engineering.md`) — invented names,
 /// no financial data (a category has none).
 struct CategoryResponseTests {
     @Test func decodesEnvelopePreservingOrderAndFields() throws {

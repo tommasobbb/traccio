@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.groupByDay(_:calendar:)` — pure grouping logic, no
 /// backend involved. Fixtures are synthetic round amounts and invented
-/// merchants (`.claude/rules/data-safety.md`).
+/// merchants (`docs/engineering.md`).
 struct TransactionDayGroupTests {
     private static let calendar = Calendar(identifier: .gregorian)
 

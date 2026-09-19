@@ -4,7 +4,7 @@ The HTTP client loggers (``httpx``/``httpcore``) emit one INFO record per
 request whose message embeds the full request URL. For Enable Banking those
 URLs carry the consent secret and account uids, so ``configure_logging`` must
 pin those loggers above INFO regardless of the app's configured level (see
-``.claude/rules/data-safety.md``). These tests use only synthetic values.
+``docs/engineering.md``). These tests use only synthetic values.
 """
 
 import io

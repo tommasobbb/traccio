@@ -25,7 +25,7 @@ adapter, the token-encryption scheme, and the redirect-URL decision are separate
 work (see ``tasks/backlog.md`` M1 and ``docs/openbanking.md``); the method
 signatures here are intentionally minimal and firm up alongside that adapter.
 
-Data safety (``.claude/rules/data-safety.md``): the DTOs below and the
+Data safety (``docs/engineering.md``): the DTOs below and the
 ``credentials`` passed to the fetch methods carry consent/session secrets.
 Secret fields are excluded from ``repr`` so an accidental log of a whole
 instance cannot leak them, but the rule stands — log identifiers and counts,
@@ -48,7 +48,7 @@ class ProviderError(Exception):
     above ``providers/`` catch — so callers never handle provider-specific
     exception types (the anti-corruption rule extends to errors, not just data).
 
-    Messages must be **stable and value-free** (``.claude/rules/data-safety.md``):
+    Messages must be **stable and value-free** (``docs/engineering.md``):
     an adapter never re-raises a provider/library exception unchanged, since its
     message may carry a response body; it wraps it with ``raise ... from`` and a
     fixed message, attaching only a non-sensitive identifier when one helps.

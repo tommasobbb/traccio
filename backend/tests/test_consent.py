@@ -2,7 +2,7 @@
 
 Pure unit tests: no database, no network, no wall clock — ``now`` is always
 passed in. Fixtures use synthetic values only (round timestamps, invented
-institution names) — see ``.claude/rules/data-safety.md``.
+institution names) — see ``docs/engineering.md``.
 """
 
 from datetime import UTC, datetime, timedelta

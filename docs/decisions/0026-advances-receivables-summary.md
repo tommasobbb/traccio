@@ -15,7 +15,7 @@ participant (ADR 0012).
 advance*. The first question the feature gets in daily use is the opposite
 shape: **"who owes me money, and how much in total?"** Answering it means
 adding up participants and outstandings *across* advances — and there is no
-place that belongs on the client (`client/CLAUDE.md`: "the backend owns
+place that belongs on the client (`docs/engineering.md`: "the backend owns
 every derived value").
 
 Two facts make this awkward:
@@ -104,7 +104,7 @@ filters the visible rows.
   already loads everything the summary needs, and a second endpoint means a
   second round trip and a second set of the same aggregate queries. The
   envelope "leaves room for metadata later" — this is that.
-- **Client-side summation.** Rejected outright by `client/CLAUDE.md` — a
+- **Client-side summation.** Rejected outright by `docs/engineering.md` — a
   derived number is a backend gap, not a client feature.
 - **A `Person` entity now** (table scoped by `user_id`, participants
   reference it, merge/rename UI). The correct long-term model, but a

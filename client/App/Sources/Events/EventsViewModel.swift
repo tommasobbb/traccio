@@ -5,16 +5,16 @@ import TraccioCore
 /// Drives `EventsView`: the caller's events, and creating a new one.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`): `total`/`memberCount` are server-derived
+/// (`docs/engineering.md`): `total`/`memberCount` are server-derived
 /// (`domain/events.py::event_total`), this view model only renders them.
 /// Nothing here logs or prints an event: its `name` is user-typed
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 @MainActor
 @Observable
 final class EventsViewModel {
     /// Why creating an event failed, for the view to surface. Carries only a
     /// status-derived reason, never the response body
-    /// (`.claude/rules/data-safety.md`) — same shape as
+    /// (`docs/engineering.md`) — same shape as
     /// `CategorizationViewModel.ActionFailure`.
     enum ActionFailure: Equatable {
         case generic

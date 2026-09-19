@@ -11,7 +11,7 @@ Detection only *suggests* (``GET /transfers/suggestions``); it never links (see
 - ``DELETE /transfers/{id}`` unlinks and reverts both legs to ``personal``.
 - ``GET /transfers`` lists the confirmed transfers.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
+Data safety (``docs/engineering.md``): these handlers log only ids and
 counts — never amounts or descriptions.
 """
 

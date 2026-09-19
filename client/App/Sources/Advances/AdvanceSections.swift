@@ -6,7 +6,7 @@ import TraccioCore
 /// actions on them — rendered only for a transaction whose advance resolved.
 ///
 /// Every displayed value still arrives via `init`, never recomputed here
-/// (`client/CLAUDE.md`: the backend owns every derived value;
+/// (`docs/engineering.md`: the backend owns every derived value;
 /// `receivable`/`reimbursed`/`outstanding`/`excess` are `AdvanceResponse`
 /// fields). The actions, though, are no longer presentational-only: this view
 /// owns the confirmation-dialog state for the two destructive ones (unlink,

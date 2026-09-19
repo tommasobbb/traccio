@@ -3,7 +3,7 @@
 The app is built via the factory with ``get_session`` overridden to a shared
 in-memory SQLite engine, so routing, schemas, and repository queries are all
 exercised without a running PostgreSQL. Values are synthetic
-(``.claude/rules/data-safety.md``): invented names, round amounts.
+(``docs/engineering.md``): invented names, round amounts.
 """
 
 from collections.abc import Iterator

@@ -11,7 +11,7 @@ transaction belongs to at most one event; assigning one already grouped
 elsewhere is refused (``409``). Deleting an event removes only the grouping — the
 transactions survive, back to no event.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
+Data safety (``docs/engineering.md``): these handlers log only ids and
 counts — never amounts, descriptions, or names.
 """
 

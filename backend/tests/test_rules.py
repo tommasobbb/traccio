@@ -1,7 +1,7 @@
 """Tests for the pure rule logic (``domain/rules``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(round amounts, invented patterns) — see ``.claude/rules/data-safety.md``.
+(round amounts, invented patterns) — see ``docs/engineering.md``.
 """
 
 from uuid import uuid4

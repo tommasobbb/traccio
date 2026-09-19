@@ -7,7 +7,7 @@ maps, then hands off to the pure
 selection, delimiter sniffing and BOM handling live here; classification does
 not.
 
-Data safety (``.claude/rules/data-safety.md``): nothing here logs a cell value,
+Data safety (``docs/engineering.md``): nothing here logs a cell value,
 a description, or an amount — only counts and stable reason codes.
 """
 

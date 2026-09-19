@@ -4,7 +4,7 @@ The app is built via the factory; ``get_session`` binds a shared in-memory
 SQLite engine, and the bank provider and token cipher are overridden with test
 doubles, so the consent flow is exercised end to end (routing, persistence,
 encryption) without a running PostgreSQL, a real bank, or a real key. Values are
-synthetic (see ``.claude/rules/data-safety.md``).
+synthetic (see ``docs/engineering.md``).
 """
 
 from collections.abc import Iterator

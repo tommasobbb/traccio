@@ -38,7 +38,7 @@ identical path, or the pipeline exists twice and drifts. The alternative
 (keep `services/sync.py` pure, thread `~6` repository functions through its
 signature as parameters) was rejected: it preserves the letter of the old
 table at the cost of ceremony the code has not earned
-(`.claude/rules/python.md`'s own YAGNI guidance). What still holds without
+(`docs/engineering.md`'s own YAGNI guidance). What still holds without
 exception: `db/`, `providers/`, and `core/` never import `services/`, and
 `services/` never imports `api/` — HTTP status codes and request/response
 schemas stay in the router. `docs/architecture.md`'s layer table is updated
@@ -96,7 +96,7 @@ single-user personal deployment does not need yet (YAGNI) — `make run`'s
 (`tasks/backlog.md`: Tailscale vs. a small VPS vs. LAN) has not landed on
 anything that would run more than one worker either. Revisit if it does.
 
-**7. `TRACCIO_BACKGROUND_SYNC_ENABLED` defaults to `false`.** `backend/CLAUDE.md`
+**7. `TRACCIO_BACKGROUND_SYNC_ENABLED` defaults to `false`.** `docs/engineering.md`
 requires the app to boot with no `.env` present; a background loop that calls
 a real bank the moment the server starts, with no explicit opt-in, is exactly
 the surprise that default exists to prevent. Turning it on is a deliberate

@@ -20,8 +20,8 @@ private final class FakeServerConfigurationStore: ServerConfigurationStoring, @u
 }
 
 /// Tests for `ServerSettingsViewModel` against `FakeAPIClient` — no network
-/// stub needed, per `.claude/rules/swift.md`'s "test the seam." Fixtures are
-/// synthetic (`.claude/rules/data-safety.md`).
+/// stub needed, per `docs/engineering.md`'s "test the seam." Fixtures are
+/// synthetic (`docs/engineering.md`).
 @MainActor
 struct ServerSettingsViewModelTests {
     private static let initialConfiguration = ServerConfiguration(

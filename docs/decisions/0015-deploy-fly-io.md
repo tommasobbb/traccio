@@ -26,7 +26,7 @@ volume — the running cost is close to a comparable VPS (~4 $/month), not
 free: Fly closed its no-card free allowance in October 2024, corrected
 mid-conversation after the user assumed otherwise.
 
-This is a deliberate exception to the root `CLAUDE.md`'s "don't add a new
+This is a deliberate exception to the `docs/engineering.md`'s "don't add a new
 top-level dependency (a new DB, a task queue, **Docker**) to solve a problem
 you haven't hit yet" — the problem this closes (`tasks/backlog.md`'s "the
 client cannot reach the backend from a real device") is real and already
@@ -59,7 +59,7 @@ hit, and Fly's deploy unit *is* a container; there was no lighter path to
   immediately: two machines would double the monthly cost for a
   single-user app, and would run ADR 0010's background scheduler twice —
   synchronizing the same connections from two processes at once. Sync is
-  idempotent (root `CLAUDE.md`), so this would not have corrupted data, but
+  idempotent (`docs/engineering.md`), so this would not have corrupted data, but
   it would have burned each bank's rate-limit budget twice as fast for no
   benefit. `fly scale show` confirms the count persists across future
   deploys.

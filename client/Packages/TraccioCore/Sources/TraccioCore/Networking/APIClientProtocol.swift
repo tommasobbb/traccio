@@ -2,7 +2,7 @@ import Foundation
 
 /// The seam a view model depends on instead of the concrete `APIClient`.
 ///
-/// Per `.claude/rules/swift.md` ("Protocols at real seams, not everywhere"):
+/// Per `docs/engineering.md` ("Protocols at real seams, not everywhere"):
 /// the API client is the one place a caller must not know the concrete type,
 /// so a view model can be tested against a fake without a network stub.
 ///

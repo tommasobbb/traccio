@@ -5,8 +5,8 @@ import TraccioCore
 @testable import Traccio
 
 /// Tests for `AdvancesViewModel` against `FakeAPIClient` — no network stub,
-/// per `.claude/rules/swift.md`'s "test the seam." Fixtures are synthetic
-/// (`.claude/rules/data-safety.md`): invented ids and names, round amounts.
+/// per `docs/engineering.md`'s "test the seam." Fixtures are synthetic
+/// (`docs/engineering.md`): invented ids and names, round amounts.
 @MainActor
 struct AdvancesViewModelTests {
     private static let advanceID = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!

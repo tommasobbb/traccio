@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.groupByConnection(connections:accounts:)` — pure
 /// grouping logic, no backend involved. Fixtures are synthetic
-/// (`.claude/rules/data-safety.md`): invented bank names, round amounts are
+/// (`docs/engineering.md`): invented bank names, round amounts are
 /// not even in play here since accounts carry no amount.
 struct ConnectionGroupTests {
     private static func connection(id: UUID = UUID(), name: String = "Test Bank")

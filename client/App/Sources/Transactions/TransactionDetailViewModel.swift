@@ -6,13 +6,13 @@ import TraccioCore
 /// category, and holds the category list the picker renders.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). After a successful write it re-fetches the single
+/// (`docs/engineering.md`). After a successful write it re-fetches the single
 /// transaction via `transaction(id:)` rather than mutating
 /// `effectiveCategoryID` locally, so the backend stays the only place that
 /// resolves confirmed-vs-suggested (`domain/categories.py::effective_category`)
 /// — see `docs/architecture.md`. Nothing here logs or prints a transaction:
 /// it carries an amount and a raw bank description, both sensitive
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 ///
 /// The type is split by concern across `TransactionDetailViewModel+*.swift`
 /// in this directory (category, manual edit, transfer, advance,

@@ -10,7 +10,7 @@ import Foundation
 /// The backend validates the pattern's length and normalizes it
 /// (`domain/rules.py::normalize_rule_pattern`); the client sends the raw
 /// typed text and lets a `422` surface if it is blank or too long, rather
-/// than re-implementing that check (see `.claude/rules/swift.md`). Likewise
+/// than re-implementing that check (see `docs/engineering.md`). Likewise
 /// for uniqueness: a duplicate `(match_kind, pattern)` surfaces as a `409`
 /// the client did not predict.
 public struct CreateRuleRequest: Encodable, Sendable {

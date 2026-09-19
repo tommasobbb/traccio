@@ -84,10 +84,10 @@ targets:
       testTargets:
         - TraccioTests
 
-  # View-model tests for App/ — the seam `.claude/rules/swift.md` asks for
+  # View-model tests for App/ — the seam `docs/engineering.md` asks for
   # (`APIClientProtocol` + a fake) needed a target to run in; this is it.
   # Deliberately separate from `make test`/`make test-core`, which stay
-  # Xcode-free (`client/CLAUDE.md`) — see `make test-app`.
+  # Xcode-free (`docs/engineering.md`) — see `make test-app`.
   TraccioTests:
     type: bundle.unit-test
     supportedDestinations: [iOS, macOS]

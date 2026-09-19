@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the transactions payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented
+/// Fixtures are synthetic (`docs/engineering.md`): invented
 /// merchants, round amounts. They pin the wire contract: field name mapping,
 /// the `TransactionRole`/`TransactionStatus` enums, `null` handling, and
 /// every required field being genuinely required. A backend field rename or

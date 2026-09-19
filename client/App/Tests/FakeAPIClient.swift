@@ -7,12 +7,12 @@ import TraccioCore
 /// `APIClientProtocol` requires `Sendable` conformance, and an actor gets that
 /// for free while still letting a test configure canned responses safely
 /// across `await` boundaries. Lives in the test target, not `TraccioCore`
-/// (`.claude/rules/swift.md`): a production module should not ship a fake.
+/// (`docs/engineering.md`): a production module should not ship a fake.
 ///
 /// Every method has a safe default (an empty collection, or a placeholder
 /// value) so a test that doesn't care about a given call doesn't need to
 /// configure it. Fixtures are synthetic throughout
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 ///
 /// This file holds only the actor's stored state and `NotConfigured`. The
 /// `Recorded*` types, the `set*` configuration methods, and the

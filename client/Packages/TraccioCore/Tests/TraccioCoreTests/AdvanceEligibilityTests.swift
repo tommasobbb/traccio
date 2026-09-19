@@ -4,7 +4,7 @@ import Testing
 @testable import TraccioCore
 
 /// Tests for `TraccioCore.canBecomeAdvance(_:)`. Fixtures are synthetic
-/// (`.claude/rules/data-safety.md`): invented ids, round amounts.
+/// (`docs/engineering.md`): invented ids, round amounts.
 struct AdvanceEligibilityTests {
     private static func makeTransaction(
         amount: Int = -1000,

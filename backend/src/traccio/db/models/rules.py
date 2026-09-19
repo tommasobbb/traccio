@@ -34,7 +34,7 @@ class RuleRow(Base):
         The predicate applied to a transaction's ``description``.
     pattern : str
         The text to match against, case-insensitive. Never logged (see
-        ``.claude/rules/data-safety.md``).
+        ``docs/engineering.md``).
     created_at : datetime
         Creation timestamp (timezone-aware, UTC); the tiebreak when two rules
         match with an equal-length pattern.

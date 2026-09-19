@@ -4,7 +4,7 @@ The app is built via the factory and its ``get_session`` dependency is overridde
 to a shared in-memory SQLite engine, so the endpoints are exercised end to end
 (routing, validation, role writes, effective_amount threading, derived status)
 without a running PostgreSQL. Values are synthetic (see
-``.claude/rules/data-safety.md``).
+``docs/engineering.md``).
 """
 
 from collections.abc import Iterator

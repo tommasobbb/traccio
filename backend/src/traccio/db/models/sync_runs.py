@@ -46,7 +46,7 @@ class SyncRunRow(Base):
         How many transactions were fetched and upserted, across all accounts.
     error_reason : str or None
         A stable, value-free reason code, set only for a non-``success``
-        outcome. Never a provider message (``.claude/rules/data-safety.md``).
+        outcome. Never a provider message (``docs/engineering.md``).
     """
 
     __tablename__ = "sync_runs"

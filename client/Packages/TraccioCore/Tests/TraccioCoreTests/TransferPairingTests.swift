@@ -6,7 +6,7 @@ import Testing
 /// Tests for `TraccioCore.canLinkAsTransfer(_:_:)` — the client-side gate for
 /// which two rows may be linked as a transfer. Mirrors
 /// `validate_transfer_pair` on the fields present on `TransactionResponse`.
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// Fixtures are synthetic (`docs/engineering.md`).
 struct TransferPairingTests {
     private static let accountA = UUID()
     private static let accountB = UUID()

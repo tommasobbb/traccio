@@ -3,7 +3,7 @@
 Adds ``fx_rates`` — cached ECB reference rates for the opt-in dashboard
 combined total (``docs/decisions/0021-fx-conversion-dashboard.md``). One row
 per ``(base, quote, rate_date)``; ``rate`` is an exact decimal string, never a
-float or ``Numeric`` (root ``CLAUDE.md``: money is never floating point).
+float or ``Numeric`` (root ``docs/engineering.md``: money is never floating point).
 
 **Not scoped by ``user_id``** — ECB rates are public reference data, identical
 for every user, the same category as the seeded ``Category`` templates. This

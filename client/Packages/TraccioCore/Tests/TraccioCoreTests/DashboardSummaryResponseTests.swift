@@ -6,7 +6,7 @@ import Testing
 /// Decoding tests for the dashboard summary payload, plus the presentation
 /// rule that picks a primary currency to feature.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): round amounts,
+/// Fixtures are synthetic (`docs/engineering.md`): round amounts,
 /// invented currency mixes.
 struct DashboardSummaryResponseTests {
     /// A representative `GET /dashboard/summary` envelope: two currencies,
@@ -384,7 +384,7 @@ struct PrimaryCurrencyTests {
 }
 
 /// Decoding tests for `CategorySummaryResponse` (the child type) in
-/// isolation, covering the negative cases per `client/CLAUDE.md`'s "a
+/// isolation, covering the negative cases per `docs/engineering.md`'s "a
 /// decoding test per model".
 struct CategorySummaryResponseTests {
     @Test func decodesAChildWithColorAndIcon() throws {
@@ -509,7 +509,7 @@ struct CategoryGroupSummaryResponseTests {
 }
 
 /// Decoding tests for `BucketSummaryResponse` in isolation, covering the
-/// negative cases per `client/CLAUDE.md`'s "a decoding test per model".
+/// negative cases per `docs/engineering.md`'s "a decoding test per model".
 struct BucketSummaryResponseTests {
     @Test func decodesStartAndEndAsBareCalendarDates() throws {
         let json = """

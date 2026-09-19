@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.donutSegments(_:)` — pure geometry, no drawing
 /// framework involved. Fixtures are synthetic round amounts
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 struct DonutSegmentsTests {
     private static func entry(
         categoryID: UUID? = nil,

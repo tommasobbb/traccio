@@ -4,7 +4,7 @@ import Testing
 @testable import TraccioCore
 
 /// Tests for `TraccioCore.trackingTimeline(...)` — the "Inizio tracciamento"
-/// axis geometry. Fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// axis geometry. Fixtures are synthetic (`docs/engineering.md`).
 struct TrackingTimelineTests {
     private let a1 = UUID()
     private let a2 = UUID()

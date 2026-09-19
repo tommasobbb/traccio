@@ -5,7 +5,7 @@ import Testing
 
 /// Decoding tests for the events payload.
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`): invented ids,
+/// Fixtures are synthetic (`docs/engineering.md`): invented ids,
 /// round amounts, `"TEST TRIP 01"`. They pin the wire contract: field name
 /// mapping, `start_date`/`end_date` as `CalendarDate` (not a full
 /// date-time), `currency: null` on an empty event as a valid state, the

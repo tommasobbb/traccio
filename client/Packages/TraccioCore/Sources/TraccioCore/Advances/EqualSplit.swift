@@ -5,7 +5,7 @@ extension TraccioCore {
     /// A form-prefill helper for `CreateAdvanceSheet` only — every value it
     /// produces stays editable by the user before the advance is created, and
     /// the advance's authoritative `receivable`/`outstanding` always comes
-    /// back from the server afterwards (`client/CLAUDE.md`: the backend owns
+    /// back from the server afterwards (`docs/engineering.md`: the backend owns
     /// every derived value). This just saves the common "split the dinner
     /// bill N ways" case some typing.
     ///

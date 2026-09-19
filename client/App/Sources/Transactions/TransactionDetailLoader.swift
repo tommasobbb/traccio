@@ -10,7 +10,7 @@ import TraccioCore
 ///
 /// Presentation only: the one `@Observable` model below does orchestration
 /// (call the client, publish the outcome), no derivation — same split as
-/// every other screen (`client/CLAUDE.md`).
+/// every other screen (`docs/engineering.md`).
 struct TransactionDetailLoader: View {
     @State private var model: Model
     private let advance: AdvanceResponse?

@@ -5,7 +5,7 @@ SQLite engine and a local :class:`FakeProvider` — no asyncio needed. The two
 ``run_scheduler`` tests exercise the async loop itself, with
 ``asyncio.to_thread`` monkeypatched to run synchronously in-process: no real
 thread, no real sleep, no network (matching the same discipline as every
-other test file — ``.claude/rules/data-safety.md``, synthetic values only).
+other test file — ``docs/engineering.md``, synthetic values only).
 """
 
 import asyncio

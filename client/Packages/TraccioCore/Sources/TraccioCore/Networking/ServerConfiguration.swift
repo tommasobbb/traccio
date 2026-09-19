@@ -30,7 +30,7 @@ public protocol ServerConfigurationStoring: Sendable {
 }
 
 /// The production `ServerConfigurationStoring`: the base URL in
-/// `UserDefaults` (not financial data — `.claude/rules/data-safety.md`'s
+/// `UserDefaults` (not financial data — `docs/engineering.md`'s
 /// restriction is narrower than "no `UserDefaults` at all", same reasoning
 /// as the biometric-lock toggle), the token in the Keychain via
 /// `APITokenStoring`.
@@ -43,7 +43,7 @@ public struct ServerConfigurationStore: ServerConfigurationStoring {
         // must handle arbitrary, possibly-malformed input; this literal is
         // fixed and always parses, so a nil here would mean the literal
         // itself was mistyped — a programmer error to fail loudly on
-        // (`.claude/rules/python.md`'s "fail loudly and early" applied to
+        // (`docs/engineering.md`'s "fail loudly and early" applied to
         // Swift), not a force-unwrap of genuinely optional input.
         guard let url = URL(string: "http://localhost:8000") else {
             preconditionFailure("hardcoded default base URL failed to parse")

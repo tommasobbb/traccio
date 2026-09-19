@@ -5,7 +5,7 @@ import Testing
 
 /// Tests for `TraccioCore.reimbursementAmountInput(forLinked:)` — the string
 /// that seeds `AddReimbursementSheet`'s amount field when a movement is
-/// linked. Fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// linked. Fixtures are synthetic (`docs/engineering.md`).
 struct ReimbursementPrefillTests {
     private static func makeTransaction(amount: Int) -> TransactionResponse {
         TransactionResponse(

@@ -4,7 +4,7 @@ extension TraccioCore {
     /// The app's one fixed locale for date/number display.
     ///
     /// Traccio has no localization tables — every string in the UI is
-    /// hardcoded Italian (`client/CLAUDE.md`) — so a date or a number that
+    /// hardcoded Italian (`docs/engineering.md`) — so a date or a number that
     /// followed the *device's* locale instead would read in a different
     /// language than every label around it whenever the device isn't set to
     /// Italian. `MoneyFormatter` already documents the app as

@@ -1,7 +1,7 @@
 """Tests for the pure categorization service (``services/categorization``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only —
-see ``.claude/rules/data-safety.md``.
+see ``docs/engineering.md``.
 """
 
 from datetime import UTC, datetime, timedelta

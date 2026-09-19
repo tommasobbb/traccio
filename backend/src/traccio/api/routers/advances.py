@@ -14,7 +14,7 @@ same ``/advances/{id}/reimbursements`` path prefix but in
 :mod:`traccio.api.routers.reimbursements`, the same split ``/events/{id}/...``
 already has between this package's routers.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
+Data safety (``docs/engineering.md``): these handlers log only ids and
 counts — never amounts or descriptions.
 """
 

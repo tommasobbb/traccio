@@ -6,7 +6,7 @@ import TraccioCore
 
 /// Tests for `ImportTransactionsViewModel` — the preview/commit orchestration
 /// behind `ImportTransactionsSheet` (ADR 0023). The seam is `APIClientProtocol`
-/// (`FakeAPIClient`); fixtures are synthetic (`.claude/rules/data-safety.md`).
+/// (`FakeAPIClient`); fixtures are synthetic (`docs/engineering.md`).
 @MainActor
 struct ImportTransactionsViewModelTests {
     private static func request() -> ImportPreviewRequest {

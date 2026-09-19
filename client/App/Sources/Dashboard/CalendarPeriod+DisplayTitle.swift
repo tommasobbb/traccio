@@ -6,7 +6,7 @@ extension CalendarPeriod {
     /// (quarter), "2026" (year) — `TraccioCore.formatDate` where that can do
     /// it (month, year), and a small Italian-only literal for the quarter
     /// label ("T" for "Trimestre"), consistent with the client being
-    /// officially Italian-only (`client/CLAUDE.md`). Lives here, not on
+    /// officially Italian-only (`docs/engineering.md`). Lives here, not on
     /// `CalendarPeriod` itself in `TraccioCore`, per the "display copy stays
     /// in the view" rule `TransactionPeriodPreset` and
     /// `TransactionsView.title(for:)` already follow — used by both

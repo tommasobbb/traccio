@@ -9,7 +9,7 @@ every one of the user's transactions from scratch, so a stale suggestion whose
 rule was deleted since the last run gets cleared, keeping the operation
 idempotent.
 
-Data safety (``.claude/rules/data-safety.md``): a rule's ``pattern`` is
+Data safety (``docs/engineering.md``): a rule's ``pattern`` is
 merchant/counterparty text. These handlers log only ids and counts — **never a
 pattern**.
 """

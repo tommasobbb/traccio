@@ -8,7 +8,7 @@ extension TraccioCore {
     /// the "Segna come anticipo" action — the `own_share` range check is not
     /// duplicated here and stays entirely server-side, which answers `422`
     /// with a stable, value-free reason if the declared share is out of
-    /// range (`.claude/rules/data-safety.md`: never a value in an error).
+    /// range (`docs/engineering.md`: never a value in an error).
     ///
     /// Parameters
     /// ----------

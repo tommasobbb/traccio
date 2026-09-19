@@ -9,7 +9,7 @@ import TraccioCore
 struct CategoryEditorSheet: View {
     /// Which write this sheet performs. Modeled as an enum rather than an
     /// optional `CategoryResponse` plus a boolean flag, so "editing nothing"
-    /// is unrepresentable (`.claude/rules/swift.md`).
+    /// is unrepresentable (`docs/engineering.md`).
     enum Mode {
         /// A new root (`parentID == nil`) or a new child of an existing root.
         case create(parentID: UUID?)

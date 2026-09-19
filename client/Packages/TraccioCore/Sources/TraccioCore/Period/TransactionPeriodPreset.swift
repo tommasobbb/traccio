@@ -13,7 +13,7 @@ import Foundation
 ///
 /// Display copy (e.g. "Questo mese") is not this type's job — the client is
 /// officially Italian-only with hardcoded literals in the presentation layer
-/// (`client/CLAUDE.md`), the same pattern `TransactionsView.title(for:)`
+/// (`docs/engineering.md`), the same pattern `TransactionsView.title(for:)`
 /// already follows for day-group headers, so a view maps a case to its label
 /// itself.
 public enum TransactionPeriodPreset: CaseIterable, Sendable, Equatable {

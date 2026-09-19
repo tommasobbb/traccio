@@ -5,8 +5,8 @@ import Testing
 
 /// Decoding/encoding tests for the settings payloads (ADR 0024, ADR 0029).
 ///
-/// Fixtures are synthetic (`.claude/rules/data-safety.md`). They pin the wire
-/// contract, including the negative cases `client/CLAUDE.md` requires.
+/// Fixtures are synthetic (`docs/engineering.md`). They pin the wire
+/// contract, including the negative cases `docs/engineering.md` requires.
 struct SettingsResponseTests {
     @Test func decodesASetDate() throws {
         let response = try TraccioCore.jsonDecoder().decode(

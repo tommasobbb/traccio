@@ -7,8 +7,8 @@ import TraccioCore
 /// 0023).
 ///
 /// All it does is call `APIClient` and hold the outcome — no derivation
-/// (`client/CLAUDE.md`). Nothing here logs the file or a movement: both carry
-/// amounts and descriptions (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`). Nothing here logs the file or a movement: both carry
+/// amounts and descriptions (`docs/engineering.md`).
 @MainActor
 @Observable
 final class ImportTransactionsViewModel {
@@ -106,7 +106,7 @@ final class ImportTransactionsViewModel {
     /// can be a security-scoped URL from `.fileImporter` (e.g. iCloud Drive),
     /// which may take a while to materialize, and base64-encoding a
     /// multi-megabyte file is not free either. Neither belongs on the main
-    /// thread (`.claude/rules/swift.md`).
+    /// thread (`docs/engineering.md`).
     func loadFile(at url: URL) async {
         phase = .idle
         pickedFile = nil

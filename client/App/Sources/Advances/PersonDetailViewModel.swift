@@ -5,7 +5,7 @@ import TraccioCore
 /// Drives `PersonDetailView`: one person's receivable, rolled up across every
 /// advance they appear on, plus that list of advances.
 ///
-/// Orchestration only (`client/CLAUDE.md`). The person row (`expected`,
+/// Orchestration only (`docs/engineering.md`). The person row (`expected`,
 /// `reimbursed`, `outstanding`) is `PersonSummaryResponse`, computed
 /// server-side; the advances are `GET /advances`'s rows filtered to this
 /// person by the server-issued `personKey` (never a name re-folded here,

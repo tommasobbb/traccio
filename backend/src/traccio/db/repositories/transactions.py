@@ -42,7 +42,7 @@ def upsert_transaction(session: Session, *, transaction: Transaction, now: datet
     dialect-specific upsert) so it behaves the same on SQLite and PostgreSQL. The
     caller owns the transaction boundary and commits.
 
-    The match is also scoped by ``user_id`` — root ``CLAUDE.md``'s "every query
+    The match is also scoped by ``user_id`` — root ``docs/engineering.md``'s "every query
     is scoped by ``user_id``, no exceptions" applies here too, even though
     ``account_id`` alone is already user-unique (an account belongs to exactly
     one user, like :func:`~traccio.db.repositories.upsert_account`'s own
@@ -163,7 +163,7 @@ def prune_stale_pending_transactions(session: Session, *, user_id: UUID, cutoff:
     """
     # Session.execute() is typed to return the generic Result[Any]; a Core
     # DELETE always actually returns a CursorResult, which is what carries
-    # rowcount. Cast at this one edge, per .claude/rules/python.md.
+    # rowcount. Cast at this one edge, per docs/engineering.md.
     result = cast(
         "CursorResult[Any]",
         session.execute(

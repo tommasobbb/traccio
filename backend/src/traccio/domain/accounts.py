@@ -31,7 +31,7 @@ class AccountError(ValueError):
     Raised by :func:`normalize_account_alias`. Carries a stable, value-free
     ``reason`` (one of the module ``REASON_*`` constants) so the API layer can
     map it to an HTTP status without inspecting the message. The offending
-    alias is never included (see ``.claude/rules/data-safety.md`` — it is
+    alias is never included (see ``docs/engineering.md`` — it is
     user-typed data, not a financial value, but the same discipline applies).
 
     Attributes

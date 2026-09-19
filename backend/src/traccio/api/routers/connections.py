@@ -15,7 +15,7 @@ holds only the callback — the bank's browser redirect cannot carry a bearer
 header, so ``api/main.py`` includes it without that dependency. The callback
 stays protected by its own unpredictable ``state`` value instead.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only the
+Data safety (``docs/engineering.md``): these handlers log only the
 ``connection_id`` and outcome — never the ``code``, ``state``, ``session_id``,
 or the authorization url (which embeds ``state``).
 """
@@ -372,7 +372,7 @@ def connections(
 
     Scoped to the current user. Secret material never leaves ``db/``, so the
     projection cannot expose the consent secret or ``auth_state`` (see
-    ``.claude/rules/data-safety.md``).
+    ``docs/engineering.md``).
 
     Parameters
     ----------

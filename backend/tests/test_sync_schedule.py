@@ -2,7 +2,7 @@
 
 Pure unit tests: no database, no network, no wall clock — ``now`` is always
 passed in. Fixtures use synthetic values only (see
-``.claude/rules/data-safety.md``). Pays special attention to the exact
+``docs/engineering.md``). Pays special attention to the exact
 boundaries (budget exhausted at the count, interval reached exactly) —
 ``tasks/backlog.md`` flagged that ``consent_state``'s own boundary went
 untested for a while; this file does not repeat that gap.

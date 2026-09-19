@@ -44,7 +44,7 @@ extension TraccioCore {
     /// Format a `Date` for display in one of the app's named shapes.
     ///
     /// Builds a fresh `DateFormatter` per call rather than sharing a mutable
-    /// static — the same `Sendable`-safe posture `.claude/rules/swift.md`
+    /// static — the same `Sendable`-safe posture `docs/engineering.md`
     /// asks for (see the removed `TransferSuggestionCard.dateFormatter` and
     /// `TransferSection.dateFormatter` this replaces). Uses the device's own
     /// time zone (unset, `DateFormatter`'s default) since callers pass real

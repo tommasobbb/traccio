@@ -23,7 +23,7 @@ silently discard something the user organized deliberately" guard, and the
 structural one (children) is checked first because it can never be worked
 around by clearing a confirmation.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids
+Data safety (``docs/engineering.md``): these handlers log only ids
 and counts — **never a category name**, which is user-typed data.
 """
 

@@ -25,7 +25,7 @@ extension APIClient: TransactionsAPI {
     /// single row's server-derived `effectiveAmount`/`effectiveCategoryID`
     /// after a write (e.g. confirming a category) without re-paginating the
     /// whole list — the backend still owns every derived value
-    /// (`client/CLAUDE.md`).
+    /// (`docs/engineering.md`).
     ///
     /// Parameters
     /// ----------

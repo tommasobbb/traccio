@@ -21,7 +21,7 @@ composes this client. The endpoints here:
   transactions; the provider follows the ``continuation_key`` across pages and
   normalizes each entry into a domain object.
 
-Data safety (``.claude/rules/data-safety.md``): this module never logs the JWT,
+Data safety (``docs/engineering.md``): this module never logs the JWT,
 the credentials, or any response body. ``/auth`` and ``/sessions`` responses
 carry secrets (the SCA url embeds ``state``; a session response holds
 ``session_id`` and account details), so a failed request is wrapped in a

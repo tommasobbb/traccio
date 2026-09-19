@@ -45,7 +45,7 @@ def _is_emoji_base(ch: str) -> bool:
 class InvalidEmojiError(ValueError):
     """The supplied value is not a single emoji.
 
-    Carries a stable, value-free message (``.claude/rules/data-safety.md``):
+    Carries a stable, value-free message (``docs/engineering.md``):
     the rejected text is never echoed back.
     """
 

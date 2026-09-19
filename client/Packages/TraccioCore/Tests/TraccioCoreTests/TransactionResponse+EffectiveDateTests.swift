@@ -7,7 +7,7 @@ import Testing
 /// value_date)` mirror the day-grouping screen relies on. `TransactionDayGroupTests`
 /// exercises the same fallback indirectly through `groupByDay`; these pin the
 /// property itself. Fixtures are synthetic round amounts and an invented
-/// merchant (`.claude/rules/data-safety.md`).
+/// merchant (`docs/engineering.md`).
 struct TransactionResponseEffectiveDateTests {
     private static func transaction(bookedAt: Date?, valueDate: Date?) -> TransactionResponse {
         TransactionResponse(

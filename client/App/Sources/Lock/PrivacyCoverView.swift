@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What the app shows the instant it stops being `.active` — including the
 /// app-switcher snapshot iOS takes right then
-/// (`.claude/rules/data-safety.md`: "consider what appears in the app
+/// (`docs/engineering.md`: "consider what appears in the app
 /// switcher snapshot when the app is backgrounded").
 ///
 /// Deliberately dumber than `LockScreenView` and shown far more often: no

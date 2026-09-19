@@ -12,7 +12,7 @@ are their own resource, nested under ``/advances/{id}/reimbursements`` the same
 way ``/events/{id}/transactions`` is a resource of its own on the events
 router, not a second concern folded into it.
 
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids and
+Data safety (``docs/engineering.md``): these handlers log only ids and
 counts — never amounts or descriptions.
 """
 

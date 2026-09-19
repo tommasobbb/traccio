@@ -7,10 +7,10 @@ import TraccioCore
 /// more as the user scrolls.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation, no
-/// arithmetic (that lives in the backend, per `client/CLAUDE.md`). Nothing
+/// arithmetic (that lives in the backend, per `docs/engineering.md`). Nothing
 /// here logs or prints a transaction: rows carry amounts, raw bank
 /// descriptions, and counterparty names, all sensitive
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 @MainActor
 @Observable
 final class TransactionsViewModel {
@@ -101,7 +101,7 @@ final class TransactionsViewModel {
     private(set) var linkFailure: LinkFailure?
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
-    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// the concrete `APIClient` (`docs/engineering.md`), so a test can
     /// inject a fake. Not `private`: `TransactionsView` reads it to hand the
     /// same client down to `TransactionDetailView`, so both share one
     /// backend connection rather than each defaulting independently.
@@ -252,7 +252,7 @@ final class TransactionsViewModel {
     ///
     /// The refresh path for `TransactionDetailView`'s category actions: after
     /// a confirm/clear, the detail screen re-fetches the single row (its
-    /// server-derived `effectiveCategoryID` — see `client/CLAUDE.md`) and
+    /// server-derived `effectiveCategoryID` — see `docs/engineering.md`) and
     /// hands it here, rather than the whole list reloading and losing scroll
     /// position and loaded pages.
     ///
@@ -536,7 +536,7 @@ final class TransactionsViewModel {
     ///
     /// Cancels any debounce already waiting; only the most recent call
     /// within the window survives to actually change `filter`. Lives here
-    /// rather than in the view (`.claude/rules/swift.md`: view models do
+    /// rather than in the view (`docs/engineering.md`: view models do
     /// orchestration, views stay thin) so it is testable without SwiftUI.
     ///
     /// Parameters

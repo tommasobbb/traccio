@@ -8,16 +8,16 @@ import TraccioCore
 /// sync and re-authorization.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). Nothing here logs or prints a connection or account:
+/// (`docs/engineering.md`). Nothing here logs or prints a connection or account:
 /// both carry institution/account names, sensitive per
-/// `.claude/rules/data-safety.md`.
+/// `docs/engineering.md`.
 @MainActor
 @Observable
 final class AccountsViewModel {
     /// Why an in-flight sync or re-authorization failed, for the view to
     /// surface. Carries only a status-derived reason, never the response
     /// body — `APIError.badStatus` already drops it
-    /// (`.claude/rules/data-safety.md`).
+    /// (`docs/engineering.md`).
     enum ActionFailure: Equatable {
         case consentExpired(connectionID: UUID)
         case generic(connectionID: UUID)
@@ -95,7 +95,7 @@ final class AccountsViewModel {
     private(set) var startConnectionFailed = false
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
-    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// the concrete `APIClient` (`docs/engineering.md`), so a test can
     /// inject a fake.
     private let client: any APIClientProtocol
     /// Set once `backfillLogosIfNeeded(_:)` has run, so the one-time
@@ -205,7 +205,7 @@ final class AccountsViewModel {
     /// Returns
     /// -------
     /// The URL to open in the system browser — never an in-app `WebView`
-    /// (`.claude/rules/data-safety.md`) — or `nil` on failure, having already
+    /// (`docs/engineering.md`) — or `nil` on failure, having already
     /// recorded `actionFailure`.
     func reauthorize(connectionID: UUID) async -> URL? {
         guard !reauthorizing.contains(connectionID) else { return nil }
@@ -253,7 +253,7 @@ final class AccountsViewModel {
     /// Returns
     /// -------
     /// The URL to open in the system browser — never an in-app `WebView`
-    /// (`.claude/rules/data-safety.md`) — or `nil` on failure, having already
+    /// (`docs/engineering.md`) — or `nil` on failure, having already
     /// recorded `startConnectionFailed`.
     func startConnection(_ institution: InstitutionResponse) async -> URL? {
         guard !isStartingConnection else { return nil }

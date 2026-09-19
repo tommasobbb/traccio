@@ -7,7 +7,7 @@ pasto, ADR 0029). ``POST /accounts`` creates a **manual** account (ADR 0020)
 — one with no bank connection — and ``DELETE /accounts/{id}`` removes an
 empty one; a synced account is created, removed, and has its ``kind`` set
 only by the sync/connection flow.
-Data safety (``.claude/rules/data-safety.md``): these handlers log only ids
+Data safety (``docs/engineering.md``): these handlers log only ids
 and counts — never an alias, which is user-typed text.
 """
 

@@ -46,7 +46,7 @@ def test_schema_never_leaks_token_fields() -> None:
     """No token-like field name reaches the schema (data-safety rule).
 
     Tokens must never appear in the OpenAPI schema — see
-    ``.claude/rules/data-safety.md``. Serialising the whole document and
+    ``docs/engineering.md``. Serialising the whole document and
     checking for the substring is a cheap, future-proof guard against a new
     schema accidentally exposing one.
     """

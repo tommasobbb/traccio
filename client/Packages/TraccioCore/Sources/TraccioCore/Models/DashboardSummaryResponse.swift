@@ -124,7 +124,7 @@ public struct DashboardSummaryResponse: Codable, Sendable, Equatable {
     /// field stays required, same posture as `CurrencySummaryResponse`.
     /// `meal_vouchers` is newer than the rest of this envelope; decoding it
     /// with a fallback to `[]` means an existing fixture or an older cached
-    /// response (`client/CLAUDE.md`'s local read cache) still decodes rather
+    /// response (`docs/engineering.md`'s local read cache) still decodes rather
     /// than failing outright, exactly as if the setting were off.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)

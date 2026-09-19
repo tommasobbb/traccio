@@ -2,7 +2,7 @@
 
 An in-memory SQLite engine backs the queries so no PostgreSQL is needed. Every
 value is synthetic and the "credential" is an opaque placeholder, never a real
-token (see ``.claude/rules/data-safety.md``).
+token (see ``docs/engineering.md``).
 """
 
 from datetime import UTC, datetime, timedelta

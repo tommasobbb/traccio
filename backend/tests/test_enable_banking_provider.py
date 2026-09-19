@@ -2,7 +2,7 @@
 
 Offline: an ``httpx.MockTransport`` serves canned ``/auth`` and ``/sessions``
 responses so no network is touched. Credentials are a synthetic in-test RSA key;
-the session id and codes are synthetic (see ``.claude/rules/data-safety.md``).
+the session id and codes are synthetic (see ``docs/engineering.md``).
 """
 
 from datetime import UTC, datetime
@@ -172,7 +172,7 @@ def test_authorization_result_hides_the_session_credential() -> None:
 
 
 # Synthetic account details (invented IBAN, holder name, product) — see
-# .claude/rules/data-safety.md. The holder name and IBAN must never surface in
+# docs/engineering.md. The holder name and IBAN must never surface in
 # the normalized ProviderAccount.
 _IBAN = "IT60X0542811101000000123456"
 _HOLDER_NAME = "MARIO ROSSI"

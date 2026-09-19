@@ -119,7 +119,7 @@ already described. Tracked in `tasks/backlog.md`.
   `advance_shares` already established.
 - The M3 client catch-up builds the dashboard screen: it consumes
   `GET /dashboard/summary` as-is: per-currency, magnitudes plus one signed
-  net, no client-side derivation (`client/CLAUDE.md`: "the backend owns every
+  net, no client-side derivation (`docs/engineering.md`: "the backend owns every
   derived value").
 
 ## Revision — 2026-08-24: category breakdown
@@ -207,7 +207,7 @@ posture the display-name join already takes for a deleted category.
 timezone — retiring the previous revision's "honest UTC reading" acceptance.**
 The client's own zero-fill loop (`TraccioCore.dailyBars`, walking a calendar
 to invent empty bars between the earliest and latest entry) is exactly the
-kind of derivation `client/CLAUDE.md` forbids; it existed only because the
+kind of derivation `docs/engineering.md` forbids; it existed only because the
 backend did not yet know the requested period's actual bounds. Now, when both
 `start` and `end` are given, `summarize` emits the **complete** bucket series
 across the whole requested period, zero-value buckets included — the client

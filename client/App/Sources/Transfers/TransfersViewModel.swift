@@ -6,9 +6,9 @@ import TraccioCore
 /// rejects them.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). Nothing here logs or prints a transaction: legs
+/// (`docs/engineering.md`). Nothing here logs or prints a transaction: legs
 /// carry amounts and raw bank descriptions, both sensitive
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 ///
 /// `GET /transfers/suggestions` embeds both legs' full `TransactionResponse`
 /// in each suggestion, so `load()` is a single request — no per-leg fan-out.
@@ -40,7 +40,7 @@ final class TransfersViewModel {
     private(set) var successTick = 0
 
     /// Client used to reach the backend. `any APIClientProtocol` rather than
-    /// the concrete `APIClient` (`.claude/rules/swift.md`), so a test can
+    /// the concrete `APIClient` (`docs/engineering.md`), so a test can
     /// inject a fake.
     private let client: any APIClientProtocol
     /// Called once per refreshed leg after a successful confirm, so the

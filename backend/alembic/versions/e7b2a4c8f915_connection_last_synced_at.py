@@ -6,7 +6,7 @@ connection (``POST /connections/{id}/sync``), stamped by
 Conti screen can render "sincronizzato N min fa" per connection —
 ``docs/design/canvas/Accounts.dc.html`` — without inventing the figure
 client-side; the client never derives values the backend owns
-(``client/CLAUDE.md``).
+(``docs/engineering.md``).
 
 Unlike ``transactions.last_synced_at`` (``c4d9e3f8a6b5``), this is a plain
 display timestamp with no pruning logic reading it, so no index is needed.

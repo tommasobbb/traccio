@@ -13,7 +13,7 @@ design work.
 
 Starting the M3 catch-up, the product owner asked for something closer to
 Revolut or Monzo: curated, modern, accattivante. Not a literal recreation
-(`.claude/rules/data-safety.md` and the design skill's copyrighted-designs
+(`docs/engineering.md` and the design skill's copyrighted-designs
 rule both rule that out), but a custom visual language rather than stock
 `List`/`Form` styling.
 
@@ -26,7 +26,7 @@ described in prose. That canvas settled the direction this ADR records.
 
 **The client moves from stock native components to a custom, hand-styled
 design system**, still built entirely in SwiftUI (no UIKit, no third-party
-UI library — `.claude/rules/swift.md`'s "dependency-light" rule still
+UI library — `docs/engineering.md`'s "dependency-light" rule still
 applies to *how* the custom look is built, just not to *which* components
 render it).
 
@@ -57,7 +57,7 @@ sets of values.
 **What does not change:**
 
 - Logic still lives in `TraccioCore`; `App/` is still presentation only
-  (`client/CLAUDE.md`) — a richer visual layer does not move derivation or
+  (`docs/engineering.md`) — a richer visual layer does not move derivation or
   networking into views.
 - The backend still owns every derived value; no total, `effective_amount`,
   or spending share is computed client-side just because the UI got
@@ -88,7 +88,7 @@ sets of values.
   building them against no data would be inventing a client-side
   derivation, which the second bullet above forbids. Backend work first
   (`tasks/backlog.md`), chart UI after.
-- **`client/CLAUDE.md`'s claim that models are code-generated from
+- **`docs/engineering.md`'s claim that models are code-generated from
   `docs/api/openapi.json` was already false** before this ADR (the four
   existing models are hand-written) — corrected in the same change that
   records this decision, not caused by it.
@@ -101,7 +101,7 @@ sets of values.
   without wanting to open Revolut"*).
 - **Adopt a third-party SwiftUI design-system package.** Rejected for now
   under the same "dependency-light" reasoning as every other top-level
-  dependency in this repo (root `CLAUDE.md`): the custom system needed here
+  dependency in this repo (`docs/engineering.md`): the custom system needed here
   is a handful of reusable views, not a framework's worth of components.
   Revisit only if the hand-built system grows unwieldy.
 
@@ -218,7 +218,7 @@ to that category and the period currently shown. The legend pattern itself —
 pairing a chart's visual order to a side list by array position — is retired
 as a rule for this codebase, not just this one chart: a `zip` of two
 independently-filtered/sorted arrays is exactly the kind of implicit coupling
-`.claude/rules/swift.md`'s "make illegal states unrepresentable" warns against
+`docs/engineering.md`'s "make illegal states unrepresentable" warns against
 one array reordering out from under the other silently produced a
 mismatched row.
 

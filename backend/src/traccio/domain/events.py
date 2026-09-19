@@ -38,7 +38,7 @@ class EventError(ValueError):
     Raised by :func:`event_total`. Carries a stable, value-free ``reason`` (a
     module ``REASON_*`` constant) so the API layer can map it to an HTTP status
     without inspecting the message. No financial values are included (see
-    ``.claude/rules/data-safety.md``).
+    ``docs/engineering.md``).
 
     Attributes
     ----------

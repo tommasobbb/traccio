@@ -73,7 +73,7 @@ extension TraccioCore {
     /// Build the "Inizio tracciamento" timeline from the per-account
     /// suggestion (ADR 0024), the current floor, and a reference "now".
     ///
-    /// Pure axis geometry, not a derivation of any value (`client/CLAUDE.md`)
+    /// Pure axis geometry, not a derivation of any value (`docs/engineering.md`)
     /// — the same "turn a backend breakdown into drawable positions" shape as
     /// `spendingBars(_:)` / `donutSegments(_:)`. The axis runs from the
     /// earliest account first-movement to `now`; each account's

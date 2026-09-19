@@ -77,7 +77,7 @@ class Connection(BaseModel):
     typically exposes several accounts. Credentials and tokens are deliberately
     absent from this model: they are encrypted at rest in ``core``/``db`` and
     are never returned by any endpoint, not even to the owning user (see
-    ``.claude/rules/data-safety.md``).
+    ``docs/engineering.md``).
 
     Attributes
     ----------
@@ -591,7 +591,7 @@ class Rule(BaseModel):
         The predicate applied to a transaction's ``description``.
     pattern : str
         The text to match against, case-insensitive. Never logged (see
-        ``.claude/rules/data-safety.md`` — it is merchant/counterparty text).
+        ``docs/engineering.md`` — it is merchant/counterparty text).
     created_at : datetime
         When the rule was created (timezone-aware, UTC). Used as a tiebreak
         when two rules match with an equal-length pattern (see
@@ -643,7 +643,7 @@ class SyncRun(BaseModel):
         How many transactions were fetched and upserted, across all accounts.
         Zero for a failure or a skip.
     error_reason : str or None
-        A stable, value-free reason code (see ``.claude/rules/data-safety.md``
+        A stable, value-free reason code (see ``docs/engineering.md``
         — never a provider message or response body), set only when
         ``outcome`` is not ``success``.
     """

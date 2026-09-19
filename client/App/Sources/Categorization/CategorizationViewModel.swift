@@ -6,11 +6,11 @@ import TraccioCore
 /// rules, and runs `POST /rules/apply`.
 ///
 /// All it does is call `APIClient` and hold the result — no derivation
-/// (`client/CLAUDE.md`). `load()` fails the whole screen if *either* fetch
+/// (`docs/engineering.md`). `load()` fails the whole screen if *either* fetch
 /// fails: categories are not decoration here, every rule row resolves its
 /// `categoryID` through them. Nothing here logs or prints a rule or
 /// category: a pattern is merchant/counterparty text, a name is user-typed
-/// (`.claude/rules/data-safety.md`).
+/// (`docs/engineering.md`).
 @MainActor
 @Observable
 final class CategorizationViewModel {
@@ -23,7 +23,7 @@ final class CategorizationViewModel {
 
     /// Why an action failed, for the view to surface. Carries only a
     /// status-derived reason, never the response body
-    /// (`.claude/rules/data-safety.md`) — same shape as
+    /// (`docs/engineering.md`) — same shape as
     /// `AccountsViewModel.ActionFailure`.
     enum ActionFailure: Equatable {
         /// `DELETE /categories/{id}` refused because it is confirmed on a

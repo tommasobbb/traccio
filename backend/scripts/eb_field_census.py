@@ -16,7 +16,7 @@ database (``TransactionRow`` has no JSON column), so root cause needs a fresh
 live capture — this script is that capture, shaped so it structurally cannot
 leak a financial value.
 
-Data safety (``.claude/rules/data-safety.md``): the three guards below make a
+Data safety (``docs/engineering.md``): the three guards below make a
 value leak impossible by construction, not by discipline.
 
 1. **Nothing derived from a value is ever formatted into output.** The only

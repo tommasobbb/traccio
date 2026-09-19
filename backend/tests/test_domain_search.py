@@ -1,7 +1,7 @@
 """Tests for the pure search helpers (``domain/search``).
 
 Pure unit tests: no database, no network. Fixtures use synthetic values only
-(invented merchant text) — see ``.claude/rules/data-safety.md``.
+(invented merchant text) — see ``docs/engineering.md``.
 """
 
 from traccio.domain.search import escape_like, normalize_search_term
