@@ -493,14 +493,26 @@ struct TransactionsView: View {
 
     // MARK: Content
 
-    @ViewBuilder
+    /// One stable `ScrollView` across every state, so it — and the
+    /// `.refreshable` control it hosts — never gets torn down mid-request.
+    /// Before this, each state built its own `ScrollView` (or none, for the
+    /// empty/failed states), so a refresh's own transition to `.loading`
+    /// destroyed the very scroll view running its Task, surfacing the
+    /// resulting cancellation as "impossibile caricare i movimenti" — see
+    /// `TransactionsViewModel.loadPage()`'s cancellation guard for the other
+    /// half of that fix.
     private var content: some View {
+        ScrollView {
+            innerContent
+                .padding(Spacing.gutter)
+        }
+    }
+
+    @ViewBuilder
+    private var innerContent: some View {
         switch model.state {
         case .idle, .loading:
-            ScrollView {
-                ListSkeleton()
-                    .padding(Spacing.gutter)
-            }
+            ListSkeleton()
         case .loaded(let transactions) where transactions.isEmpty:
             emptyState
         case .loaded(let transactions):
@@ -536,23 +548,20 @@ struct TransactionsView: View {
 
     private func list(_ transactions: [TransactionResponse]) -> some View {
         let groups = TraccioCore.groupByDay(transactions)
-        return ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.cardGap) {
-                if model.transferSuggestionCount > 0 {
-                    TransferSuggestionsLinkCard(
-                        count: model.transferSuggestionCount,
-                        client: model.client,
-                        onUpdate: { model.replace($0) },
-                        onDashboardStale: { freshness.markStale([.dashboard]) }
-                    )
-                }
-                LazyVStack(alignment: .leading, spacing: 22) {
-                    ForEach(groups) { group in
-                        dayGroup(group, isLastGroup: group.id == groups.last?.id)
-                    }
+        return VStack(alignment: .leading, spacing: Spacing.cardGap) {
+            if model.transferSuggestionCount > 0 {
+                TransferSuggestionsLinkCard(
+                    count: model.transferSuggestionCount,
+                    client: model.client,
+                    onUpdate: { model.replace($0) },
+                    onDashboardStale: { freshness.markStale([.dashboard]) }
+                )
+            }
+            LazyVStack(alignment: .leading, spacing: 22) {
+                ForEach(groups) { group in
+                    dayGroup(group, isLastGroup: group.id == groups.last?.id)
                 }
             }
-            .padding(Spacing.gutter)
         }
     }
 

@@ -198,7 +198,7 @@ final class TransactionsViewModel {
     /// that can set `.failed` — an error is surfaced without carrying its
     /// text into the UI (it may reference the response).
     func loadPage() async {
-        state = .loading
+        state.beginLoading()
         offset = 0
         reachedEnd = false
         // A page reload is a context change: drop any in-progress row
@@ -211,6 +211,11 @@ final class TransactionsViewModel {
             offset = page.count
             reachedEnd = page.count < pageSize
         } catch {
+            // A cancelled request (e.g. `.refreshable`'s Task, cancelled by
+            // SwiftUI itself if the scroll view it's hosted in is torn down
+            // mid-request) is not a failure worth surfacing — the list either
+            // already showed the previous page, or a fresh load will follow.
+            guard !error.isCancellationError else { return }
             state = .failed
         }
     }
