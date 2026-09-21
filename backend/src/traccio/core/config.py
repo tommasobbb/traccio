@@ -8,7 +8,7 @@ pydantic-settings.
 from functools import lru_cache
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -283,6 +283,28 @@ class Settings(BaseSettings):
     # Only the most recent ECB date's row is ever re-fetched; historical rows
     # are immutable once stored.
     fx_rate_ttl_hours: int = 12
+
+    @field_validator(
+        "encryption_key",
+        "enable_banking_application_id",
+        "enable_banking_private_key_path",
+        "enable_banking_private_key_pem",
+        "api_token",
+        mode="before",
+    )
+    @classmethod
+    def _blank_env_means_unset(cls, value: str | None) -> str | None:
+        """Treat a blank ``.env`` value the same as an absent one.
+
+        ``.env.example`` leaves every optional secret blank (e.g.
+        ``TRACCIO_API_TOKEN=``) rather than omitting the line, so
+        pydantic-settings reads it as ``""``, not ``None`` — every caller's
+        ``is None`` check (``api/deps.py::require_api_token``, this module's
+        own production boot gate) would otherwise see a falsy-but-truthy
+        sentinel and treat the secret as configured, e.g. requiring a bearer
+        token no one set. Empty string and unset both mean "not configured".
+        """
+        return value or None
 
 
 @lru_cache
