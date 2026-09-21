@@ -144,7 +144,12 @@ struct EventsView: View {
                         } label: {
                             EventRow(event: event)
                                 .padding(.horizontal, Spacing.cardPadding)
-                                .padding(.vertical, Spacing.itemGap)
+                                // 16, not a named token: the 2026-09-19 first
+                                // pass used Spacing.itemGap (12); the tile's
+                                // own enlargement to 56pt (EventRow.swift)
+                                // asked for a bit more room again on the
+                                // second pass.
+                                .padding(.vertical, 16)
                         }
                         .buttonStyle(.pressableRow)
                         .matchedTransitionSource(id: event.id, in: transitionNamespace)

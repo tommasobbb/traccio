@@ -328,12 +328,21 @@ struct AccountsView: View {
     /// A connection with exactly one account: the institution's own wordmark
     /// stands in for its name (`BankLogoView.Style.wordmark`) — the header
     /// name is never repeated underneath. When the account carries a user
-    /// alias, that is genuinely new information (not a repeat of the
-    /// institution's name), so it still gets its own line under the mark;
-    /// with no alias, the wordmark alone identifies the account, same as
-    /// `connectionHeader` above. Status and currency follow, plus the sync
-    /// control beside it — outside the `Button`, since a `Button` can't nest
-    /// another `Button`, so this is two siblings in an `HStack`, not one row.
+    /// alias that's genuinely new information — not a copy of the
+    /// institution's own name, which Enable Banking can hand back as the
+    /// account's alias verbatim (e.g. "Isybank" under the Isybank wordmark,
+    /// found 2026-09-19) — it gets its own line under the mark; with no
+    /// alias, or a redundant one, the wordmark alone identifies the account,
+    /// same as `connectionHeader` above.
+    ///
+    /// The currency sits on the wordmark's own row rather than sharing a row
+    /// with the status/scheduler lines below — the latter used to be
+    /// squeezed into whatever width was left after the currency label,
+    /// truncating the scheduler line ("Sincronizzazione automatic…") at a
+    /// width `connectionHeader`'s wider version of the same line never hit.
+    /// Status and currency follow, plus the sync control beside it —
+    /// outside the `Button`, since a `Button` can't nest another `Button`,
+    /// so this is two siblings in an `HStack`, not one row.
     private func collapsedSingleAccountCard(
         _ connection: ConnectionResponse, _ account: AccountResponse
     ) -> some View {
@@ -342,24 +351,26 @@ struct AccountsView: View {
             Button {
                 editingAccount = account
             } label: {
-                HStack(spacing: Spacing.itemGap) {
-                    VStack(alignment: .leading, spacing: Spacing.tightGap) {
+                VStack(alignment: .leading, spacing: Spacing.tightGap) {
+                    HStack(alignment: .top, spacing: Spacing.itemGap) {
                         BankLogoView(
                             logo: connection.institutionLogo, name: connection.institutionName,
                             style: .wordmark(height: Self.wordmarkHeight, maxWidth: Self.wordmarkMaxWidth)
                         )
-                        if let alias = account.alias {
-                            Text(alias)
-                                .font(Typography.caption.weight(.semibold))
-                                .foregroundStyle(Palette.inkSecondary)
-                                .lineLimit(1)
-                        }
-                        statusRow(connection)
+                        Spacer(minLength: Spacing.tightGap)
+                        Text(account.currency)
+                            .font(Typography.caption.weight(.semibold))
+                            .foregroundStyle(Palette.inkTertiary)
                     }
-                    Spacer(minLength: Spacing.tightGap)
-                    Text(account.currency)
-                        .font(Typography.caption.weight(.semibold))
-                        .foregroundStyle(Palette.inkTertiary)
+                    if let alias = account.alias,
+                        !isAliasRedundant(alias, institutionName: connection.institutionName)
+                    {
+                        Text(alias)
+                            .font(Typography.caption.weight(.semibold))
+                            .foregroundStyle(Palette.inkSecondary)
+                            .lineLimit(1)
+                    }
+                    statusRow(connection)
                 }
                 .contentShape(Rectangle())
             }
@@ -368,6 +379,16 @@ struct AccountsView: View {
 
             syncButton(connection)
         }
+    }
+
+    /// Whether `alias` is nothing but a copy of the institution's own name —
+    /// case- and whitespace-insensitive, since that's exactly the shape the
+    /// duplicate took (a wordmark spelling "isybank" with a plain "Isybank"
+    /// repeated underneath).
+    private func isAliasRedundant(_ alias: String, institutionName: String) -> Bool {
+        alias.trimmingCharacters(in: .whitespacesAndNewlines)
+            .caseInsensitiveCompare(institutionName.trimmingCharacters(in: .whitespacesAndNewlines))
+            == .orderedSame
     }
 
     /// Two rows when the scheduler is on, each single-line on its own — never

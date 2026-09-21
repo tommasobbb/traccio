@@ -21,12 +21,21 @@ import TraccioCore
 /// chevron is gone too — a two-line block would center it awkwardly, and
 /// `TransactionRow`'s equivalent row has no chevron either, relying on
 /// `.pressableRow` + the zoom transition for the tap affordance.
+///
+/// **Tile enlarged 2026-09-19 (second pass)**: on-device, the two-line
+/// anatomy above still read as cramped — the tile stayed at `Transaction
+/// Row`'s 44pt even though this row has none of that row's competing
+/// elements (no chevron, no third caption). Diameter 44 → 56, matching the
+/// row's own vertical padding move in `EventsView.eventListCard` (`6` →
+/// `Spacing.itemGap`, then `12` → `16` here) — both `EventTile`/`IconTile`
+/// scale their glyph proportionally to `diameter`, so this is a pure size
+/// increase, not a re-balance.
 struct EventRow: View {
     let event: EventResponse
 
     var body: some View {
         HStack(spacing: Spacing.itemGap) {
-            EventTile(emoji: event.emoji, color: event.color, diameter: 44)
+            EventTile(emoji: event.emoji, color: event.color, diameter: 56)
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.name)
                     .font(Typography.body.weight(.semibold))
