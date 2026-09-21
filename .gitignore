@@ -48,9 +48,12 @@ secrets/
 # Self-signed TLS material for the local https callback (make run-tls).
 .certs/
 
-# --- Local agent config ---
+# --- Local agent config / personal working log ---
+# tasks/ is a personal backlog+diary, .claude/ local agent config — never
+# public, stripped from all of history's prior commits (Fase 5 cleanup).
 CLAUDE.local.md
-.claude/settings.local.json
+tasks/
+.claude/
 
 # --- design canvas ---
 # Seeded, publishable payload built from the .dc.html sources by
