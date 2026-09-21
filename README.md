@@ -12,7 +12,7 @@ pieces fit together and `docs/domain.md` for the shared vocabulary.
   <img src="docs/screenshots/movimenti.png" width="260" alt="Movimenti — elenco transazioni, suggerimenti di trasferimento, categorizzazione rapida">
   <img src="docs/screenshots/conti.png" width="260" alt="Conti — conti collegati e conti manuali, per istituto">
 </p>
-<p align="center"><sub>Panoramica · Movimenti · Conti — dati sintetici, popolati da <code>make demo</code>, nessuna credenziale bancaria coinvolta.</sub></p>
+<p align="center"><sub>Panoramica · Movimenti · Conti — synthetic data, populated by <code>make demo</code>.</sub></p>
 
 > **This is a single-user, personal tool, not a production multi-tenant
 > service.** There is one fixed user id, one shared API bearer token
