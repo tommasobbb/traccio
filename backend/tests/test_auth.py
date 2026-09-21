@@ -9,19 +9,32 @@ protected endpoint" — it needs only a database session and the fixed
 
 from collections.abc import Iterator
 
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from tests.conftest import sqlite_engine as _sqlite_engine
+from tests.test_connections import FakeProvider
+from traccio.api.deps import get_bank_provider, get_token_cipher_dep
 from traccio.api.main import create_app
 from traccio.core.config import Settings, get_settings
+from traccio.core.crypto import TokenCipher
 from traccio.db.session import get_session
 
 _TOKEN = "TEST-TOKEN-01"
 
 
 def _client(*, api_token: str | None) -> TestClient:
-    """Build a client with ``api_token`` set, a fresh in-memory database."""
+    """Build a client with ``api_token`` set, a fresh in-memory database.
+
+    ``get_bank_provider``/``get_token_cipher_dep`` are faked too — most
+    tests here hit ``/accounts``, which never resolves either dependency,
+    but the callback test below does. Without a fake, that route's real
+    dependencies raise unless a real Enable Banking application id and
+    encryption key are configured — true by accident on a machine with a
+    real ``.env``, false on a clean CI runner (the failure this guards
+    against: it passed everywhere the author ran it, and nowhere else).
+    """
     engine = _sqlite_engine()
 
     def override_get_session() -> Iterator[Session]:
@@ -34,6 +47,10 @@ def _client(*, api_token: str | None) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_settings] = lambda: Settings(api_token=api_token)
+    app.dependency_overrides[get_bank_provider] = lambda: FakeProvider()
+    app.dependency_overrides[get_token_cipher_dep] = lambda: TokenCipher(
+        Fernet.generate_key().decode()
+    )
     return TestClient(app)
 
 

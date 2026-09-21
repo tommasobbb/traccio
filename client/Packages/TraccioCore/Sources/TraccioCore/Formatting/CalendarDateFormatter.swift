@@ -17,6 +17,16 @@ extension TraccioCore {
     /// only if the components do not form a valid date (never true for a
     /// backend-supplied value).
     private static func resolve(_ date: CalendarDate) -> Date? {
+        // `Calendar.date(from:)` alone isn't a reliable nil-detector for a
+        // wildly out-of-range month: it normalizes by carrying the overflow
+        // into the year (month 999_999_999 → some far-future year) rather
+        // than failing, and whether the carried year still resolves to a
+        // `Date` is a Foundation-version detail — it did on one OS build and
+        // didn't on another, caught by this function's own test suite
+        // passing locally and failing in CI on a different macOS. Bounding
+        // the month explicitly makes the fallback deterministic everywhere.
+        guard (1...12).contains(date.month) else { return nil }
+
         var components = DateComponents()
         components.year = date.year
         components.month = date.month
