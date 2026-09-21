@@ -4,8 +4,16 @@ A personal finance tracker: aggregates bank accounts via Open Banking APIs
 and categorizes transactions. Two deliverables from one repo — a Python
 backend and a native SwiftUI client (iOS + macOS).
 
-Built for one user, on real data. See `docs/architecture.md` for how the
-pieces fit together and `docs/domain.md` for the shared vocabulary.
+Started as a personal itch: no banking or budgeting app tracks spending
+across several accounts, catches a transfer *between* your own accounts
+before it gets double-counted as spending, or keeps score on who still
+owes what after a shared trip — while still getting categorization and
+manual entries exactly right, not "mostly right". Built solo, backend and
+iOS client both, on real Open Banking data, in daily use since August
+2026.
+
+See `docs/architecture.md` for how the pieces fit together and
+`docs/domain.md` for the shared vocabulary.
 
 <p align="center">
   <img src="docs/screenshots/panoramica.png" width="260" alt="Panoramica — riepilogo del mese, spesa per categoria, confronto col mese precedente">
