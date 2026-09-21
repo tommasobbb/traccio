@@ -7,6 +7,13 @@ backend and a native SwiftUI client (iOS + macOS).
 Built for one user, on real data. See `docs/architecture.md` for how the
 pieces fit together and `docs/domain.md` for the shared vocabulary.
 
+<p align="center">
+  <img src="docs/screenshots/panoramica.png" width="260" alt="Panoramica — riepilogo del mese, spesa per categoria, confronto col mese precedente">
+  <img src="docs/screenshots/movimenti.png" width="260" alt="Movimenti — elenco transazioni, suggerimenti di trasferimento, categorizzazione rapida">
+  <img src="docs/screenshots/conti.png" width="260" alt="Conti — conti collegati e conti manuali, per istituto">
+</p>
+<p align="center"><sub>Panoramica · Movimenti · Conti — dati sintetici, popolati da <code>make demo</code>, nessuna credenziale bancaria coinvolta.</sub></p>
+
 > **This is a single-user, personal tool, not a production multi-tenant
 > service.** There is one fixed user id, one shared API bearer token
 > instead of real per-account authentication, and no rate limiting beyond
